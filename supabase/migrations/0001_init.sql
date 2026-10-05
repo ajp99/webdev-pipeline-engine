@@ -1,0 +1,422 @@
+-- 0001_init.sql
+-- Draft data model for CreatePipeline Engine. Derived from docs/spec/10-data-model.md,
+-- docs/spec/12-security.md and docs/spec/gates.yaml.
+--
+-- DRAFT: column types, constraints and the items marked PROPOSAL are the drafter's choices
+-- where the spec lists only field names. Review them in phase 1 (task P1-T02) before applying.
+-- Not yet implemented: Storage bucket policies for uploads, and the approval checks inside
+-- advance_stage() (task P1-T07).
+
+-- ---------------------------------------------------------------------------
+-- Enums
+-- ---------------------------------------------------------------------------
+-- PROPOSAL: the spec lists build_round_n as a stage value. Modeled here as one repeating
+-- stage 'build_rounds'; the round number lives in rounds.number.
+create type stage as enum (
+  'intake', 'requirements', 'plan', 'prototype', 'build_rounds',
+  'qc_report', 'deploy_prep', 'handover', 'closed'
+);
+create type project_status as enum ('active', 'paused', 'closed');
+create type close_reason as enum ('completed', 'cancelled');
+create type gate_type as enum ('soft', 'hard', 'client');
+create type approver_role as enum ('owner', 'client');
+create type artifact_status as enum ('draft', 'approved', 'superseded');
+create type asked_by as enum ('template', 'agent');
+create type comment_disposition as enum ('forwarded', 'change_request', 'ignored');
+create type change_decision as enum ('accept_current_round', 'defer', 'decline');
+create type skill_scope as enum ('project', 'candidate', 'library', 'deprecated');
+create type skill_mark as enum ('good', 'bad');
+create type template_status as enum ('draft', 'approved', 'archived'); -- PROPOSAL
+
+-- ---------------------------------------------------------------------------
+-- Role helpers (used by RLS policies)
+-- ---------------------------------------------------------------------------
+-- PROPOSAL: the owner is identified by app_metadata.role = 'owner' in the JWT. Set it with the
+-- service role only; clients must never be able to edit app_metadata.
+create function public.is_owner() returns boolean
+language sql stable as $$
+  select coalesce((auth.jwt() -> 'app_metadata' ->> 'role') = 'owner', false)
+$$;
+
+create function public.is_service_role() returns boolean
+language sql stable as $$
+  select coalesce(auth.role() = 'service_role', false)
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Tables
+-- ---------------------------------------------------------------------------
+create table projects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  industry text,
+  stage stage not null default 'intake',
+  status project_status not null default 'active',
+  close_reason close_reason,
+  cost_warn_threshold numeric(10, 2),
+  retention_until timestamptz,
+  round_plan jsonb,
+  created_at timestamptz not null default now(),
+  constraint close_reason_needs_closed check (close_reason is null or status = 'closed')
+);
+
+create table clients (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text not null,
+  project_id uuid not null references projects (id) on delete cascade,
+  role text not null default 'client', -- spec lists a role field; values not specified
+  created_at timestamptz not null default now()
+);
+create index clients_project_idx on clients (project_id);
+
+-- The project a logged-in client belongs to. A project can have several client logins.
+create function public.client_project_id() returns uuid
+language sql stable security definer set search_path = public as $$
+  select project_id from public.clients where id = auth.uid()
+$$;
+
+create table intake_templates (
+  id uuid primary key default gen_random_uuid(),
+  industry text not null,
+  version int not null default 1,
+  sections jsonb not null default '[]'::jsonb,
+  status template_status not null default 'draft',
+  created_at timestamptz not null default now(),
+  unique (industry, version)
+);
+
+create table intake_responses (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  round int not null,
+  question_id text not null,
+  answer jsonb,
+  asked_by asked_by not null,
+  updated_at timestamptz not null default now(),
+  unique (project_id, round, question_id)
+);
+create index intake_responses_project_idx on intake_responses (project_id);
+
+create table uploads (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  kind text not null,
+  storage_path text not null,
+  optional boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create index uploads_project_idx on uploads (project_id);
+
+create table artifacts (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  type text not null,
+  version int not null default 1,
+  content jsonb not null default '{}'::jsonb,
+  status artifact_status not null default 'draft',
+  -- PROPOSAL: not in the spec field list. Needed so clients see only the PRD and prototype,
+  -- never internal plans.
+  client_visible boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (project_id, type, version)
+);
+create index artifacts_project_idx on artifacts (project_id);
+
+create table approvals (
+  id uuid primary key default gen_random_uuid(),
+  artifact_id uuid not null references artifacts (id),
+  approved_by uuid not null references auth.users (id),
+  role approver_role not null,
+  gate_type gate_type not null,
+  at timestamptz not null default now(),
+  -- Client approvals use the client gate; owner approvals use soft or hard.
+  constraint role_matches_gate check ((role = 'client') = (gate_type = 'client'))
+);
+create index approvals_artifact_idx on approvals (artifact_id);
+
+create table rounds (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  number int not null,
+  scope jsonb,
+  preview_url text,
+  status text not null default 'planned', -- values not specified in the spec
+  unique (project_id, number)
+);
+
+create table backlog_items (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  round int,
+  question text not null,
+  context text,
+  assumption text,
+  owner_answer text,
+  ask_client boolean not null default false,
+  client_answer text,
+  status text not null default 'open', -- values not specified in the spec
+  created_at timestamptz not null default now()
+);
+create index backlog_items_project_idx on backlog_items (project_id);
+
+create table comments (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  body text not null,
+  owner_disposition comment_disposition,
+  created_by uuid references auth.users (id),
+  created_at timestamptz not null default now()
+);
+create index comments_project_idx on comments (project_id);
+
+create table change_requests (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  description text not null,
+  impact_note text,
+  decision change_decision,
+  created_at timestamptz not null default now()
+);
+
+create table qc_runs (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  lighthouse jsonb,
+  checklist jsonb,
+  run_at timestamptz not null default now()
+);
+
+create table skills_registry (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  path text not null,
+  scope skill_scope not null,
+  project_id uuid references projects (id) on delete set null,
+  version int not null default 1,
+  generalization_report jsonb,
+  approved_by uuid references auth.users (id),
+  approved_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint project_scope_needs_project check (scope <> 'project' or project_id is not null)
+);
+
+create table stage_runs (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  stage stage not null,
+  status text not null default 'queued', -- values not specified in the spec
+  log_ref text,
+  tokens_used bigint not null default 0,
+  cost numeric(10, 4) not null default 0,
+  started_at timestamptz,
+  finished_at timestamptz
+);
+create index stage_runs_project_idx on stage_runs (project_id);
+
+create table gate_config (
+  id uuid primary key default gen_random_uuid(),
+  stage stage not null,
+  project_id uuid references projects (id) on delete cascade, -- null = global default
+  gate_type gate_type not null,
+  gatekeeper approver_role not null,
+  escalate_after_hours int not null default 24 check (escalate_after_hours > 0)
+);
+create unique index gate_config_unique
+  on gate_config (stage, gate_type, coalesce(project_id, '00000000-0000-0000-0000-000000000000'::uuid));
+
+create table skill_uses (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  stage stage not null,
+  skill text not null,
+  mark skill_mark not null,
+  marked_at timestamptz not null default now()
+);
+create index skill_uses_project_idx on skill_uses (project_id);
+
+-- Global gate defaults. Mirrors docs/spec/gates.yaml.
+insert into gate_config (stage, gate_type, gatekeeper) values
+  ('intake',       'soft',   'owner'),
+  ('requirements', 'client', 'client'),
+  ('plan',         'soft',   'owner'),
+  ('prototype',    'soft',   'owner'),
+  ('prototype',    'client', 'client'),
+  ('build_rounds', 'soft',   'owner'),
+  ('qc_report',    'soft',   'owner'),
+  ('deploy_prep',  'hard',   'owner'),
+  ('handover',     'hard',   'owner');
+
+-- ---------------------------------------------------------------------------
+-- Guards
+-- ---------------------------------------------------------------------------
+-- The approval log is append-only.
+create function prevent_mutation() returns trigger
+language plpgsql as $$
+begin
+  raise exception '% is append-only', tg_table_name;
+end;
+$$;
+create trigger approvals_append_only
+  before update or delete on approvals
+  for each row execute function prevent_mutation();
+
+-- Agents and clients cannot write projects.stage directly. Only advance_stage() may change it.
+create function guard_stage_change() returns trigger
+language plpgsql as $$
+begin
+  if new.stage is distinct from old.stage
+     and coalesce(current_setting('app.stage_advance', true), '') <> 'on' then
+    raise exception 'projects.stage can only change through advance_stage()';
+  end if;
+  return new;
+end;
+$$;
+create trigger projects_stage_guard
+  before update of stage on projects
+  for each row execute function guard_stage_change();
+
+-- STUB (task P1-T07): must verify that every gate for the current stage in gate_config
+-- (project override first, then global default) has a matching approval record, and that
+-- p_next is the next stage in docs/spec/stages.yaml, before changing the stage.
+create function advance_stage(p_project uuid, p_next stage) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not (public.is_owner() or public.is_service_role()) then
+    raise exception 'advance_stage: not allowed';
+  end if;
+  raise exception 'advance_stage: approval checks not implemented yet (P1-T07)';
+  -- Once implemented, the update runs like this:
+  --   perform set_config('app.stage_advance', 'on', true);
+  --   update projects set stage = p_next where id = p_project;
+end;
+$$;
+revoke all on function advance_stage(uuid, stage) from public;
+grant execute on function advance_stage(uuid, stage) to authenticated, service_role;
+
+-- A client may only change client_answer on a backlog item.
+create function guard_backlog_client_update() returns trigger
+language plpgsql as $$
+begin
+  if public.is_owner() or public.is_service_role() then
+    return new;
+  end if;
+  if (new.id, new.project_id, new.round, new.question, new.context, new.assumption,
+      new.owner_answer, new.ask_client, new.status, new.created_at)
+     is distinct from
+     (old.id, old.project_id, old.round, old.question, old.context, old.assumption,
+      old.owner_answer, old.ask_client, old.status, old.created_at) then
+    raise exception 'clients may only change client_answer';
+  end if;
+  return new;
+end;
+$$;
+create trigger backlog_client_update_guard
+  before update on backlog_items
+  for each row execute function guard_backlog_client_update();
+
+-- ---------------------------------------------------------------------------
+-- Row-level security
+-- ---------------------------------------------------------------------------
+alter table projects          enable row level security;
+alter table clients           enable row level security;
+alter table intake_templates  enable row level security;
+alter table intake_responses  enable row level security;
+alter table uploads           enable row level security;
+alter table artifacts         enable row level security;
+alter table approvals         enable row level security;
+alter table rounds            enable row level security;
+alter table backlog_items     enable row level security;
+alter table comments          enable row level security;
+alter table change_requests   enable row level security;
+alter table qc_runs           enable row level security;
+alter table skills_registry   enable row level security;
+alter table stage_runs        enable row level security;
+alter table gate_config       enable row level security;
+alter table skill_uses        enable row level security;
+
+-- Owner: full access to every table.
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'projects', 'clients', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
+    'approvals', 'rounds', 'backlog_items', 'comments', 'change_requests', 'qc_runs',
+    'skills_registry', 'stage_runs', 'gate_config', 'skill_uses'
+  ] loop
+    execute format(
+      'create policy owner_all on %I for all to authenticated using (public.is_owner()) with check (public.is_owner())',
+      t
+    );
+  end loop;
+end $$;
+
+-- Clients: only their own project's client-facing rows.
+create policy client_read_own_project on projects
+  for select to authenticated using (id = public.client_project_id());
+
+create policy client_read_self on clients
+  for select to authenticated using (id = auth.uid());
+
+create policy client_read_approved_templates on intake_templates
+  for select to authenticated using (status = 'approved');
+
+create policy client_read_responses on intake_responses
+  for select to authenticated using (project_id = public.client_project_id());
+create policy client_write_responses on intake_responses
+  for insert to authenticated with check (
+    project_id = public.client_project_id()
+    and exists (select 1 from projects p
+                where p.id = project_id and p.stage = 'intake' and p.status = 'active')
+  );
+create policy client_update_responses on intake_responses
+  for update to authenticated
+  using (
+    project_id = public.client_project_id()
+    and exists (select 1 from projects p
+                where p.id = project_id and p.stage = 'intake' and p.status = 'active')
+  )
+  with check (project_id = public.client_project_id());
+
+create policy client_read_uploads on uploads
+  for select to authenticated using (project_id = public.client_project_id());
+create policy client_add_uploads on uploads
+  for insert to authenticated with check (project_id = public.client_project_id());
+create policy client_delete_uploads on uploads
+  for delete to authenticated using (project_id = public.client_project_id());
+
+create policy client_read_visible_artifacts on artifacts
+  for select to authenticated using (
+    project_id = public.client_project_id() and client_visible
+  );
+
+create policy client_read_approvals on approvals
+  for select to authenticated using (
+    exists (select 1 from artifacts a
+            where a.id = artifact_id and a.project_id = public.client_project_id() and a.client_visible)
+  );
+create policy client_add_approval on approvals
+  for insert to authenticated with check (
+    role = 'client' and gate_type = 'client' and approved_by = auth.uid()
+    and exists (select 1 from artifacts a
+                where a.id = artifact_id and a.project_id = public.client_project_id() and a.client_visible)
+  );
+
+create policy client_read_ask_client_items on backlog_items
+  for select to authenticated using (project_id = public.client_project_id() and ask_client);
+create policy client_answer_ask_client_items on backlog_items
+  for update to authenticated
+  using (project_id = public.client_project_id() and ask_client)
+  with check (project_id = public.client_project_id() and ask_client);
+
+create policy client_read_comments on comments
+  for select to authenticated using (project_id = public.client_project_id());
+create policy client_add_prototype_comment on comments
+  for insert to authenticated with check (
+    project_id = public.client_project_id()
+    and created_by = auth.uid()
+    and owner_disposition is null
+    and exists (select 1 from projects p where p.id = project_id and p.stage = 'prototype')
+  );
+
+-- rounds, change_requests, qc_runs, skills_registry, stage_runs, gate_config and skill_uses
+-- have no client policy: owner only.

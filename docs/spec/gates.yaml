@@ -1,0 +1,42 @@
+# Machine-readable gate definitions. Derived from docs/spec/03-pipeline-and-gates.md.
+version: 1
+snapshot_date: 2026-10-05
+auto_advance: false          # nothing advances automatically; overdue gates only show a badge
+default_escalate_after_hours: 24
+gate_types:
+  soft:   { description: "Reversible actions. Owner reviews.", actor: owner }
+  hard:   { description: "Irreversible actions. Owner approves; same Accept action as other gates.", actor: owner }
+  client: { description: "Client-attributed approvals.", actor: client }
+actions: [accept, feedback, reject]
+# accept   = approve and advance
+# feedback = send notes back; agent produces a new version
+# reject   = send the stage back without a new version
+gates:
+  - stage: intake
+    approvals:
+      - { gate_type: soft, gatekeeper: owner }
+  - stage: requirements
+    # Owner edits are part of the stage; there is no separate owner approval record.
+    approvals:
+      - { gate_type: client, gatekeeper: client }
+  - stage: plan
+    approvals:
+      - { gate_type: soft, gatekeeper: owner }
+  - stage: prototype
+    # Two sequential approval records: owner first, then client.
+    approvals:
+      - { gate_type: soft, gatekeeper: owner }
+      - { gate_type: client, gatekeeper: client }
+  - stage: build_rounds
+    approvals:
+      - { gate_type: soft, gatekeeper: owner, per: round }
+  - stage: qc_report
+    # QC results and report are approved together in one gate.
+    approvals:
+      - { gate_type: soft, gatekeeper: owner }
+  - stage: deploy_prep
+    approvals:
+      - { gate_type: hard, gatekeeper: owner }
+  - stage: handover
+    approvals:
+      - { gate_type: hard, gatekeeper: owner }

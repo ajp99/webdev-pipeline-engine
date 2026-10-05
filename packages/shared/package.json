@@ -1,0 +1,6 @@
+{
+  "name": "@wpe/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Types and constants used by both apps: stages, gates, database types."
+}

@@ -1,0 +1,49 @@
+# Machine-readable stage definitions. Derived from docs/spec/03-pipeline-and-gates.md.
+# Spec files are read-only for agents; propose changes in docs/proposals/.
+version: 1
+snapshot_date: 2026-10-05
+stages:
+  - id: intake
+    order: 1
+    name: Intake
+    outputs: [intake_record]
+  - id: requirements
+    order: 2
+    name: Requirements (PRD lock)
+    outputs: [prd]
+  - id: plan
+    order: 3
+    name: Plan
+    outputs: [plan, skill_set, round_scope]
+  - id: prototype
+    order: 4
+    name: Prototype
+    outputs: [prototype_preview]
+    max_revision_cycles: 2
+  - id: build_rounds
+    order: 5
+    name: Build rounds
+    # The spec lists this stage as build_round_n: one stage value per round.
+    # Modeled here as one stage that repeats, with the round number in rounds.number.
+    repeats: true
+    typical_rounds: { simple: 2, larger: 4 }
+    outputs: [round_preview, round_summary, backlog]
+  - id: qc_report
+    order: 6
+    name: QC and report
+    outputs: [qc_results, report]
+    max_fix_loops: 2
+  - id: deploy_prep
+    order: 7
+    name: Deploy prep
+    outputs: [deployment_checklist]
+  - id: handover
+    order: 8
+    name: Handover
+    outputs: [handover_pack]
+  - id: closed
+    order: 9
+    name: Closed
+    terminal: true
+project_status: [active, paused, closed]
+close_reason: [completed, cancelled]
