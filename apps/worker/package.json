@@ -1,0 +1,6 @@
+{
+  "name": "@wpe/worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Stage runner and Agent SDK workers. Runs on the owner's machine, never deployed to Vercel."
+}
