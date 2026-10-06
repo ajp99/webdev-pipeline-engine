@@ -22,19 +22,22 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Acceptance: One concise report page; QC results and report are approved together in one soft gate.
 
 - [ ] **P5-T04 Deployment preparation**  
-  Acceptance: Environment variables, Resend sender configured, production deploy, post-deploy smoke test, and an exact DNS records and steps list. Hard gate.
+  Acceptance: Production build verified on `staging`; `staging` is merged into `main`, which Vercel deploys through its Git integration. The owner sets environment variables and domains in Vercel from an agent-written checklist; Resend sender configured; post-deploy smoke test; an exact DNS records and steps list. Hard gate.
 
 - [ ] **P5-T05 Handover agent**  
   Acceptance: Documentation, GitHub web-editor guide with screenshots for the project's file layout, ownership transfer checklist, handover document, maintenance notes. Hard gate.
 
 - [ ] **P5-T06 Project close**  
-  Acceptance: Marking handover complete revokes scoped tokens, sets the project to a read-only archive, and sets the retention date (default 90 days after close, adjustable per project); client accounts stay active until the owner disables them.
+  Acceptance: Marking handover complete runs a final database export, revokes scoped tokens, sets the project to a read-only archive, and sets the retention date (default 90 days after close, adjustable per project); client accounts stay active until the owner disables them.
 
 - [ ] **P5-T07 Change requests during live period**  
   Acceptance: Change requests apply from go-live until handover is marked complete; after close they are refused with a note that changes are handled outside the pipeline.
 
-- [ ] **P5-T08 Pilot**  
-  Acceptance: Run a real small client site end to end; measure token cost and approval friction per stage; propose spec changes in `docs/proposals/` based on what was learned.
+- [ ] **P5-T08 Read-only MCP server**  
+  Acceptance: An MCP server lets the owner ask Claude about status, the approval queue, the backlog and cost. It cannot approve, answer or change anything.
+
+- [ ] **P5-T09 Pilot**  
+  Acceptance: Run the owner's own site end to end, with the owner playing the client from a second email account. Measure token cost per project against the estimate in `docs/spec/13-cost.md`, owner time per stage, Feedback loops per gate, first-try Lighthouse pass, and defects found after go-live. Propose spec changes in `docs/proposals/` based on what was learned.
 
 ## Gate
 

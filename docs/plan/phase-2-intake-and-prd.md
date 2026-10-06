@@ -21,8 +21,8 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P2-T03 Client intake form**  
   Acceptance: Save-as-you-go form with optional asset uploads to private storage (including the storage bucket policies); missing items are flagged, not blocking; clients can only write while the project is in intake and active.
 
-- [ ] **P2-T04 Stage runner interface and worker wake-up**  
-  Acceptance: `run(stage, project)` returns a result and the next gate; Supabase Realtime wakes the local runner on owner approval; runs are recorded in `stage_runs`; a stage resumes after the worker restarts.
+- [ ] **P2-T04 Stage runner with a durable queue**  
+  Acceptance: `run(stage, project)` returns a result and the next gate. An approval enqueues the next `stage_runs` row; the runner polls every 15 to 30 seconds and claims a row atomically (`FOR UPDATE SKIP LOCKED`), refreshes `heartbeat_at`, and a stale heartbeat re-queues the run. A runner that was offline finds the queue waiting. The claim function is a schema change the owner approves. Realtime is not used.
 
 - [ ] **P2-T05 Intake agent follow-ups**  
   Acceptance: Posts at most a few targeted follow-ups per round for vague or conflicting answers; stops when coverage is judged sufficient or after 3 follow-up rounds; produces a gap list for the owner.
@@ -41,6 +41,9 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 
 - [ ] **P2-T10 Change-request records**  
   Acceptance: Create change requests with description, affected pages and features, impact note, and the owner's decision; accepted ones bump the PRD version.
+
+- [ ] **P2-T11 Client email notifications**  
+  Acceptance: Resend emails clients for four events: intake follow-ups ready, PRD ready, prototype ready, ask-client question waiting. The pipeline has its own Resend sender; the owner supplies the sender domain and DNS records. Owner alerts stay dashboard-only.
 
 ## Gate
 

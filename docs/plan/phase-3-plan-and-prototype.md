@@ -22,7 +22,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Acceptance: Produces the plan artifact: skills and tools chosen, build plan, and the proposed round count and scope per round from the locked PRD; owner edits and approves (soft gate).
 
 - [ ] **P3-T04 Prototype agent**  
-  Acceptance: Builds the single main page from the plan, brand inputs and starter into the project repo and produces a Vercel preview link, using scoped GitHub and Vercel tokens.
+  Acceptance: Builds the single main page from the plan, brand inputs and starter into the project repo and pushes it to the `staging` branch with a short-lived GitHub App token. The preview URL is read from the GitHub deployment status that Vercel's Git integration posts. No Vercel token is used.
 
 - [ ] **P3-T05 Two-step prototype approval**  
   Acceptance: Owner approves first (soft), then the client approves (client gate) from the dashboard; two approval records; the client preview link is visible only to that project's logins.
@@ -35,6 +35,12 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 
 - [ ] **P3-T08 Skill use marks**  
   Acceptance: At stage approval the owner can optionally mark each skill used as good or bad; marks are stored in `skill_uses`; unmarked uses do not count.
+
+- [ ] **P3-T09 Project provisioning script (owner-run)**  
+  Acceptance: One command, run by the owner, creates the client repo from `templates/master-starter`, installs the GitHub App on it, creates and links the Vercel project (production branch `main`, previews from `staging`), and records `github_repo` and `vercel_project_id` in `projects`. Workers never receive broader credentials.
+
+- [ ] **P3-T10 Eval harness**  
+  Acceptance: Fictional client fixtures live in `evals/fixtures/`. A harness runs the Planner (skill selection and round plan) against them and scores the results with an Opus 5.5 judge. It runs when prompts or models change, and its scores are calibrated against the owner's spot checks. Fixtures contain no real client data.
 
 ## Gate
 
