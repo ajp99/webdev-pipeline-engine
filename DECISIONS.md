@@ -73,3 +73,34 @@ Every locked decision, with its area and reason. Source of the spec decisions: t
 | D-067 | Evals | The Planner (skill selection and round plan) is evaluated first | Owner's choice |
 | D-068 | Evals | The judge model is Opus 5.5 | Stronger judge; about double the cost |
 | D-069 | Operations | No restore drill for backups | Owner's choice; accepted risk |
+| D-070 | Intake | Templates support text (short and long), choices (single and multiple), file upload, and links | Owner's choice |
+| D-071 | Intake | A new industry template is generated from the industry name plus the owner's notes | Owner's choice |
+| D-072 | Intake | Required fields are set by the owner per template (a `required` flag on each question) | Owner's choice |
+| D-073 | Intake | The client form shows one section per step, with a progress bar, saving as the client goes | Owner's choice |
+| D-074 | Intake | The client submits each round explicitly and can reopen it until the agent has reviewed it | Owner's choice |
+| D-075 | Uploads | 25 MB maximum per file. Allowed types are set by D-076 and D-100 | Owner's choice |
+| D-076 | Uploads | Zip files are not allowed | An archive can hide oversized or malicious files; hostile client content is the prompt-injection risk |
+| D-077 | Intake | At most 8 follow-up questions per round | Owner's choice |
+| D-078 | Intake | The agent reviews each submitted round in one batch. After the review the client's answers are locked; only the owner can edit them and send the round back for another review | Owner's choice |
+| D-079 | Intake | Lock cycle: open, submitted, reviewed (locked), then unlocked for the follow-up round, where the client may also change earlier answers | Owner's choice |
+| D-080 | Intake | The owner's edits to a client's answer overwrite it, with no history | Owner's choice; accepted risk: the client's original wording is lost |
+| D-081 | Runner | One ticket per project at a time, and at most 2 projects in parallel (adjustable) | Avoids head-of-line blocking without overloading the laptop or the API limits |
+| D-082 | Runner | A failed run is retried once automatically, then fails to the owner's queue | Owner's choice |
+| D-083 | Runner | No time limit on runs; the heartbeat and the cost warning only | Owner's choice; accepted risk: a runaway agent loop keeps a fresh heartbeat |
+| D-084 | Runner | Run logs are stored as text rows in the database | Owner's choice |
+| D-085 | Runner | Run logs are deleted 90 days after project close, with the rest of the project's data | Owner's choice |
+| D-086 | PRD | The PRD is a fixed list of structured sections, each written in markdown | Easy to diff, edit and generate |
+| D-087 | PRD | The client can Sign off or Request changes with a note that goes to the owner, not to agents | Gives a client who disagrees a way to say so in the dashboard |
+| D-088 | PRD | The owner edits the PRD in markdown text areas with a live preview and a side-by-side version diff | Owner's choice |
+| D-089 | PRD | The client sees the latest PRD version plus an agent-written summary of what changed since they last looked | Owner's choice |
+| D-090 | Change requests | Clients submit change requests in the dashboard from go-live until handover is complete | Owner's choice |
+| D-091 | Notifications | Client emails are in English only | Owner's choice |
+| D-092 | Notifications | One email per event and no reminders | Owner's choice; a silent client simply stalls and only the owner's overdue badge shows it |
+| D-093 | Phase 2 gate | Evidence is a manual walkthrough, an automated end-to-end test (model responses stubbed), and a cost report | Owner's choice |
+| D-094 | Accounts | Client accounts are created by an invite email with a link to set a password | Owner's choice |
+| D-095 | Templates | The owner edits an industry template as text (markdown or JSON) in the console | Owner's choice |
+| D-096 | Owner notes | Private per-project owner notes that agents read and clients never see, stored in an owner-only table | Clients can read their own project row, so notes cannot be a column on it |
+| D-097 | PRD | The round plan is removed from the PRD (the Planner owns it); the internal gap and conflict list is a separate owner-only artifact | The spec listed a round plan in the PRD and also had the Planner set rounds after lock |
+| D-098 | Uploads | Uploads are scanned for malware in the worker before any agent sees them; agents never open documents with macros | Owner's choice |
+| D-099 | Agents | The intake agent starts on Haiku 4.5 and moves up if quality is poor | Cheapest start; the owner judges quality |
+| D-100 | Uploads | Allowed types: PNG, JPEG, WebP, SVG (sanitized), PDF, DOCX, plain text, markdown, JSON and MP4, up to 25 MB each. Agents treat MP4 as an asset only | Owner's choice |

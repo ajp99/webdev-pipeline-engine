@@ -21,5 +21,8 @@ The riskiest items are local workers going offline mid-stage, client unfamiliari
 | No restore drill for backups | Risk (accepted) | Exports are unproven until restored once |
 | CI and branch protection deferred | Revisit | Until CI exists, an agent's "tests pass" is its own report |
 | Workers isolated by directory only | Risk (accepted) | Container isolation is the next step if the risk grows |
+| No time limit on runs | Risk (accepted) | A runaway agent loop keeps a fresh heartbeat; the cost warning is only a badge |
+| Owner edits overwrite client answers with no history | Risk (accepted) | The client's original wording is lost; the approval log does not record answer edits |
+| Silent clients stall the pipeline | Risk (accepted) | No reminder emails; the owner's overdue badge is the only signal |
 
 **Out of scope for v1:** multi-tenant use by other developers, e-commerce, user-facing databases, automated billing and invoicing, CMS-based editing, chat notifications, owner email notifications, multi-language sites, quotes and price estimates, and changes after a project is closed.

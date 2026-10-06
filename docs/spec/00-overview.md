@@ -11,12 +11,12 @@ CreatePipeline Engine is a single-owner internal system that takes a marketing-s
 | Autonomy | Human-in-the-loop: owner approves every stage; three gate types (soft, hard, client), no auto-advance, overdue gates only get a badge |
 | Orchestration | Agent SDK workers plus Supabase state; the runner polls a durable queue (`stage_runs`) every 15 to 30 seconds; stage runner interface so Inngest or Trigger.dev can replace it later |
 | Worker host | Owner's own machine (must be online while a stage runs) |
-| Intake | Hybrid: industry templates plus agent follow-ups on vague answers |
-| Industry templates | Agent generates, owner edits and approves, then saved to library |
-| Client assets | Optional uploads (logo, favicon, assets, content); agent structures and generates copy |
-| Client login | Email + password accounts |
-| Client dashboard | Intake, progress tracker, prototype preview and approval, comments on the prototype only |
-| Client comments | Prototype comments only; they reach owner first as raw text, and owner decides what goes to agents |
+| Intake | Hybrid: industry templates plus agent follow-ups on vague answers. The agent reviews each submitted round in one batch (up to 8 follow-ups, cap of 3 follow-up rounds); answers lock after review |
+| Industry templates | Agent generates from the industry name plus the owner's notes; owner edits as text and approves; then saved to library |
+| Client assets | Optional uploads (PNG, JPEG, WebP, SVG sanitized, PDF, DOCX, plain text, markdown, JSON, MP4; 25 MB each; no zip; scanned for malware); agent structures and generates copy |
+| Client login | Email + password accounts, created by an invite email with a link to set a password |
+| Client dashboard | Intake, progress tracker, PRD sign-off or request changes, prototype preview and approval, comments on the prototype, change requests during the live period |
+| Client comments | Prototype comments, PRD change-request notes and live-period change requests reach the owner first as raw text; the owner decides what goes to agents |
 | Prototype | Single-page clickable preview of the main page |
 | Build rounds | Agent proposes round count and scope from pages and features; owner approves (about 2 for simple, 4 for larger) |
 | Skills | Reusable Git library of SKILL.md files; project skills move project-local, candidate, library, deprecated, with owner review at match confirmation and at the generalization diff |
@@ -35,3 +35,6 @@ CreatePipeline Engine is a single-owner internal system that takes a marketing-s
 | Round review | Each build round is a pull request into the client repo's `staging` branch; console Accept merges it, Feedback comments on it, Reject closes it; a merge by the owner's GitHub account also counts as Accept (webhook) |
 | Worker access | GitHub App with short-lived tokens limited to one client repo per run; workers hold no Vercel token; an owner-run provisioning script sets up each project |
 | Operations | Encrypted database exports on a schedule and before each close; GitHub secret scanning on, CI and branch protection later; automated agent evals (Planner first, Opus 5.5 judge); pilot on the owner's own site; read-only MCP server at the end of phase 5 (see 15-operations.md) |
+| PRD | A fixed list of structured sections, each in markdown; the client sees the latest version plus an agent-written summary of changes; the gap and conflict list is owner-only; no round plan (the Planner owns it) |
+| Runner behavior | One ticket per project, at most 2 projects in parallel; one automatic retry; no time limit; logs stored as database rows and deleted 90 days after close |
+| Owner notes | Private per-project notes that agents read and clients never see |

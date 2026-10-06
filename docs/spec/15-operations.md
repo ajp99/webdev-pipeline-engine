@@ -33,3 +33,17 @@ GitHub secret scanning and push protection are on. CI and branch protection are 
 ## MCP server (D-055, D-057)
 
 A read-only MCP server lets the owner ask Claude about status, the approval queue, the backlog, and cost. It cannot approve, answer, or change anything, because a prompt-injected client message must never be able to approve a gate through chat. It lands at the end of phase 5, before the pilot.
+## Runner behavior (D-081 to D-085)
+
+- At most one ticket per project at a time, and at most 2 projects in parallel (adjustable with `WORKER_MAX_PARALLEL_PROJECTS`).
+- A failed run is retried once automatically (at most 2 attempts), then fails to the owner's queue.
+- No time limit on runs; the heartbeat and the cost warning are the only guards.
+- Run logs are text rows in the database and are deleted 90 days after project close.
+
+## Client accounts (D-094)
+
+The owner enters the client's email; the client receives an invite email with a link to set a password. A project can have several client logins.
+
+## Phase 2 gate evidence (D-093)
+
+"A test client signs off a PRD" is shown by three things recorded in `docs/plan/PROGRESS.md`: a manual walkthrough with the owner as the test client from a second email, an automated end-to-end test with stubbed model responses, and a cost report copied from `stage_runs` and compared with the estimates in `13-cost.md`.

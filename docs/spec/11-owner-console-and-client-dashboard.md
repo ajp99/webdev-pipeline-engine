@@ -14,14 +14,19 @@ One Next.js app serves both views, split by role. Because alerts are dashboard-o
 - Template and skills library manager: review agent-generated templates; skills show a 'Skills ready for generalization review' badge with a diff of the project-local and generalized versions, which the owner approves, edits, or rejects
 - Stage run monitor: worker status, logs, and retry
 - QC and report viewer
+- Intake review: edit client answers (an edit overwrites, with no history), send a round back to the agent for another review, add or remove questions, and accept intake
+- Template editor: edit an industry template as text (markdown or JSON) and approve it
+- Private notes per project, read by agents and never shown to clients
+- Run log viewer for each stage run
 
 **Client dashboard:**
 
-- Intake form with save-as-you-go, optional asset uploads, follow-up questions, and questions the owner marked ask-client with an answer box
+- Intake form: one section per step with a progress bar, saving as the client goes; optional uploads; an explicit Submit per round (reopen until the agent has reviewed it); follow-up rounds; and questions the owner marked ask-client with an answer box
 - Progress tracker showing the current stage in plain language
-- PRD review and sign-off
+- PRD review: the latest version with a summary of what changed; Sign off, or Request changes with a note to the owner
 - Prototype preview and approval
-- Comments on the prototype only; no editing of site content before handover
+- Comments on the prototype; no editing of site content before handover
+- Change requests from go-live until handover is complete
 - Final report summary once the owner chooses to share it
 
 Clients never see internal plans, costs, agent logs, or the question backlog unless the owner marks an item as ask-client.
