@@ -3,9 +3,9 @@
 -- docs/spec/12-security.md and docs/spec/gates.yaml.
 --
 -- DRAFT: column types and constraints are the drafter's choices where the spec lists only
--- field names; the owner has accepted the choices recorded in DECISIONS.md (D-038 to D-069).
+-- field names; the owner has accepted the choices recorded in DECISIONS.md (D-038 to D-100).
 -- Review once more in phase 1 (task P1-T02) before applying to a real project.
--- Not yet implemented: Storage bucket policies for uploads (task P2-T03), the approval checks
+-- Not yet implemented: Storage bucket policies for uploads (task P2-T03), client email records (P2-T11), the approval checks
 -- inside advance_stage() (task P1-T07), and the queue claim function (task P2-T04).
 
 -- ---------------------------------------------------------------------------
@@ -32,6 +32,10 @@ create type template_status as enum ('draft', 'approved', 'archived');
 create type round_status as enum ('planned', 'building', 'in_review', 'approved');
 create type run_status as enum ('queued', 'running', 'succeeded', 'failed', 'cancelled');
 create type backlog_status as enum ('open', 'answered', 'assumption_accepted');
+-- D-078, D-079: a client can write only while a round is open; 'reviewed' locks it.
+create type intake_round_status as enum ('open', 'submitted', 'reviewed');
+-- D-098: uploads are scanned for malware before any agent sees them.
+create type upload_scan_status as enum ('pending', 'clean', 'infected');
 
 -- ---------------------------------------------------------------------------
 -- Owner identity (D-040)
@@ -104,6 +108,21 @@ language sql stable security definer set search_path = public as $$
   select project_id from public.clients where id = auth.uid()
 $$;
 
+-- One row per intake round (round 1 is the template; later rounds are follow-ups).
+-- Clients write answers only while a round is 'open' (D-079). The agent's batch review sets
+-- 'reviewed'; only the owner can unlock a round again.
+create table intake_rounds (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  round int not null,
+  status intake_round_status not null default 'open',
+  submitted_at timestamptz,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (project_id, round)
+);
+create index intake_rounds_project_idx on intake_rounds (project_id);
+
 create table intake_responses (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects (id) on delete cascade,
@@ -122,7 +141,17 @@ create table uploads (
   kind text not null,
   storage_path text not null,
   optional boolean not null default true,
-  created_at timestamptz not null default now()
+  mime_type text not null,
+  size_bytes bigint not null,
+  scan_status upload_scan_status not null default 'pending',
+  created_at timestamptz not null default now(),
+  -- D-075, D-100: 25 MB maximum; no zip files.
+  constraint upload_size_limit check (size_bytes > 0 and size_bytes <= 26214400),
+  constraint upload_allowed_types check (mime_type in (
+    'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain', 'text/markdown', 'application/json', 'video/mp4'
+  ))
 );
 create index uploads_project_idx on uploads (project_id);
 
@@ -198,8 +227,12 @@ create table change_requests (
   description text not null,
   impact_note text,
   decision change_decision,
+  -- D-090: clients may submit change requests from go-live until handover is complete.
+  submitted_by approver_role not null default 'owner',
+  created_by uuid references auth.users (id),
   created_at timestamptz not null default now()
 );
+create index change_requests_project_idx on change_requests (project_id);
 
 create table qc_runs (
   id uuid primary key default gen_random_uuid(),
@@ -235,14 +268,46 @@ create table stage_runs (
   claimed_by text,
   heartbeat_at timestamptz,
   attempts int not null default 0,
-  log_ref text,
   tokens_used bigint not null default 0,
   cost numeric(10, 4) not null default 0,
   started_at timestamptz,
-  finished_at timestamptz
+  finished_at timestamptz,
+  -- D-082: one automatic retry, so at most 2 attempts.
+  constraint attempts_limit check (attempts <= 2)
 );
 create index stage_runs_project_idx on stage_runs (project_id);
 create index stage_runs_queue_idx on stage_runs (queued_at) where status = 'queued';
+
+-- D-084, D-085: run logs are text rows; deleted with the project's data 90 days after close.
+create table run_logs (
+  id bigint generated always as identity primary key,
+  run_id uuid not null references stage_runs (id) on delete cascade,
+  level text not null default 'info' check (level in ('debug', 'info', 'warn', 'error')),
+  message text not null,
+  created_at timestamptz not null default now()
+);
+create index run_logs_run_idx on run_logs (run_id, id);
+
+-- D-096: private owner notes. A separate table because clients can read their own projects row.
+create table owner_notes (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index owner_notes_project_idx on owner_notes (project_id);
+
+-- D-087: a client's 'Request changes' note on a PRD version. Goes to the owner, never to agents.
+create table prd_feedback (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  artifact_id uuid not null references artifacts (id),
+  body text not null,
+  created_by uuid not null references auth.users (id),
+  created_at timestamptz not null default now()
+);
+create index prd_feedback_project_idx on prd_feedback (project_id);
 
 create table gate_config (
   id uuid primary key default gen_random_uuid(),
@@ -345,6 +410,27 @@ create trigger backlog_client_update_guard
   before update on backlog_items
   for each row execute function guard_backlog_client_update();
 
+-- A client may only submit or reopen a round (open <-> submitted); the review is not theirs.
+create function guard_intake_round_client_update() returns trigger
+language plpgsql as $$
+begin
+  if public.is_owner() or public.is_service_role() then
+    return new;
+  end if;
+  if (new.id, new.project_id, new.round, new.reviewed_at)
+     is distinct from (old.id, old.project_id, old.round, old.reviewed_at) then
+    raise exception 'clients may only submit or reopen a round';
+  end if;
+  if new.status = 'submitted' and old.status = 'open' then
+    new.submitted_at := now();
+  end if;
+  return new;
+end;
+$$;
+create trigger intake_round_client_update_guard
+  before update on intake_rounds
+  for each row execute function guard_intake_round_client_update();
+
 -- ---------------------------------------------------------------------------
 -- Row-level security
 -- ---------------------------------------------------------------------------
@@ -352,6 +438,7 @@ alter table owners            enable row level security;
 alter table projects          enable row level security;
 alter table clients           enable row level security;
 alter table intake_templates  enable row level security;
+alter table intake_rounds     enable row level security;
 alter table intake_responses  enable row level security;
 alter table uploads           enable row level security;
 alter table artifacts         enable row level security;
@@ -365,6 +452,9 @@ alter table skills_registry   enable row level security;
 alter table stage_runs        enable row level security;
 alter table gate_config       enable row level security;
 alter table skill_uses        enable row level security;
+alter table run_logs           enable row level security;
+alter table owner_notes        enable row level security;
+alter table prd_feedback       enable row level security;
 
 -- Owner: full access to every table.
 do $$
@@ -373,7 +463,8 @@ begin
   foreach t in array array[
     'owners', 'projects', 'clients', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
     'approvals', 'rounds', 'backlog_items', 'comments', 'change_requests', 'qc_runs',
-    'skills_registry', 'stage_runs', 'gate_config', 'skill_uses'
+    'skills_registry', 'stage_runs', 'gate_config', 'skill_uses',
+    'intake_rounds', 'run_logs', 'owner_notes', 'prd_feedback'
   ] loop
     execute format(
       'create policy owner_all on %I for all to authenticated using (public.is_owner()) with check (public.is_owner())',
@@ -389,18 +480,32 @@ create policy client_read_own_project on projects
 create policy client_read_self on clients
   for select to authenticated using (id = auth.uid());
 
+create policy client_read_rounds on intake_rounds
+  for select to authenticated using (project_id = public.client_project_id());
+-- Submit or reopen only: the trigger above blocks every other change.
+create policy client_submit_round on intake_rounds
+  for update to authenticated
+  using (project_id = public.client_project_id() and status in ('open', 'submitted'))
+  with check (project_id = public.client_project_id() and status in ('open', 'submitted'));
+
 create policy client_read_responses on intake_responses
   for select to authenticated using (project_id = public.client_project_id());
 create policy client_write_responses on intake_responses
   for insert to authenticated with check (
     project_id = public.client_project_id()
+    and exists (select 1 from intake_rounds r
+                where r.project_id = intake_responses.project_id
+                  and r.round = intake_responses.round and r.status = 'open')
     and exists (select 1 from projects p
                 where p.id = project_id and p.stage = 'intake' and p.status = 'active')
   );
+-- D-079: while any round is open, earlier answers can be changed too.
 create policy client_update_responses on intake_responses
   for update to authenticated
   using (
     project_id = public.client_project_id()
+    and exists (select 1 from intake_rounds r
+                where r.project_id = intake_responses.project_id and r.status = 'open')
     and exists (select 1 from projects p
                 where p.id = project_id and p.stage = 'intake' and p.status = 'active')
   )
@@ -409,7 +514,9 @@ create policy client_update_responses on intake_responses
 create policy client_read_uploads on uploads
   for select to authenticated using (project_id = public.client_project_id());
 create policy client_add_uploads on uploads
-  for insert to authenticated with check (project_id = public.client_project_id());
+  for insert to authenticated with check (
+    project_id = public.client_project_id() and scan_status = 'pending'
+  );
 create policy client_delete_uploads on uploads
   for delete to authenticated using (project_id = public.client_project_id());
 
@@ -447,6 +554,29 @@ create policy client_add_prototype_comment on comments
     and exists (select 1 from projects p where p.id = project_id and p.stage = 'prototype')
   );
 
+create policy client_read_prd_feedback on prd_feedback
+  for select to authenticated using (project_id = public.client_project_id());
+create policy client_request_prd_changes on prd_feedback
+  for insert to authenticated with check (
+    project_id = public.client_project_id()
+    and created_by = auth.uid()
+    and exists (select 1 from artifacts a
+                where a.id = artifact_id and a.project_id = public.client_project_id() and a.client_visible)
+    and exists (select 1 from projects p where p.id = project_id and p.stage = 'requirements')
+  );
+
+create policy client_read_change_requests on change_requests
+  for select to authenticated using (project_id = public.client_project_id());
+-- Go-live happens at deployment preparation, so the live period is the handover stage.
+create policy client_submit_change_request on change_requests
+  for insert to authenticated with check (
+    project_id = public.client_project_id()
+    and submitted_by = 'client' and created_by = auth.uid()
+    and impact_note is null and decision is null
+    and exists (select 1 from projects p
+                where p.id = project_id and p.stage = 'handover' and p.status = 'active')
+  );
+
 -- owners, intake_templates (clients read the snapshot on their own project row), rounds,
--- change_requests, qc_runs, skills_registry, stage_runs, gate_config and skill_uses have no
--- client policy: owner only.
+-- qc_runs, skills_registry, stage_runs, run_logs, owner_notes, gate_config and skill_uses have no
+-- client policy: owner only. Clients get no update or delete on change_requests or prd_feedback.
