@@ -1,6 +1,6 @@
 # Agents, skills and tools
 
-> Snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (as of 2026-10-05). From this commit the repo is the source of truth. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 Eight agent roles cover the pipeline; each has a fixed input, output artifact, and model tier. The model tiers are a starting point to tune after the first pilot project.
 
@@ -27,6 +27,6 @@ Eight agent roles cover the pipeline; each has a fixed input, output artifact, a
 
 Manual promotion stays available: the owner can promote a project-local skill by hand after a single project, and it runs the same `generalize_skill` steps, automated checks and diff review.
 
-**Tools available to workers:** file read/write in the project repo, shell commands (build, lint, test), Lighthouse CLI, Playwright for the E2E checklist, GitHub CLI, Vercel CLI, and Supabase client access to the pipeline tables. Workers cannot touch other projects' repos or any credentials beyond those scoped to the current project.
+**Tools available to workers:** file read/write in the project repo, shell commands (build, lint, test), Lighthouse CLI, Playwright for the E2E checklist, GitHub access through short-lived GitHub App tokens limited to one repository, and Supabase client access to the pipeline tables. Workers hold no Vercel token. Workers cannot touch other projects' repos or any credentials beyond those scoped to the current project.
 
 **Copy and claims:** agents may draft plausible copy from the intake. Every factual claim (numbers, testimonials, certifications, awards, guarantees, named clients) is highlighted in the draft for the owner's review.

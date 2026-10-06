@@ -7,7 +7,7 @@ Every locked decision, with its area and reason. Source of the spec decisions: t
 | D-001 | Scope | Internal tool for one owner (freelance/agency pipeline); not multi-tenant | Owner's choice |
 | D-002 | Scope | Marketing sites and landing pages only | Owner's choice |
 | D-003 | Autonomy | Human-in-the-loop: owner approves every stage | Owner's choice |
-| D-004 | Orchestration | Agent SDK workers plus Supabase state behind a swappable stage runner interface | Workers run on the owner's machine and approvals live in the database; a workflow engine (Inngest, Trigger.dev) can replace the runner later |
+| D-004 | Orchestration | Agent SDK workers plus Supabase state behind a swappable stage runner interface | Workers run on the owner's machine and approvals live in the database; a workflow engine (Inngest, Trigger.dev) can replace the runner later; the wake-up mechanism is superseded by D-050 |
 | D-005 | Worker host | Owner's own machine; must be online while a stage runs | Free; accepted trade-off |
 | D-006 | Intake | Hybrid: industry templates plus agent follow-ups; cap of 3 follow-up rounds | Owner's choice. A coverage-score model was considered and dropped |
 | D-007 | Intake | Agent generates industry templates; owner edits and approves; they join the template library | Owner's choice |
@@ -43,3 +43,33 @@ Every locked decision, with its area and reason. Source of the spec decisions: t
 | D-037 | Repo | AGENTS.md as the main agent file with a short CLAUDE.md pointing to it | Works across several coding agents and Claude Code |
 | D-038 | Data model | Build rounds are one repeating stage `build_rounds`, with the round number in `rounds.number`. This replaces the spec snapshot's `build_round_n` stage value; the snapshot in `docs/spec/10-data-model.md` is left unchanged | Keeps the stage enum fixed; `stages.yaml` and the SQL already use it |
 | D-039 | Repo | The master site starter lives in `templates/master-starter/`, outside the pnpm workspaces | Keeps starter dependencies separate from the pipeline's; stays in one repo |
+| D-040 | Security | The owner is recognized by membership in an `owners` table checked by the RLS policies, replacing the JWT claim | Revocable instantly; ready for a second owner |
+| D-041 | Data model | `rounds.status`, `stage_runs.status` and `backlog_items.status` are enums (values proposed by the drafter, accepted by the owner) | The database rejects typos and generated types list the states |
+| D-042 | Data model | `clients.role` is removed | Roles come from the owners table |
+| D-043 | Repo | No license file | Internal tool; all rights reserved by default |
+| D-044 | Agents | Standard dev tooling (linters, formatters, test runners, type packages) may be added without asking; application dependencies and schema changes still need approval | Owner's choice |
+| D-045 | Notifications | Clients receive emails via Resend for four events (intake follow-ups ready, PRD ready, prototype ready, ask-client question waiting); owner alerts stay dashboard-only | Otherwise a client is never told something is waiting |
+| D-046 | Repo | GitHub secret scanning and push protection now; CI and branch protection later | Public repo. Until CI exists, an agent's "tests pass" is unverified |
+| D-047 | Data model | Superseded by D-061. Original: keep the client template policy and never archive a template in use | Replaced by the template snapshot |
+| D-048 | Tooling | Node 22 or newer, with `.nvmrc` | Node 20 is past end of life as far as known |
+| D-049 | Operations | Database exports on a schedule and before each project close | The approval log lives only in Supabase |
+| D-050 | Orchestration | The runner polls a durable queue (`stage_runs`) every 15 to 30 seconds and claims work with `FOR UPDATE SKIP LOCKED`, with a heartbeat for crash recovery; supersedes the Realtime wake-up | No lost events when the laptop is offline; approvals are human-paced, so seconds of delay do not matter |
+| D-051 | Starter | The starter version is not tracked per client site | Owner's choice |
+| D-052 | Config sync | A consistency test checks the YAML against the SQL (stage enum and gate seed); TypeScript types come from the database; gate behavior is read from `gate_config` at runtime | Avoids maintaining a custom code generator |
+| D-053 | Security | Workers are isolated by per-project working directory only | Owner's choice; container isolation is the next step if the risk grows |
+| D-054 | Client repos | Rounds are built on a `staging` branch; `main`, the Vercel production branch, changes only at deployment preparation | A site cannot go live early |
+| D-055 | Roadmap | An MCP server for the owner's chat is added to the roadmap | Owner's choice |
+| D-056 | Review | Each build round is a pull request into `staging`; the console Accept merges it, Feedback comments on it, Reject closes it | A ready-made diff and review surface, with previews attached |
+| D-057 | Roadmap | The MCP server is read-only (status, approval queue, backlog, cost) and lands at the end of phase 5, before the pilot | Chat must not be able to approve gates; prompt-injection risk |
+| D-058 | Approvals | A merge of a round's pull request into `staging` by the owner's GitHub account counts as Accept, via a webhook that is signature-verified and idempotent | Owner's choice |
+| D-059 | Security | Workers use a GitHub App: short-lived tokens limited to one client repo, created per run | Scoped tokens without manual per-project creation |
+| D-060 | Provisioning | An owner-run script creates each repo, links the Vercel project and records the IDs; workers get GitHub tokens only; Vercel deploys through its Git integration; the owner sets environment variables and domains | Workers never hold broader credentials |
+| D-061 | Data model | The template's sections are copied into the project at creation, with the template id kept for reference; clients have no read policy on templates. Supersedes D-047 | The project keeps the version it started with |
+| D-062 | Operations | Exports are encrypted, saved locally and copied to the owner's own cloud drive; never into the public repo | Owner's choice |
+| D-063 | Data model | Proposal items 2 (`client_visible`), 5 (change decisions) and 7 (`advance_stage` stub) accepted as drafted | Owner's choice |
+| D-064 | Pilot | The pilot is the owner's own site, with the owner playing the client from a second email account | Owner's choice |
+| D-065 | Evals | Automated eval harness with a judge model from the start, run when prompts or models change | Owner's choice |
+| D-066 | Accessibility | Lighthouse 80 only, as in the spec | Owner's choice |
+| D-067 | Evals | The Planner (skill selection and round plan) is evaluated first | Owner's choice |
+| D-068 | Evals | The judge model is Opus 5.5 | Stronger judge; about double the cost |
+| D-069 | Operations | No restore drill for backups | Owner's choice; accepted risk |

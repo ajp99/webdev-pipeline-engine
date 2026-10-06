@@ -1,6 +1,6 @@
 # QC and final report
 
-> Snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (as of 2026-10-05). From this commit the repo is the source of truth. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 The QC agent runs after the last build round; a project passes when every item below passes, and failures return to the Builder as a fix list for the owner's approval, with at most 2 fix loops before the report lists what remains for the owner to accept or fix manually.
 

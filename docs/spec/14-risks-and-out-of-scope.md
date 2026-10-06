@@ -1,6 +1,6 @@
 # Assumptions, risks and revisit triggers
 
-> Snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (as of 2026-10-05). From this commit the repo is the source of truth. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 The riskiest items are local workers going offline mid-stage, client unfamiliarity with the GitHub editor, and agent-written copy missing the client's voice.
 
@@ -18,5 +18,8 @@ The riskiest items are local workers going offline mid-stage, client unfamiliari
 | Revisit alerts | Trigger | Missed approvals because dashboard-only checks are too slow |
 | Credentials shared over WhatsApp or email | Risk (accepted) | The handover document may contain credentials; rotating shared keys after first login would reduce exposure |
 | Owner login without multi-factor | Risk (accepted) | Add multi-factor when the owner decides to |
+| No restore drill for backups | Risk (accepted) | Exports are unproven until restored once |
+| CI and branch protection deferred | Revisit | Until CI exists, an agent's "tests pass" is its own report |
+| Workers isolated by directory only | Risk (accepted) | Container isolation is the next step if the risk grows |
 
-**Out of scope for v1:** multi-tenant use by other developers, e-commerce, user-facing databases, automated billing and invoicing, CMS-based editing, email or chat notifications, multi-language sites, quotes and price estimates, and changes after a project is closed.
+**Out of scope for v1:** multi-tenant use by other developers, e-commerce, user-facing databases, automated billing and invoicing, CMS-based editing, chat notifications, owner email notifications, multi-language sites, quotes and price estimates, and changes after a project is closed.

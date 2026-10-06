@@ -1,6 +1,6 @@
 # Spec index
 
-> Snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (as of 2026-10-05). From this commit the repo is the source of truth. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 | File | Covers |
 | --- | --- |
@@ -19,6 +19,7 @@
 | [12-security.md](12-security.md) | Security and credentials |
 | [13-cost.md](13-cost.md) | Cost estimate |
 | [14-risks-and-out-of-scope.md](14-risks-and-out-of-scope.md) | Assumptions, risks, revisit triggers, out of scope |
+| [15-operations.md](15-operations.md) | Project setup, backups, evals, pilot, notifications, MCP server |
 | [stages.yaml](stages.yaml) | Machine-readable stage definitions |
 | [gates.yaml](gates.yaml) | Machine-readable gate types, classification, defaults |
 

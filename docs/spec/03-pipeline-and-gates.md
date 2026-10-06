@@ -1,6 +1,6 @@
 # Pipeline phases and gates
 
-> Snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (as of 2026-10-05). From this commit the repo is the source of truth. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 The pipeline has eight stages, and each one ends with a stored approval before the next begins. Machine-readable definitions: [stages.yaml](stages.yaml) and [gates.yaml](gates.yaml).
 
@@ -30,7 +30,7 @@ Every stage ends in one of three gate types. None advances automatically: the ow
 | Hard | Irreversible actions: deploy prep, handover | Owner | Same Accept action as the other gates; the type is a label in the queue and tables |
 | Client | Client-attributed approvals: PRD lock, prototype sign-off | Client | Recorded as a client approval |
 
-**Gate actions:** Accept approves and advances. Feedback sends notes back and the agent produces a new version. Reject sends the stage back without a new version.
+**Gate actions:** Accept approves and advances. Feedback sends notes back and the agent produces a new version. Reject sends the stage back without a new version. In build rounds, a merge of the round's pull request into `staging` by the owner's own GitHub account also counts as Accept (see 07-build-rounds.md).
 
 **Gate classification:**
 
