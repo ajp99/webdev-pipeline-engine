@@ -2,15 +2,16 @@
 -- Draft data model for CreatePipeline Engine. Derived from docs/spec/10-data-model.md,
 -- docs/spec/12-security.md and docs/spec/gates.yaml.
 --
--- DRAFT: column types, constraints and the items marked PROPOSAL are the drafter's choices
--- where the spec lists only field names. Review them in phase 1 (task P1-T02) before applying.
--- Not yet implemented: Storage bucket policies for uploads, and the approval checks inside
--- advance_stage() (task P1-T07).
+-- DRAFT: column types and constraints are the drafter's choices where the spec lists only
+-- field names; the owner has accepted the choices recorded in DECISIONS.md (D-038 to D-069).
+-- Review once more in phase 1 (task P1-T02) before applying to a real project.
+-- Not yet implemented: Storage bucket policies for uploads (task P2-T03), the approval checks
+-- inside advance_stage() (task P1-T07), and the queue claim function (task P2-T04).
 
 -- ---------------------------------------------------------------------------
 -- Enums
 -- ---------------------------------------------------------------------------
--- PROPOSAL: the spec lists build_round_n as a stage value. Modeled here as one repeating
+-- D-038: the spec snapshot lists build_round_n as a stage value. Modeled here as one repeating
 -- stage 'build_rounds'; the round number lives in rounds.number.
 create type stage as enum (
   'intake', 'requirements', 'plan', 'prototype', 'build_rounds',
@@ -26,16 +27,28 @@ create type comment_disposition as enum ('forwarded', 'change_request', 'ignored
 create type change_decision as enum ('accept_current_round', 'defer', 'decline');
 create type skill_scope as enum ('project', 'candidate', 'library', 'deprecated');
 create type skill_mark as enum ('good', 'bad');
-create type template_status as enum ('draft', 'approved', 'archived'); -- PROPOSAL
+create type template_status as enum ('draft', 'approved', 'archived');
+-- D-041: status lifecycles as enums (values proposed by the drafter, accepted by the owner).
+create type round_status as enum ('planned', 'building', 'in_review', 'approved');
+create type run_status as enum ('queued', 'running', 'succeeded', 'failed', 'cancelled');
+create type backlog_status as enum ('open', 'answered', 'assumption_accepted');
+
+-- ---------------------------------------------------------------------------
+-- Owner identity (D-040)
+-- ---------------------------------------------------------------------------
+-- The owner is recognized by membership in this table, not by a JWT claim. Rows are added with
+-- the service role only; revoking access is a delete. A second owner would be a second row.
+create table owners (
+  id uuid primary key references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
 
 -- ---------------------------------------------------------------------------
 -- Role helpers (used by RLS policies)
 -- ---------------------------------------------------------------------------
--- PROPOSAL: the owner is identified by app_metadata.role = 'owner' in the JWT. Set it with the
--- service role only; clients must never be able to edit app_metadata.
 create function public.is_owner() returns boolean
-language sql stable as $$
-  select coalesce((auth.jwt() -> 'app_metadata' ->> 'role') = 'owner', false)
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.owners where id = auth.uid())
 $$;
 
 create function public.is_service_role() returns boolean
@@ -46,10 +59,27 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------
+create table intake_templates (
+  id uuid primary key default gen_random_uuid(),
+  industry text not null,
+  version int not null default 1,
+  sections jsonb not null default '[]'::jsonb,
+  status template_status not null default 'draft',
+  created_at timestamptz not null default now(),
+  unique (industry, version)
+);
+
 create table projects (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   industry text,
+  -- D-061: the template's sections are copied into the project at creation, so the project keeps
+  -- the version it started with; the template id is kept for reference only.
+  intake_template_id uuid references intake_templates (id),
+  intake_template_snapshot jsonb,
+  -- D-060: filled in by the owner-run provisioning script.
+  github_repo text,
+  vercel_project_id text,
   stage stage not null default 'intake',
   status project_status not null default 'active',
   close_reason close_reason,
@@ -64,7 +94,6 @@ create table clients (
   id uuid primary key references auth.users (id) on delete cascade,
   email text not null,
   project_id uuid not null references projects (id) on delete cascade,
-  role text not null default 'client', -- spec lists a role field; values not specified
   created_at timestamptz not null default now()
 );
 create index clients_project_idx on clients (project_id);
@@ -74,16 +103,6 @@ create function public.client_project_id() returns uuid
 language sql stable security definer set search_path = public as $$
   select project_id from public.clients where id = auth.uid()
 $$;
-
-create table intake_templates (
-  id uuid primary key default gen_random_uuid(),
-  industry text not null,
-  version int not null default 1,
-  sections jsonb not null default '[]'::jsonb,
-  status template_status not null default 'draft',
-  created_at timestamptz not null default now(),
-  unique (industry, version)
-);
 
 create table intake_responses (
   id uuid primary key default gen_random_uuid(),
@@ -114,7 +133,7 @@ create table artifacts (
   version int not null default 1,
   content jsonb not null default '{}'::jsonb,
   status artifact_status not null default 'draft',
-  -- PROPOSAL: not in the spec field list. Needed so clients see only the PRD and prototype,
+  -- D-063: not in the spec field list. Needed so clients see only the PRD and prototype,
   -- never internal plans.
   client_visible boolean not null default false,
   created_at timestamptz not null default now(),
@@ -140,7 +159,11 @@ create table rounds (
   number int not null,
   scope jsonb,
   preview_url text,
-  status text not null default 'planned', -- values not specified in the spec
+  -- D-056: each round is a pull request into the client repo's staging branch.
+  branch text,
+  pr_number int,
+  pr_url text,
+  status round_status not null default 'planned',
   unique (project_id, number)
 );
 
@@ -154,7 +177,7 @@ create table backlog_items (
   owner_answer text,
   ask_client boolean not null default false,
   client_answer text,
-  status text not null default 'open', -- values not specified in the spec
+  status backlog_status not null default 'open',
   created_at timestamptz not null default now()
 );
 create index backlog_items_project_idx on backlog_items (project_id);
@@ -200,11 +223,18 @@ create table skills_registry (
   constraint project_scope_needs_project check (scope <> 'project' or project_id is not null)
 );
 
+-- D-050: stage_runs is the durable queue the local runner polls (every 15 to 30 seconds).
+-- The runner claims a row atomically (FOR UPDATE SKIP LOCKED), refreshes heartbeat_at while
+-- working, and a stale heartbeat lets the row be re-queued. The claim function comes in P2-T04.
 create table stage_runs (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects (id) on delete cascade,
   stage stage not null,
-  status text not null default 'queued', -- values not specified in the spec
+  status run_status not null default 'queued',
+  queued_at timestamptz not null default now(),
+  claimed_by text,
+  heartbeat_at timestamptz,
+  attempts int not null default 0,
   log_ref text,
   tokens_used bigint not null default 0,
   cost numeric(10, 4) not null default 0,
@@ -212,6 +242,7 @@ create table stage_runs (
   finished_at timestamptz
 );
 create index stage_runs_project_idx on stage_runs (project_id);
+create index stage_runs_queue_idx on stage_runs (queued_at) where status = 'queued';
 
 create table gate_config (
   id uuid primary key default gen_random_uuid(),
@@ -317,6 +348,7 @@ create trigger backlog_client_update_guard
 -- ---------------------------------------------------------------------------
 -- Row-level security
 -- ---------------------------------------------------------------------------
+alter table owners            enable row level security;
 alter table projects          enable row level security;
 alter table clients           enable row level security;
 alter table intake_templates  enable row level security;
@@ -339,7 +371,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'projects', 'clients', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
+    'owners', 'projects', 'clients', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
     'approvals', 'rounds', 'backlog_items', 'comments', 'change_requests', 'qc_runs',
     'skills_registry', 'stage_runs', 'gate_config', 'skill_uses'
   ] loop
@@ -356,9 +388,6 @@ create policy client_read_own_project on projects
 
 create policy client_read_self on clients
   for select to authenticated using (id = auth.uid());
-
-create policy client_read_approved_templates on intake_templates
-  for select to authenticated using (status = 'approved');
 
 create policy client_read_responses on intake_responses
   for select to authenticated using (project_id = public.client_project_id());
@@ -418,5 +447,6 @@ create policy client_add_prototype_comment on comments
     and exists (select 1 from projects p where p.id = project_id and p.stage = 'prototype')
   );
 
--- rounds, change_requests, qc_runs, skills_registry, stage_runs, gate_config and skill_uses
--- have no client policy: owner only.
+-- owners, intake_templates (clients read the snapshot on their own project row), rounds,
+-- change_requests, qc_runs, skills_registry, stage_runs, gate_config and skill_uses have no
+-- client policy: owner only.
