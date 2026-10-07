@@ -2,7 +2,7 @@
 
 > Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
-One Next.js app serves both views, split by role. Because alerts are dashboard-only, the owner console centers on an approval queue.
+One Next.js app serves both views, split by role. The owner console centers on an approval queue; the owner is also emailed when a gate is ready, a run waits on a pause request, or a run fails.
 
 **Owner console:**
 
@@ -18,6 +18,7 @@ One Next.js app serves both views, split by role. Because alerts are dashboard-o
 - Template editor: edit an industry template as text (markdown or JSON) and approve it
 - Private notes per project, read by agents and never shown to clients
 - Run log viewer for each stage run
+- Client invites: send an invite (valid 7 days) and resend it from a button
 - Pause requests: answer a waiting run's request to delete files or rewrite history
 - Plan versions: the Planner's re-plan after each round, with a diff, for approval
 - Round review: the pull request link, the diff, the preview, the backlog and the round's claims
@@ -30,9 +31,12 @@ One Next.js app serves both views, split by role. Because alerts are dashboard-o
 - Prototype screenshots (desktop and mobile) with Approve, or Request changes with a required note
 - Final screenshots after QC, with a comment box (a note comes to the owner; approval stays with the owner; no email)
 - No editing of site content before handover
-- Change requests from go-live until handover is complete
+- Change requests from go-live until handover is complete, each showing its status (received, accepted, deferred, declined, deployed); no email
+- A privacy page the agent drafts and the owner reviews (what is stored, who processes it, the 90-day retention)
+- After the handover is marked complete the dashboard is read-only and shows only the handover guide and its PDF
+- Mobile-first layout, since clients will often approve from a phone
 - Final report summary once the owner chooses to share it
 
 Clients never see internal plans, costs, agent logs, or the question backlog unless the owner marks an item as ask-client.
 
-Clients also receive emails (sent through Resend) when intake follow-ups, the PRD, the prototype, or an ask-client question is waiting for them. Owner alerts stay dashboard-only.
+Clients also receive emails (sent over SMTP from the owner's Gmail) when intake follow-ups, the PRD, the prototype, or an ask-client question is waiting for them.

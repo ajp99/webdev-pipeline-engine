@@ -6,19 +6,19 @@ The core is a project row with a stage, plus append-only versioned artifacts and
 
 | Table | Purpose | Key fields |
 | --- | --- | --- |
-| projects | One per client site | id, name, industry, intake_template_id, intake_template_snapshot, github_repo, vercel_project_id, stage, status (active, paused, closed), close_reason (completed or cancelled), token_budget, retention_until, round_plan, created_at |
+| projects | One per client site | id, name, industry, intake_template_id, intake_template_snapshot, github_repo, vercel_project_id, stage, status (active, paused, closed), close_reason (completed or cancelled), token_budget, retention_until, data_deleted_at, round_plan, created_at |
 | clients | Client accounts (Supabase Auth users) | id, email, project_id |
 | owners | Owner accounts (Supabase Auth users); membership decides the owner role | id, created_at |
 | intake_templates | Versioned industry templates | id, industry, version, sections, status |
 | intake_rounds | Intake rounds and their lock state | project_id, round, status (open, submitted, reviewed), submitted_at, reviewed_at |
 | intake_responses | Answers by round; the owner's edits overwrite | project_id, round, question_id, answer, asked_by (template or agent) |
-| uploads | Client assets | project_id, kind, storage_path, optional, mime_type, size_bytes (25 MB maximum), scan_status (pending, clean, infected) |
+| uploads | Client assets | project_id, kind, storage_path, optional, mime_type, size_bytes (25 MB maximum; images 5 MB maximum), scan_status (pending, clean, infected) |
 | artifacts | Versioned agent outputs (PRD, its internal prd_notes, plan, report, handover docs) | project_id, type, version, content, status (draft, approved, superseded) |
 | approvals | Immutable approval log | artifact_id, approved_by, role (owner or client), gate_type (soft, hard, client), at |
-| rounds | Build rounds | project_id, number, scope, preview_url, branch, pr_number, pr_url, feedback_count (at most 3), claims, claims_cleared_at, status (planned, building, in_review, approved) |
+| rounds | Build rounds | project_id, number, scope, preview_url, branch, pr_number, pr_url, feedback_count (at most 3), claims, claims_cleared_at, change_request_id, status (planned, building, in_review, approved) |
 | backlog_items | Questions and assumptions from building | project_id, round, question, context, assumption, owner_answer, ask_client, client_answer, answer_action (next_round or immediate_fix), status (open, answered, assumption_accepted) |
 | comments | Client notes on the prototype and on the final screenshots | project_id, body, kind (prototype, final_screenshots), artifact_id, owner_disposition (forwarded, change request, ignored) |
-| change_requests | Post-lock scope changes | project_id, description, impact_note, decision, submitted_by (owner or client), created_by |
+| change_requests | Post-lock scope changes | project_id, description, impact_note, decision (accept_current_round, accept_mini_round, defer, decline), status (received, accepted, deferred, declined, deployed), submitted_by (owner or client), created_by |
 | qc_runs | QC results | project_id, lighthouse scores, checklist results, run_at |
 | skills_registry | Library index and per-project skills | name, path, scope (project, candidate, library, deprecated), project_id, version, generalization_report (JSONB), approved_by, approved_at |
 | stage_runs | Durable queue and run log for the stage runner | project_id, stage, status (queued, running, waiting, succeeded, failed, cancelled), queued_at, claimed_by, heartbeat_at, attempts (at most 2), tokens_used, started_at, finished_at |

@@ -18,7 +18,7 @@ flowchart LR
 
 The client approves at the PRD and the prototype; every other gate is the owner's. Feedback sends an artifact back to its agent as a new version with the owner's notes, Reject sends the stage back without a new version, and the stage stays open until the owner accepts.
 
-**Stage outputs:** intake record, PRD v1.0, plan with skill set and round scope, prototype screenshots, one pull request, preview and backlog per round, QC results and report, final screenshots, deployment checklist, handover pack.
+**Stage outputs:** intake record, PRD v1.0, plan with skill set, design brief, token budget and round scope, prototype screenshots, one pull request, preview and backlog per round, QC results and report, final screenshots, deployment checklist, handover pack.
 
 ### Gate types
 

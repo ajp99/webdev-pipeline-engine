@@ -15,7 +15,7 @@ Eight agent roles cover the pipeline; each has a fixed input, output artifact, a
 | Reporter | QC results, round history | Concise high-level report | Haiku 4.5 |
 | Handover | Final repo, PRD | Documentation, GitHub-editor content guide, handover document | Sonnet 5.5 or Haiku 4.5 |
 
-**Skills library:** a Git repo of SKILL.md files grouped by area: starter customization, industry copy, SEO, accessibility basics, MDX content structure, Resend contact form, deployment, handover. In this repo it lives in `skills/`. The Planner proposes which skills a project uses. Skills the agent creates for a specific project stay with that project until the owner promotes them to the library.
+**Skills library:** a Git repo of SKILL.md files grouped by area: starter customization, industry copy, SEO, accessibility basics, MDX content structure, SMTP contact form, deployment, handover. In this repo it lives in `skills/`. The Planner proposes which skills a project uses. Skills the agent creates for a specific project stay with that project until the owner promotes them to the library.
 
 **Skill promotion lifecycle:** a skill moves through four states: project-local, candidate, library, deprecated.
 
@@ -34,3 +34,4 @@ Manual promotion stays available: the owner can promote a project-local skill by
 **First skills and loading (D-105 to D-107):** an agent drafts the first skills from the starter and spec and the owner reviews them. The Planner selects the skills for a project and the worker loads only those into the run. A script scans `skills/` and updates the registry, at worker start and before each run.
 
 **The plan (D-108, D-109, D-126, D-135):** structured fields (rounds with scope, skills, dependencies, token budget) plus a markdown rationale per section, edited as text. The Planner proposes the round count with a rule of thumb: 5 pages or fewer and no blog is 2 rounds, otherwise 4; the owner can override. It flags hard rounds for Opus 5.5 and proposes the token budget; the owner confirms both when approving the plan. After each approved round the Planner re-plans the remaining rounds and the owner approves the new plan version.
+**Reference-site tool (D-188):** a narrow tool that opens only the URLs the client listed (up to 3) and returns screenshots, never page text. It accepts public web addresses only, has a short timeout, and stores the screenshots privately for deletion with the project's other data. It is the only network access beyond D-131's refusal rule.
