@@ -37,7 +37,7 @@ A read-only MCP server lets the owner ask Claude about status, the approval queu
 
 - At most one ticket per project at a time, and at most 2 projects in parallel (adjustable with `WORKER_MAX_PARALLEL_PROJECTS`).
 - A failed run is retried once automatically (at most 2 attempts), then fails to the owner's queue.
-- No time limit on runs; the heartbeat and the cost warning are the only guards.
+- No time limit on runs; the heartbeat and the token progress bar are the only guards. A run waiting for the owner's answer to a pause request keeps its slot.
 - Run logs are text rows in the database and are deleted 90 days after project close.
 
 ## Client accounts (D-094)
@@ -47,3 +47,18 @@ The owner enters the client's email; the client receives an invite email with a 
 ## Phase 2 gate evidence (D-093)
 
 "A test client signs off a PRD" is shown by three things recorded in `docs/plan/PROGRESS.md`: a manual walkthrough with the owner as the test client from a second email, an automated end-to-end test with stubbed model responses, and a cost report copied from `stage_runs` and compared with the estimates in `13-cost.md`.
+## Previews, screenshots and QC (D-114 to D-117)
+
+Vercel previews stay behind Vercel's login and only the owner views them. The worker builds the site and serves it locally; screenshots (full-page desktop and mobile), Lighthouse and Playwright all run against that build. No live preview is shared with the client before go-live. The client sees prototype screenshots, and new final screenshots after QC.
+
+## Provisioning script (D-060, D-123)
+
+An owner-run command that creates the client repo from `templates/master-starter`, installs the GitHub App, creates and links the Vercel project, and records the IDs. Each step checks whether it is already done, so a rerun resumes; a cleanup command removes a half-created project after a confirmation; a dry-run mode shows the planned steps first.
+
+## Handover repo (D-137, D-139)
+
+The client creates an empty GitHub repo and adds the owner. An owner-run script pushes one clean commit to it, with no round history, pull requests or `.pipeline/` notes. The original repo and its pull requests stay with the owner.
+
+## Phase 3 and 4 gate evidence (D-127, D-141)
+
+Phase 3: the phase 2 evidence (manual walkthrough, automated end-to-end test with stubbed model responses, cost report) plus the Planner eval results on the 3 fictional fixtures. Phase 4: two real rounds on the dental fixture with a throwaway repo, exercising a re-plan, Feedback loops, a risky-command pause and an ask-client answer; an automated round-loop test with stubbed model and GitHub calls; table-driven tests of the command allowlist (allowed, refused and paused commands, including attempts to reword a refused one); and a cost report in tokens.

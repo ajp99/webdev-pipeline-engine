@@ -13,7 +13,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 ## Tasks
 
 - [ ] **P2-T01 Template schema and generic template**  
-  Acceptance: Templates are stored as JSON with versions. Question types: short text, long text, single choice, multiple choice, file upload, links. Each question has a `required` flag set by the owner. The console validates edits against the schema and rejects invalid ones with clear errors. A generic approved template exists.
+  Acceptance: Templates are stored as JSON with versions. Question types: short text, long text, single choice, multiple choice, file upload, links. Each question has a `required` flag set by the owner. The console validates edits against the schema and rejects invalid ones with clear errors. A generic approved template exists, including a design section (visual style, reference sites liked and disliked, colors and fonts, imagery style).
 
 - [ ] **P2-T02 Industry template generation and editing**  
   Acceptance: The input is the industry name plus the owner's notes. An agent drafts the template; the owner edits it as text (markdown or JSON) in the console, approves it, and it joins the library as a new version. When a project starts, the template's sections are copied into `intake_template_snapshot`, so the project keeps its version.

@@ -21,7 +21,9 @@ The riskiest items are local workers going offline mid-stage, client unfamiliari
 | No restore drill for backups | Risk (accepted) | Exports are unproven until restored once |
 | CI and branch protection deferred | Revisit | Until CI exists, an agent's "tests pass" is its own report |
 | Workers isolated by directory only | Risk (accepted) | Container isolation is the next step if the risk grows |
-| No time limit on runs | Risk (accepted) | A runaway agent loop keeps a fresh heartbeat; the cost warning is only a badge |
+| No time limit on runs | Risk (accepted) | A runaway agent loop keeps a fresh heartbeat, and there is no cost warning; the token progress bar is the only signal |
+| A waiting run keeps its slot | Risk (accepted) | An unanswered pause request can occupy one of the 2 project slots indefinitely |
+| The client never uses the live site before go-live | Risk (accepted) | The client sees screenshots only; hover, menus, forms and animation are reviewed by the owner alone |
 | Owner edits overwrite client answers with no history | Risk (accepted) | The client's original wording is lost; the approval log does not record answer edits |
 | Silent clients stall the pipeline | Risk (accepted) | No reminder emails; the owner's overdue badge is the only signal |
 

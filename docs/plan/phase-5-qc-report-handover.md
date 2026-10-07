@@ -13,16 +13,16 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 ## Tasks
 
 - [ ] **P5-T01 QC runner**  
-  Acceptance: Lighthouse CLI on key pages (mobile), basic SEO checks, the generic checklist (including privacy policy, cookie notice, and contact form spam protection), and the Playwright smoke test; results stored in `qc_runs`.
+  Acceptance: Lighthouse CLI on key pages (mobile) and Playwright, run against a local production build the worker serves; basic SEO checks; the generic checklist (including privacy policy, cookie notice, and contact form spam protection); a claim-marker check (every `<Claim>` marker belongs to a cleared claim); results stored in `qc_runs`.
 
 - [ ] **P5-T02 Fix-list loop**  
   Acceptance: Failures become a fix list for owner approval; at most 2 fix loops; afterwards the report lists remaining issues for the owner to accept or fix manually.
 
-- [ ] **P5-T03 Reporter and combined gate**  
-  Acceptance: One concise report page; QC results and report are approved together in one soft gate.
+- [ ] **P5-T03 Reporter, final screenshots and combined gate**  
+  Acceptance: One concise report page; QC results and report are approved together in one soft gate. After acceptance the worker takes full-page desktop and mobile screenshots of the finished site (from the local build) and shares them with the client, who can view them and comment (a note comes to the owner; approval stays with the owner; no email).
 
 - [ ] **P5-T04 Deployment preparation**  
-  Acceptance: Production build verified on `staging`; `staging` is merged into `main`, which Vercel deploys through its Git integration. The owner sets environment variables and domains in Vercel from an agent-written checklist; Resend sender configured; post-deploy smoke test; an exact DNS records and steps list. Hard gate.
+  Acceptance: Production build verified on `staging`; a script strips all cleared claim markers; `staging` is merged into `main`, which Vercel deploys through its Git integration. The owner sets environment variables and domains in Vercel from an agent-written checklist; Resend sender configured; post-deploy smoke test; an exact DNS records and steps list. Hard gate.
 
 - [ ] **P5-T05 Handover agent**  
   Acceptance: Documentation, GitHub web-editor guide with screenshots for the project's file layout, ownership transfer checklist, handover document, maintenance notes. Hard gate.
@@ -38,6 +38,9 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 
 - [ ] **P5-T09 Pilot**  
   Acceptance: Run the owner's own site end to end, with the owner playing the client from a second email account. Measure token cost per project against the estimate in `docs/spec/13-cost.md`, owner time per stage, Feedback loops per gate, first-try Lighthouse pass, and defects found after go-live. Propose spec changes in `docs/proposals/` based on what was learned.
+
+- [ ] **P5-T10 Handover script (owner-run)**  
+  Acceptance: The client creates an empty GitHub repo and adds the owner. One command pushes a single clean commit to it: no round history, no pull requests, no `.pipeline/` notes. The Vercel project and domain move to the client; the exact Vercel steps are settled when this task starts. The original repo and its pull requests stay with the owner.
 
 ## Gate
 

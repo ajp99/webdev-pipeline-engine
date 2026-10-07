@@ -8,7 +8,7 @@ The pipeline is one Next.js app on Vercel, a Supabase backend, and a stage runne
 flowchart TB
   subgraph vercel["Next.js app (Vercel) - apps/web"]
     owner["Owner console: approve, answer, edit"]
-    client["Client dashboard: intake, preview, comments"]
+    client["Client dashboard: intake, screenshots, feedback"]
     hook["GitHub webhook: merge = Accept"]
   end
   subgraph supabase["Supabase"]
@@ -30,7 +30,7 @@ flowchart TB
   client -.->|"emails via Resend"| mail["Resend: client emails"]
 ```
 
-Approvals are stored in Supabase; an approval enqueues the next run, and the stage runner starts a worker only for a queued, approved stage. Workers reach only the tools shown: the skills library, one client repo through a short-lived GitHub App token, and the Claude API. Vercel deploys from the repo through its Git integration, so workers hold no Vercel token.
+Approvals are stored in Supabase; an approval enqueues the next run, and the stage runner starts a worker only for a queued, approved stage. Workers reach only the tools shown: the skills library, one client repo through a short-lived GitHub App token, and the Claude API. Vercel deploys from the repo through its Git integration, so workers hold no Vercel token. Screenshots and QC measurements come from a local production build the worker serves itself; Vercel previews stay behind Vercel's login and only the owner views them.
 
 **Stack:** Next.js, TypeScript, Tailwind CSS, Supabase (Postgres, Auth, Storage), GitHub App, Vercel, Resend, Claude Agent SDK (TypeScript), Lighthouse CLI, Playwright.
 
