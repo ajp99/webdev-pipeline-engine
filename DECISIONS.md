@@ -15,7 +15,7 @@ Every locked decision, with its area and reason. Source of the spec decisions: t
 | D-009 | Client access | Email + password accounts; several logins per project, any can approve; approvals only in the dashboard | Owner's choice |
 | D-010 | Client dashboard | Intake, progress tracker, PRD sign-off, prototype preview and approval, comments on the prototype only | Owner's clarification: clients can fill intake, view the prototype, comment on the prototype only |
 | D-011 | Client comments | Reach the owner first as raw text; owner decides what goes to agents | Owner's choice |
-| D-012 | Prototype | Single-page clickable preview of the main page; at most 2 revision cycles | Owner's choice |
+| D-012 | Prototype | Single-page prototype of the main page, at most 2 revision cycles. The clickable-preview part is superseded by D-114 | Owner's choice |
 | D-013 | Build rounds | Agent proposes round count and scope from pages and features; owner approves (about 2 simple, 4 larger) | Owner's choice |
 | D-014 | Gates | Three gate types (soft, hard, client); no auto-advance; overdue gates only show a badge after 24 hours (per-stage, per-project overridable) | Owner's choice; keeps "owner approves every stage" intact |
 | D-015 | Gates | Prototype has two approval records (owner soft, then client); PRD lock is one client gate with owner edits part of the stage; QC results and report are one gate | Owner's choice |
@@ -104,3 +104,49 @@ Every locked decision, with its area and reason. Source of the spec decisions: t
 | D-098 | Uploads | Uploads are scanned for malware in the worker before any agent sees them; agents never open documents with macros | Owner's choice |
 | D-099 | Agents | The intake agent starts on Haiku 4.5 and moves up if quality is poor | Cheapest start; the owner judges quality |
 | D-100 | Uploads | Allowed types: PNG, JPEG, WebP, SVG (sanitized), PDF, DOCX, plain text, markdown, JSON and MP4, up to 25 MB each. Agents treat MP4 as an asset only | Owner's choice |
+| D-101 | Starter | Pages are built from the starter's section library, plus new components the agent writes when needed | Owner's choice |
+| D-102 | Starter | Styling is Tailwind plus whatever the agent chooses per site | Owner's choice; sites will differ, so the plan records what was chosen and the handover guide describes it |
+| D-103 | Starter | The client edits MDX (pages and posts) and JSON (settings and navigation); schema checks run at build with plain-language errors | Owner's choice |
+| D-104 | Starter | The Builder may add dependencies named in the approved plan; any others need the owner's approval at the round gate | Owner's choice; the approval comes after the fact, since the dependency is already in the round's PR |
+| D-105 | Skills | An agent drafts the first skills; the owner reviews them | Owner's choice |
+| D-106 | Skills | The Planner selects skills per project and the worker loads only those into the run | Least context per run |
+| D-107 | Skills | A script scans `skills/` and updates the registry, at worker start and before each run | The worker cannot see GitHub merges directly |
+| D-108 | Plan | The plan is structured fields (rounds with scope, skills, dependencies, budget) plus a markdown rationale per section, edited as text | Machine-readable for rounds, readable for the owner |
+| D-109 | Plan | The plan proposes the project's budget and the owner confirms it when approving the plan (units set by D-138 and D-140) | Owner's choice |
+| D-110 | Prototype | The prototype uses real copy drafted from the intake, with every factual claim highlighted for the owner's review | Owner's choice |
+| D-111 | Prototype | The prototype stage produces one design | Owner's choice |
+| D-112 | Intake | The generic intake template includes a design section: visual style, reference sites liked and disliked, colors and fonts, imagery style | Owner's choice |
+| D-113 | Prototype | Client feedback on the prototype is one free-text box per revision | Owner's choice |
+| D-114 | Prototype | The client sees the prototype as screenshots only; no live preview is shared. Previews stay behind Vercel's login and only the owner views them. Supersedes the clickable part of D-012 | Owner's choice |
+| D-115 | Prototype | Screenshots are full-page desktop and full-page mobile | Owner's choice |
+| D-116 | QC | The worker builds the site and serves it locally; screenshots, Lighthouse and Playwright run against that build | Free; slightly different from Vercel |
+| D-117 | Final screenshots | No live preview is shared with the client before go-live. After the build and testing are complete, new screenshots are shared | Owner's choice; accepted risk: the client first uses the real site after go-live |
+| D-118 | Final screenshots | The client can view the final screenshots and comment; a note comes to the owner and approval stays with the owner | Owner's choice |
+| D-119 | Final screenshots | No email when the final screenshots are shared | Owner's choice |
+| D-120 | Prototype | A revision cycle starts each time the owner sends feedback to the agent for a new prototype version; the first version does not count | Owner's choice |
+| D-121 | Starter | Images come from client uploads, plus placeholder images with descriptive alt text; placeholders are clearly marked | Avoids unlicensed stock or generated images |
+| D-122 | Evals | The Planner eval fixtures are 3 fictional clients: a dental clinic, a law firm and a restaurant | Owner's choice |
+| D-123 | Provisioning | The provisioning script resumes where it stopped, has a cleanup command and has a dry-run mode | Owner's choice |
+| D-124 | Prototype | No agent self-check on the prototype; the owner reviews the screenshots directly | Owner's choice |
+| D-125 | Prototype | The client can Approve the prototype, or Request changes with a required note, the same pattern as the PRD | Owner's choice |
+| D-126 | Plan | The Planner follows a rule of thumb for the number of rounds (5 pages or fewer and no blog is 2 rounds, otherwise 4); the owner can override | Owner's choice |
+| D-127 | Phase 3 gate | Evidence is the phase 2 evidence (manual walkthrough, automated end-to-end test with stubbed model responses, cost report) plus the Planner eval results on the 3 fixtures | Owner's choice |
+| D-128 | Builder | Before a round's pull request opens, the build, lint, typecheck and content schema checks must pass | Owner's choice |
+| D-129 | Builder | The Builder records an assumption and continues; only a true blocker (something it cannot work around) stops the round and is flagged to the owner | Owner's choice |
+| D-130 | Builder | Shell commands run from an allowlist, with installs run without install scripts and refused commands logged to the backlog; a short list of risky commands pauses the run and asks the owner | Hostile client text could talk an agent into damaging commands |
+| D-131 | Builder | The commands that pause the run are: deleting a directory or many files, and force-pushing or rewriting git history. Other network requests are refused, and dependency installs outside the plan are allowed but flagged at the round gate | Owner's choice |
+| D-132 | Builder | A run waiting for the owner's answer keeps its concurrency slot | Owner's choice; accepted risk: an unanswered request can occupy a slot indefinitely |
+| D-133 | Rounds | At most 3 Feedback loops per round, then the owner must Accept or Reject | Owner's choice |
+| D-134 | Rounds | For each ask-client answer the owner chooses whether it waits for the next round or triggers an immediate fix on the open PR | Owner's choice |
+| D-135 | Rounds | After each approved round the Planner re-plans the remaining rounds using the owner's answers, and the owner approves the updated plan before the next round starts | Owner's choice |
+| D-136 | Rounds | A round's pull request is merged into `staging` with a merge commit, keeping every commit | Owner's choice |
+| D-137 | Handover | The client receives a fresh repo with clean history; the pull requests stay with the owner | The client would otherwise inherit every commit message, PR description and internal note |
+| D-138 | Cost | Token use is shown as a progress bar against the project's budget, with no warnings | Owner's choice; accepted risk together with D-083 |
+| D-139 | Handover | The client creates an empty repo and adds the owner; an owner-run script pushes the clean commit there | Owner's choice |
+| D-140 | Cost | Costs are shown in tokens only, with no dollar amounts; budgets are in tokens | Owner's choice |
+| D-141 | Phase 4 gate | Evidence is two real rounds on the dental fixture (with a re-plan, Feedback loops, a risky-command pause and an ask-client answer), an automated round-loop test with stubbed model responses, table-driven allowlist tests, and a cost report | Owner's choice |
+| D-142 | Repo process | The phase 3 and 4 change set is stacked on the open phase 2 branch | Owner's choice |
+| D-143 | Builder | Agent-written factual claims are wrapped in a `<Claim>` marker component that renders normally; the round summary lists every claim, approving the round clears them, and QC fails if an uncleared marker remains | Makes the claim review checkable |
+| D-144 | Builder | The Builder uses Sonnet 5.5 by default; the plan flags hard rounds for Opus 5.5 and the owner approves that with the plan | Owner's choice |
+| D-145 | Builder | Agents keep a notes file in the client repo (`.pipeline/NOTES.md`), removed by the clean-history handover; agents never copy the owner's private notes into it | Owner's choice |
+| D-146 | Builder | All cleared claim markers are stripped at deploy prep by a script; QC checks that every marker belongs to a cleared claim | Owner's choice |

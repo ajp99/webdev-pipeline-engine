@@ -9,7 +9,7 @@ The site is hosted under the owner's accounts during the project, then ownership
 **Deployment preparation (after report approval):**
 
 1. Production environment variables set by the owner in the client's Vercel project, Resend sender configured, analytics only if the PRD asks for it.
-2. Production build verified on `staging`, then `staging` is merged into `main`, which Vercel deploys to production through its Git integration.
+2. Production build verified on `staging`; a script strips all cleared claim markers; then `staging` is merged into `main`, which Vercel deploys to production through its Git integration.
 3. Domain and DNS handled manually by the owner or the client; the agent produces the exact DNS records and a step list.
 4. Post-deploy smoke test against the live URL.
 
@@ -17,8 +17,8 @@ The site is hosted under the owner's accounts during the project, then ownership
 
 - Project documentation: structure, content files, how to run locally
 - GitHub web-editor guide: how to edit MDX/JSON content, add a blog post, and commit, with screenshots for this project's file layout
-- Ownership transfer checklist: GitHub repo, Vercel project, Resend account or sender, domain registrar notes
+- Ownership transfer checklist: the client creates an empty GitHub repo and adds the owner; an owner-run script pushes a single clean commit (no round history, no pull requests, no `.pipeline/` notes); the Vercel project and domain move to the client (the Vercel steps are settled in phase 5); Resend account or sender; domain registrar notes
 - Handover document listing remaining credentials and settings, shared manually by WhatsApp or email
 - Maintenance notes and known limitations
 
-Go-live happens at deployment preparation, and the client sees the final site only once it is live. Change requests apply from go-live until the owner marks the handover complete. A project is closed when the owner marks the handover complete: ownership of the repo and Vercel project is with the client, scoped tokens are revoked, and the project becomes a read-only archive. Uploads and intake data are deleted 90 days after close (adjustable per project), and changes after close are handled outside the pipeline. A final database export runs before close.
+Go-live happens at deployment preparation, and the client sees the final site only once it is live. Change requests apply from go-live until the owner marks the handover complete. A project is closed when the owner marks the handover complete: the client owns the fresh repo and the Vercel project, while the original repo, its pull requests and the notes file stay with the owner, scoped tokens are revoked, and the project becomes a read-only archive. Uploads and intake data are deleted 90 days after close (adjustable per project), and changes after close are handled outside the pipeline. A final database export runs before close.

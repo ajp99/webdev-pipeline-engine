@@ -18,7 +18,7 @@ flowchart LR
 
 The client approves at the PRD and the prototype; every other gate is the owner's. Feedback sends an artifact back to its agent as a new version with the owner's notes, Reject sends the stage back without a new version, and the stage stays open until the owner accepts.
 
-**Stage outputs:** intake record, PRD v1.0, plan with skill set and round scope, prototype preview, one preview and backlog per round, QC results and report, deployment checklist, handover pack.
+**Stage outputs:** intake record, PRD v1.0, plan with skill set and round scope, prototype screenshots, one pull request, preview and backlog per round, QC results and report, final screenshots, deployment checklist, handover pack.
 
 ### Gate types
 
@@ -49,7 +49,8 @@ Per-stage values live in `gate_config`: global defaults, with per-project overri
 
 **Loops and limits:**
 
-- Prototype: at most 2 revision cycles; further changes need the owner's decision, for example a change request.
+- Prototype: at most 2 revision cycles. A cycle starts each time the owner sends feedback to the agent for a new prototype version; the first version does not count. Further changes need the owner's decision, for example a change request.
+- Rounds: at most 3 Feedback loops per round, then the owner must Accept or Reject. After each approved round the Planner re-plans the remaining rounds and the owner approves the updated plan before the next round starts.
 - QC: at most 2 fix loops; after that the report lists the remaining issues for the owner to accept or fix manually.
 - Paused: the owner can pause a project at any time; agents stop and data is kept. A cancelled project is closed and archived like a finished one.
-- Cost: a warning threshold set per project shows when token cost approaches it; nothing pauses automatically.
+- Cost: token use is shown as a progress bar against the project's token budget (tokens only, no dollar amounts, no warnings); nothing pauses automatically.

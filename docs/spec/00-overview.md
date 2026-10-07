@@ -15,9 +15,9 @@ CreatePipeline Engine is a single-owner internal system that takes a marketing-s
 | Industry templates | Agent generates from the industry name plus the owner's notes; owner edits as text and approves; then saved to library |
 | Client assets | Optional uploads (PNG, JPEG, WebP, SVG sanitized, PDF, DOCX, plain text, markdown, JSON, MP4; 25 MB each; no zip; scanned for malware); agent structures and generates copy |
 | Client login | Email + password accounts, created by an invite email with a link to set a password |
-| Client dashboard | Intake, progress tracker, PRD sign-off or request changes, prototype preview and approval, comments on the prototype, change requests during the live period |
-| Client comments | Prototype comments, PRD change-request notes and live-period change requests reach the owner first as raw text; the owner decides what goes to agents |
-| Prototype | Single-page clickable preview of the main page |
+| Client dashboard | Intake, progress tracker, PRD sign-off or request changes, prototype screenshots with approve or request changes, final screenshots with comments, change requests during the live period |
+| Client comments | Prototype and final-screenshot notes, PRD change-request notes and live-period change requests reach the owner first as raw text; the owner decides what goes to agents |
+| Prototype | One design of the main page, with real drafted copy (claims highlighted), shown to the client as full-page desktop and mobile screenshots only; at most 2 revision cycles |
 | Build rounds | Agent proposes round count and scope from pages and features; owner approves (about 2 for simple, 4 for larger) |
 | Skills | Reusable Git library of SKILL.md files; project skills move project-local, candidate, library, deprecated, with owner review at match confirmation and at the generalization diff |
 | Site architecture | Static-first Next.js, MDX/JSON content, blog, contact form emailed via Resend, no database |
@@ -27,14 +27,18 @@ CreatePipeline Engine is a single-owner internal system that takes a marketing-s
 | Post-handover edits | Client edits MDX/JSON via GitHub web editor using a short guide |
 | Credentials | Ownership transfers plus a handover document shared manually by WhatsApp or email; it may contain credentials (accepted risk) |
 | Domain and DNS | Handled manually by owner or client, per client |
-| Final acceptance | No client approval before go-live; the client sees the final site once it is live, and changes until handover is complete go through change requests |
-| Project close | Ownership transferred, scoped tokens revoked, read-only archive; uploads and intake data deleted 90 days after close (adjustable per project); client accounts stay active until the owner disables them |
+| Final acceptance | No client approval before go-live; the client sees the final site once it is live, and changes until handover is complete go through change requests; final screenshots are shared after QC |
+| Project close | The client gets a fresh repo with clean history, scoped tokens revoked, read-only archive; uploads and intake data deleted 90 days after close (adjustable per project); client accounts stay active until the owner disables them |
 | Legal pages | Every site gets a privacy policy and cookie notice drafted by the agent for owner review |
 | Copy claims | Agents may draft plausible copy; every factual claim is highlighted for owner review |
 | Lifecycle | Projects can be paused; a cancelled project is closed and archived; changes after close are handled outside the pipeline |
-| Round review | Each build round is a pull request into the client repo's `staging` branch; console Accept merges it, Feedback comments on it, Reject closes it; a merge by the owner's GitHub account also counts as Accept (webhook) |
+| Round review | Each build round is a pull request into the client repo's `staging` branch; console Accept merges it, Feedback comments on it, Reject closes it; a round's PR is merged with a merge commit; at most 3 Feedback loops per round; a merge by the owner's GitHub account also counts as Accept (webhook) |
 | Worker access | GitHub App with short-lived tokens limited to one client repo per run; workers hold no Vercel token; an owner-run provisioning script sets up each project |
 | Operations | Encrypted database exports on a schedule and before each close; GitHub secret scanning on, CI and branch protection later; automated agent evals (Planner first, Opus 5.5 judge); pilot on the owner's own site; read-only MCP server at the end of phase 5 (see 15-operations.md) |
 | PRD | A fixed list of structured sections, each in markdown; the client sees the latest version plus an agent-written summary of changes; the gap and conflict list is owner-only; no round plan (the Planner owns it) |
-| Runner behavior | One ticket per project, at most 2 projects in parallel; one automatic retry; no time limit; logs stored as database rows and deleted 90 days after close |
+| Runner behavior | One ticket per project, at most 2 projects in parallel; one automatic retry; no time limit; a run waiting for the owner keeps its slot; logs stored as database rows and deleted 90 days after close |
 | Owner notes | Private per-project notes that agents read and clients never see |
+| Starter | Section library plus agent-written components; Tailwind with agent-chosen styling; MDX for pages and posts and JSON for settings and navigation, with schema checks at build; placeholder images with descriptive alt text |
+| Plan | Structured fields plus a markdown rationale; proposes the token budget and the round count (5 pages or fewer and no blog is 2 rounds, otherwise 4); re-planned after each round with the owner's approval |
+| Builder | Sonnet 5.5 by default (Opus 5.5 for rounds the plan flags); command allowlist, two command types pause for the owner, other commands refused; a blocker stops a round, other questions become assumptions; claim markers for factual claims |
+| Cost view | Tokens only, as a progress bar against the plan's token budget; no warnings |

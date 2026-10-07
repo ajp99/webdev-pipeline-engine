@@ -7,10 +7,10 @@ One Next.js app serves both views, split by role. Because alerts are dashboard-o
 **Owner console:**
 
 - Approval queue with badge counts: every pending artifact, round, backlog item, comment, and change request in one place; each pending gate shows its type (soft, hard, client), the actions Accept, Feedback and Reject, and an overdue badge once its escalate_after_hours passes
-- Project list with stage, round, and blockers; pause or resume a project, close it, disable client accounts, and see token cost against the warning threshold
+- Project list with stage, round, and blockers; pause or resume a project, close it, disable client accounts, and see token use as a progress bar against the plan's token budget (no warnings)
 - Artifact editor: edit and approve PRD, plan, skill set, round scope, report, handover documents, with version diff
 - Question backlog view: answer, mark as ask-client, or accept the agent's assumption
-- Prototype comment inbox: raw client comments, with actions to forward to agent, convert to change request, or dismiss
+- Client notes inbox: raw notes on the prototype and the final screenshots, with actions to forward to agent, convert to change request, or dismiss
 - Template and skills library manager: review agent-generated templates; skills show a 'Skills ready for generalization review' badge with a diff of the project-local and generalized versions, which the owner approves, edits, or rejects
 - Stage run monitor: worker status, logs, and retry
 - QC and report viewer
@@ -18,14 +18,18 @@ One Next.js app serves both views, split by role. Because alerts are dashboard-o
 - Template editor: edit an industry template as text (markdown or JSON) and approve it
 - Private notes per project, read by agents and never shown to clients
 - Run log viewer for each stage run
+- Pause requests: answer a waiting run's request to delete files or rewrite history
+- Plan versions: the Planner's re-plan after each round, with a diff, for approval
+- Round review: the pull request link, the diff, the preview, the backlog and the round's claims
 
 **Client dashboard:**
 
 - Intake form: one section per step with a progress bar, saving as the client goes; optional uploads; an explicit Submit per round (reopen until the agent has reviewed it); follow-up rounds; and questions the owner marked ask-client with an answer box
 - Progress tracker showing the current stage in plain language
 - PRD review: the latest version with a summary of what changed; Sign off, or Request changes with a note to the owner
-- Prototype preview and approval
-- Comments on the prototype; no editing of site content before handover
+- Prototype screenshots (desktop and mobile) with Approve, or Request changes with a required note
+- Final screenshots after QC, with a comment box (a note comes to the owner; approval stays with the owner; no email)
+- No editing of site content before handover
 - Change requests from go-live until handover is complete
 - Final report summary once the owner chooses to share it
 
