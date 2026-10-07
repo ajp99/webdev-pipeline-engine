@@ -3,7 +3,7 @@
 -- docs/spec/12-security.md and docs/spec/gates.yaml.
 --
 -- DRAFT: column types and constraints are the drafter's choices where the spec lists only
--- field names; the owner has accepted the choices recorded in DECISIONS.md (D-038 to D-146).
+-- field names; the owner has accepted the choices recorded in DECISIONS.md (D-038 to D-215).
 -- Review once more in phase 1 (task P1-T02) before applying to a real project.
 -- Not yet implemented: Storage bucket policies for uploads (task P2-T03), client email records (P2-T11), the approval checks
 -- inside advance_stage() (task P1-T07), and the queue claim function (task P2-T04).
@@ -24,7 +24,10 @@ create type approver_role as enum ('owner', 'client');
 create type artifact_status as enum ('draft', 'approved', 'superseded');
 create type asked_by as enum ('template', 'agent');
 create type comment_disposition as enum ('forwarded', 'change_request', 'ignored');
-create type change_decision as enum ('accept_current_round', 'defer', 'decline');
+-- D-174: after go-live an accepted change request runs as a mini-round (accept_mini_round).
+create type change_decision as enum ('accept_current_round', 'accept_mini_round', 'defer', 'decline');
+-- D-193: the client dashboard shows each change request's status; no email.
+create type change_status as enum ('received', 'accepted', 'deferred', 'declined', 'deployed');
 create type skill_scope as enum ('project', 'candidate', 'library', 'deprecated');
 create type skill_mark as enum ('good', 'bad');
 create type template_status as enum ('draft', 'approved', 'archived');
@@ -97,6 +100,8 @@ create table projects (
   -- progress bar with no warnings.
   token_budget bigint,
   retention_until timestamptz,
+  -- D-169: set by the scheduled deletion job once uploads, intake data and run logs are deleted.
+  data_deleted_at timestamptz,
   round_plan jsonb,
   created_at timestamptz not null default now(),
   constraint close_reason_needs_closed check (close_reason is null or status = 'closed')
@@ -155,6 +160,8 @@ create table uploads (
   created_at timestamptz not null default now(),
   -- D-075, D-100: 25 MB maximum; no zip files.
   constraint upload_size_limit check (size_bytes > 0 and size_bytes <= 26214400),
+  -- D-211: site images over 5 MB are rejected at upload; documents and video keep 25 MB.
+  constraint upload_image_size_limit check (mime_type not like 'image/%' or size_bytes <= 5242880),
   constraint upload_allowed_types check (mime_type in (
     'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -244,12 +251,16 @@ create table change_requests (
   description text not null,
   impact_note text,
   decision change_decision,
+  status change_status not null default 'received',
   -- D-090: clients may submit change requests from go-live until handover is complete.
   submitted_by approver_role not null default 'owner',
   created_by uuid references auth.users (id),
   created_at timestamptz not null default now()
 );
 create index change_requests_project_idx on change_requests (project_id);
+
+-- D-174: a change-request mini-round is a round on a cr-N branch tied to the request it builds.
+alter table rounds add column change_request_id uuid references change_requests (id);
 
 create table qc_runs (
   id uuid primary key default gen_random_uuid(),
@@ -611,7 +622,7 @@ create policy client_submit_change_request on change_requests
   for insert to authenticated with check (
     project_id = public.client_project_id()
     and submitted_by = 'client' and created_by = auth.uid()
-    and impact_note is null and decision is null
+    and impact_note is null and decision is null and status = 'received'
     and exists (select 1 from projects p
                 where p.id = project_id and p.stage = 'handover' and p.status = 'active')
   );

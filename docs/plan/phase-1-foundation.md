@@ -13,10 +13,10 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 ## Tasks
 
 - [ ] **P1-T01 Set up tooling and workspaces**  
-  Acceptance: Node 22 or newer (`.nvmrc`). Approved dependencies: next, react, react-dom, typescript, tailwindcss, eslint, prettier, vitest, yaml, @supabase/supabase-js, @supabase/ssr; standard dev tooling may be added without asking. `pnpm install` produces a lockfile; `pnpm --filter @wpe/web dev` serves a page; `pnpm -r typecheck`, `pnpm lint` and `pnpm test` run and pass; the Commands section of `AGENTS.md` lists them.
+  Acceptance: Node 22 or newer (`.nvmrc`). Approved dependencies: next, react, react-dom, typescript, tailwindcss, eslint, prettier, vitest, yaml, @supabase/supabase-js, @supabase/ssr; standard dev tooling may be added without asking. `pnpm install` produces a lockfile; `pnpm --filter @wpe/web dev` serves a page; `pnpm -r typecheck`, `pnpm lint` and `pnpm test` run and pass; the Commands section of `AGENTS.md` lists them. The worker is developed and run inside WSL2 on Windows; a local Supabase runs through the Supabase CLI and Docker for development and tests; worker secrets live in a gitignored `.env` file (only `.env.example` is committed).
 
 - [ ] **P1-T02 Create the Supabase project and apply the migration**  
-  Acceptance: The owner supplies the project URL and keys; the agent never asks for them in chat or commits them. Migration `0001_init.sql` applies to a fresh database: 22 tables, 9 gate defaults, the status enums, the `owners` table and the queue columns on `stage_runs`. The owner's row in `owners` is inserted with the service role (task P1-T05 provides the script). The owner reviews the schema once more before it is applied.
+  Acceptance: The owner supplies the project URL and keys; the agent never asks for them in chat or commits them. Migration `0001_init.sql` applies to a fresh database: 22 tables, 9 gate defaults, the status enums, the `owners` table and the queue columns on `stage_runs`. The owner's row in `owners` is inserted with the service role (task P1-T05 provides the script). The pipeline runs on Supabase's free plan until the pilot and moves to Pro before a real client uses it. The owner reviews the schema once more before it is applied.
 
 - [ ] **P1-T03 Generate database types into packages/shared**  
   Acceptance: Types generated from the live schema live in `packages/shared`; a documented script regenerates them; `pnpm -r typecheck` passes.

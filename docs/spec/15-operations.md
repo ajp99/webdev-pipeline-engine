@@ -10,9 +10,9 @@ This file collects the decisions made after the original spec snapshot that are 
 - Workers get a **GitHub App** token: short-lived and limited to one client repository, created per run. Workers hold **no Vercel token**; Vercel deploys through its Git integration and previews are read from the GitHub deployment status.
 - The owner sets production environment variables and domains in Vercel at deployment preparation, from an agent-written checklist.
 
-## Client notifications (D-045)
+## Notifications and mail (D-045, D-156, D-167, D-168, D-200)
 
-Clients receive emails via Resend for four events: intake follow-ups ready, PRD ready, prototype ready, and an ask-client question waiting. The pipeline has its own Resend sender (the owner supplies the domain and DNS records). Owner alerts stay dashboard-only.
+Clients receive emails for four events: intake follow-ups ready, PRD ready, prototype ready, and an ask-client question waiting. The pipeline sends them over SMTP from the owner's Gmail account with an app password, and Supabase's invite and password-reset emails use the same Gmail through Supabase's custom SMTP. The owner is emailed when a gate is ready, when a run is waiting on a pause request, and when a run fails; overdue gates stay a console badge only. Change-request status and final screenshots send no email. Resend is not used unless a PRD names it.
 
 ## Backups (D-049, D-062, D-069)
 
@@ -24,15 +24,15 @@ An automated eval harness with a judge model (Opus 5.5) runs fictional client fi
 
 ## Pilot (D-064)
 
-The pilot is the owner's own site, with the owner playing the client from a second email account. Measures: token cost per project against the estimate in `13-cost.md`, owner time per stage, Feedback loops per gate, first-try Lighthouse pass, and defects found after go-live.
+The pilot is the owner's own site, with the owner playing the client from a second email account. It runs up to deployment on the Vercel address and then a handover to a second GitHub account; there is no custom domain, so the DNS steps are first exercised on a real client (D-172). Measures: token cost per project against the estimate in `13-cost.md`, owner time per stage, Feedback loops per gate, first-try Lighthouse pass, and defects found after go-live.
 
 ## Repo hygiene and CI (D-046)
 
 GitHub secret scanning and push protection are on. CI and branch protection are deferred; until they exist, an agent's report that tests pass is unverified.
 
-## MCP server (D-055, D-057)
+## MCP server (D-055, D-057, D-177)
 
-A read-only MCP server lets the owner ask Claude about status, the approval queue, the backlog, and cost. It cannot approve, answer, or change anything, because a prompt-injected client message must never be able to approve a gate through chat. It lands at the end of phase 5, before the pilot.
+A read-only MCP server would let the owner ask Claude about status, the approval queue, the backlog, and cost. It cannot approve, answer, or change anything, because a prompt-injected client message must never be able to approve a gate through chat. The owner is not sure it is needed, so it stays optional and is decided after the pilot (task P5-T08 is deferred until then).
 ## Runner behavior (D-081 to D-085)
 
 - At most one ticket per project at a time, and at most 2 projects in parallel (adjustable with `WORKER_MAX_PARALLEL_PROJECTS`).
@@ -62,3 +62,22 @@ The client creates an empty GitHub repo and adds the owner. An owner-run script 
 ## Phase 3 and 4 gate evidence (D-127, D-141)
 
 Phase 3: the phase 2 evidence (manual walkthrough, automated end-to-end test with stubbed model responses, cost report) plus the Planner eval results on the 3 fictional fixtures. Phase 4: two real rounds on the dental fixture with a throwaway repo, exercising a re-plan, Feedback loops, a risky-command pause and an ask-client answer; an automated round-loop test with stubbed model and GitHub calls; table-driven tests of the command allowlist (allowed, refused and paused commands, including attempts to reword a refused one); and a cost report in tokens.
+## Owner machine and services (D-196 to D-204)
+
+- The worker runs inside WSL2 on the owner's Windows laptop, started by hand in a terminal for now; it keeps the laptop awake only while a run is active.
+- Worker secrets live in a gitignored `.env` file and rely on full-disk encryption; one Anthropic key serves all projects.
+- Supabase is on the free plan until the pilot and on Pro before a real client uses the pipeline. Development and tests use a local Supabase through the Supabase CLI and Docker.
+- Clients reach the dashboard at the default `vercel.app` address.
+- A project's working folder is kept until the project closes and is reset at the start of every run. A model call that is rate-limited or overloaded waits with backoff and resumes without using an attempt.
+
+## Retention job (D-169, D-214)
+
+A scheduled worker job deletes uploads, intake data and run logs when a project's retention date arrives, without a confirmation step, and records `data_deleted_at`. It does not remove client accounts. A client's request for earlier deletion is handled by hand outside the pipeline.
+
+## Change requests after go-live (D-174, D-175, D-193)
+
+An accepted change request runs as a mini-round (`cr-N` branch, pull request into `staging`, owner Accept, then a hard-gate deploy step that merges `staging` into `main`) with the round checks only. The dashboard shows each request's status; no email is sent.
+
+## Phase 5 gate evidence (D-171)
+
+The pilot report against the pilot measures above, a cost report in tokens, and automated tests of the QC runner, the fix loop and a dry run of the handover script.

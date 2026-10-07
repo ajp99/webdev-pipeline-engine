@@ -13,7 +13,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 ## Tasks
 
 - [ ] **P2-T01 Template schema and generic template**  
-  Acceptance: Templates are stored as JSON with versions. Question types: short text, long text, single choice, multiple choice, file upload, links. Each question has a `required` flag set by the owner. The console validates edits against the schema and rejects invalid ones with clear errors. A generic approved template exists, including a design section (visual style, reference sites liked and disliked, colors and fonts, imagery style).
+  Acceptance: Templates are stored as JSON with versions. Question types: short text, long text, single choice, multiple choice, file upload, links. Each question has a `required` flag set by the owner. The console validates edits against the schema and rejects invalid ones with clear errors. A generic approved template exists, including the design section from task P2-T15.
 
 - [ ] **P2-T02 Industry template generation and editing**  
   Acceptance: The input is the industry name plus the owner's notes. An agent drafts the template; the owner edits it as text (markdown or JSON) in the console, approves it, and it joins the library as a new version. When a project starts, the template's sections are copied into `intake_template_snapshot`, so the project keeps its version.
@@ -43,16 +43,22 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Acceptance: Change-request records with description, affected pages and features, the agent's impact note, and the owner's decision; accepted ones bump the PRD version. Clients can submit change requests in the dashboard from go-live until handover is complete (the handover stage); clients cannot set the impact note or the decision.
 
 - [ ] **P2-T11 Client email notifications**  
-  Acceptance: Resend sends clients English emails for four events: intake follow-ups ready, PRD ready, prototype ready, ask-client question waiting. One email per event and no reminders. The pipeline has its own Resend sender; the owner supplies the sender domain and DNS records. Sent emails are recorded to avoid duplicates (a schema change the owner approves). Owner alerts stay dashboard-only.
+  Acceptance: The worker sends clients English emails over SMTP (nodemailer, approved for this task) from the owner's Gmail account with an app password, for four events: intake follow-ups ready, PRD ready, prototype ready, ask-client question waiting. One email per event and no reminders. The owner is also emailed when a gate is ready, when a run is waiting on a pause request, and when a run fails; overdue gates stay a console badge only. Change-request status and final screenshots send no email. Sent emails are recorded to avoid duplicates (a schema change the owner approves).
 
 - [ ] **P2-T12 Client invites**  
-  Acceptance: The owner enters the client's email; Supabase sends an invite email with a link to set a password. A project can have several client logins, any of which can approve.
+  Acceptance: The owner enters the client's email; Supabase sends an invite email with a link to set a password. A project can have several client logins, any of which can approve. Invite links are valid for 7 days and the console has a Resend invite button. Supabase's invite and password-reset emails use Supabase's custom SMTP with the same Gmail account.
 
 - [ ] **P2-T13 Upload scanning and file handling**  
   Acceptance: Uploads are scanned for malware in the worker before any agent sees them (the owner installs the scanner on their machine); infected files are quarantined and flagged to the owner. SVG is sanitized, zip is rejected, macro-enabled documents are never opened, and MP4 is treated as an asset only. Allowed types and the 25 MB limit are enforced in the database and in the form.
 
 - [ ] **P2-T14 Phase 2 gate evidence**  
   Acceptance: Record in `PROGRESS.md`: (1) a manual walkthrough with the owner as the test client from a second email, using a fictional client, from template to signed PRD; (2) an automated end-to-end test (Playwright) of the same flow with model responses stubbed; (3) a cost report from `stage_runs` compared with the estimates in `docs/spec/13-cost.md`.
+
+- [ ] **P2-T15 Design section and style cards**  
+  Acceptance: The generic template's design section asks for: 4 style cards (pick 1 or 2) and layout density; up to 3 reference sites with what the client likes about each; colors and font styles with an optional brand guideline upload; imagery style and things to avoid. It also asks about an existing website (one text question: URL, what to keep, what to change) and requires a logo upload or an explicit answer that there is none. An agent proposes 4 distinct style directions (such as minimal, bold, warm, corporate) and the owner approves them; each is built as a standalone sample page rendered to an image the form shows. Site images over 5 MB are rejected at upload.
+
+- [ ] **P2-T16 Dashboard basics: privacy page and mobile-first layout**  
+  Acceptance: The client dashboard is mobile-first and usable on a phone for every client action in this phase. It links to a privacy page that an agent drafts and the owner reviews, naming what is stored, who processes it and the 90-day retention; there is no first-login acceptance step.
 
 ## Gate
 
