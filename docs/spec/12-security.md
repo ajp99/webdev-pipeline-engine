@@ -15,3 +15,6 @@ The main risks are agents with shell access on the owner's own machine, client d
 - **GitHub webhook:** verify GitHub's signature, accept a merge as Accept only when the merger is the owner's GitHub account, and make it idempotent so a console-triggered merge is not recorded twice.
 - **Backups:** the database is exported on a schedule and before each project close, encrypted, saved locally and copied to the owner's own cloud drive. Exports never go into this repo (`.gitignore` excludes them). The encryption key lives in a password manager. There is no restore drill (accepted risk).
 - **Repo hygiene:** the repo is public. GitHub secret scanning and push protection are on; CI and branch protection come later.
+- **Uploads:** allowed types are PNG, JPEG, WebP, SVG, PDF, DOCX, plain text, markdown, JSON and MP4, up to 25 MB each, with no zip files. Each upload is scanned for malware in the worker before any agent sees it, SVG is sanitized, agents never open documents with macros, and MP4 is treated as an asset only. The scanner is installed on the owner's machine.
+- **Owner notes:** stored in an owner-only table, because clients can read their own project row. The Requirements agent must not quote them in anything the client sees.
+- **Run logs:** stored as database rows, may contain client data, and are deleted 90 days after project close.

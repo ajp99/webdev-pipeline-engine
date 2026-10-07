@@ -4,11 +4,16 @@
 
 Intake is a multi-step, multi-round form: an industry template sets the baseline questions, and an agent adds follow-ups only where answers are vague or contradictory.
 
-1. Owner creates the project, picks an industry (or asks the agent to generate a new template), and invites the client with an email + password account.
-2. Round 1: the client completes the template sections: business, audience, goals, pages, tone, competitors, brand, required features.
-3. Optional uploads: logo, favicon, imagery, existing copy, links. Every field is optional; missing items are flagged, not blocking.
-4. The intake agent reviews answers after each section and posts at most a few targeted follow-ups (vague goals, undefined terms, conflicting requirements).
-5. Round 2 and later: client answers follow-ups. The agent stops when it judges coverage sufficient or after a cap of 3 follow-up rounds, then flags remaining gaps to the owner.
-6. Owner reviews the full intake record and may add or remove questions before submission is accepted.
+1. The owner creates the project, picks an industry (or asks the agent to generate a new template from the industry name plus the owner's notes), and enters the client's email. The client gets an invite email with a link to set a password.
+2. Round 1: the client completes the template, one section per step with a progress bar. Answers save as the client goes. Fields the owner marked `required` in the template must be filled before submitting; everything else is optional, and missing items are flagged, not blocking.
+3. Optional uploads: logo, favicon, imagery, existing copy, links. Allowed types are PNG, JPEG, WebP, SVG (sanitized), PDF, DOCX, plain text, markdown, JSON and MP4, up to 25 MB each. Zip files are not allowed. Uploads are scanned for malware before any agent sees them, and agents never open documents with macros.
+4. The client submits the round explicitly and can reopen it until the agent has reviewed it.
+5. The agent (Haiku 4.5 to start, moving up if quality is poor) reviews the whole submitted round in one batch and posts at most 8 targeted follow-up questions (vague goals, undefined terms, conflicting requirements). After the review the round is locked: the client cannot change those answers.
+6. A follow-up round unlocks for the client, who answers the follow-ups and may also change earlier answers. After submitting, the agent reviews again and the round locks again. The cap is 3 follow-up rounds; then the agent flags remaining gaps to the owner.
+7. The owner reviews the full intake record and may edit client answers (the edit overwrites the answer, with no history), send a round back to the agent for another review, and add or remove questions, before accepting intake.
 
-**Industry template lifecycle:** the agent drafts a template for a new industry, the owner edits and approves it, and it joins the template library. Templates are versioned; a project keeps the version it started with.
+**Round states:** open, submitted, reviewed (locked). Only the owner can unlock a reviewed round.
+
+**Industry template lifecycle:** the agent drafts a template for a new industry, the owner edits it as text (markdown or JSON) in the console and approves it, and it joins the template library. Templates are versioned. When a project starts, the template's sections are copied into the project, so it keeps the version it started with.
+
+**Client emails:** the client is emailed (in English, once per event, no reminders) when intake follow-ups are ready.

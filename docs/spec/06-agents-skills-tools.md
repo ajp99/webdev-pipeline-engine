@@ -6,9 +6,9 @@ Eight agent roles cover the pipeline; each has a fixed input, output artifact, a
 
 | Agent | Input | Output (proposal for owner approval) | Suggested model |
 | --- | --- | --- | --- |
-| Intake | Template, client answers | Follow-up questions, gap list | Haiku 4.5 or Sonnet 5.5 |
-| Requirements | Full intake | PRD, gap list, round plan | Sonnet 5.5 |
-| Planner | Locked PRD, skills library | Skill and tool selection, build plan | Sonnet 5.5 |
+| Intake | Template, client answers | Follow-up questions, gap list | Haiku 4.5 to start (move up if quality is poor) |
+| Requirements | Full intake, owner notes | PRD (client-visible), internal gap and conflict list (owner-only), change summary for each new version | Sonnet 5.5 |
+| Planner | Locked PRD, skills library | Skill and tool selection, build plan, round count and scope | Sonnet 5.5 |
 | Prototype | Plan, brand inputs, starter | Single-page clickable preview | Sonnet 5.5 |
 | Builder | Approved plan, round scope | Code in the client's repo, preview deploy, question backlog | Sonnet 5.5 (Opus 5.5 for hard rounds) |
 | QC | Built site | Lighthouse results, SEO and checklist report | Sonnet 5.5 |
@@ -30,3 +30,4 @@ Manual promotion stays available: the owner can promote a project-local skill by
 **Tools available to workers:** file read/write in the project repo, shell commands (build, lint, test), Lighthouse CLI, Playwright for the E2E checklist, GitHub access through short-lived GitHub App tokens limited to one repository, and Supabase client access to the pipeline tables. Workers hold no Vercel token. Workers cannot touch other projects' repos or any credentials beyond those scoped to the current project.
 
 **Copy and claims:** agents may draft plausible copy from the intake. Every factual claim (numbers, testimonials, certifications, awards, guarantees, named clients) is highlighted in the draft for the owner's review.
+**Owner notes and uploads:** agents read the owner's private notes and the client's scanned uploads. Agents never open macro-enabled documents and treat MP4 files as assets only.
