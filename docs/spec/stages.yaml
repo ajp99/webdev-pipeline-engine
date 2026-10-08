@@ -23,8 +23,8 @@ stages:
   - id: build_rounds
     order: 5
     name: Build rounds
-    # The spec lists this stage as build_round_n: one stage value per round.
-    # Modeled here as one stage that repeats, with the round number in rounds.number.
+    # Originally listed as build_round_n (one stage value per round). D-038: modeled as one
+    # stage that repeats, with the round number in rounds.number.
     repeats: true
     typical_rounds: { simple: 2, larger: 4 }
     outputs: [round_preview, round_summary, backlog]

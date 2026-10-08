@@ -9,3 +9,9 @@ coverage/
 !.env.example
 supabase/.branches/
 supabase/.temp/
+# Database exports and backups must never be committed (the repo is public)
+backups/
+*.dump
+*.dump.*
+*.age
+*.enc

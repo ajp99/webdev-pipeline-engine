@@ -16,6 +16,7 @@ CreatePipeline Engine: an internal, single-owner pipeline that takes marketing-s
 | [supabase/migrations/](supabase/migrations) | Draft data model with row-level security |
 | [skills/](skills/README.md) | Reusable SKILL.md library |
 | [templates/master-starter/](templates/master-starter/README.md) | Master site starter (empty until phase 3) |
+| [evals/](evals/README.md), [scripts/](scripts/README.md) | Agent evals (fictional fixtures) and owner-run scripts |
 | `apps/web`, `apps/worker`, `packages/shared` | pnpm workspace packages (empty scaffolds) |
 
 ## Notes
