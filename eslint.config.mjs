@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/coverage/**',
       'templates/**',
       'apps/web/next-env.d.ts',
+      'packages/shared/src/database.types.ts',
     ],
   },
   js.configs.recommended,

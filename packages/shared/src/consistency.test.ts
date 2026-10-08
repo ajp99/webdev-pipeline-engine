@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { STAGES } from './index';
+import { Constants } from './database.types';
 
 // P1-T04: the SQL and the TypeScript constants must agree with docs/spec/stages.yaml and gates.yaml.
 const root = join(fileURLToPath(import.meta.url), '../../../..');
@@ -65,5 +66,20 @@ describe('stages.yaml and gates.yaml agree with SQL and TypeScript', () => {
   it('the release-note approval is not a stage gate (D-223)', () => {
     expect(gatesYaml.releases[0].artifact_type).toBe('release_note');
     expect(gatesYaml.gates.some((g: { stage: string }) => g.stage === 'release_note')).toBe(false);
+  });
+});
+
+describe('generated database types (P1-T03)', () => {
+  const generated = readFileSync(join(root, 'packages/shared/src/database.types.ts'), 'utf8');
+
+  it('declare every table the migrations create', () => {
+    const created = [...sql.matchAll(/create table (\w+) \(/gi)].map((m) => m[1]!).sort();
+    const typed = [...generated.matchAll(/^\s{6}(\w+): \{\n\s+Row:/gm)].map((m) => m[1]!).sort();
+    expect(created.length).toBe(23);
+    expect(typed).toEqual(created);
+  });
+
+  it('list the same stages as stages.yaml', () => {
+    expect([...Constants.public.Enums.stage]).toEqual([...STAGES]);
   });
 });
