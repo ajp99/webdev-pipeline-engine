@@ -30,7 +30,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P1-T06 Owner console shell**  
   Acceptance: Project list and approval queue pages. Each pending gate shows its type (soft, hard, client), the Accept, Feedback and Reject actions, and an overdue badge computed from `escalate_after_hours`.
 
-- [ ] **P1-T07 Implement advance_stage()**  
+- [x] **P1-T07 Implement advance_stage()**  
   Acceptance: Add migration `0002` that replaces the stub function (the owner approves this schema change first; never edit an applied migration). Checks that every gate for the current stage has its approval record (project override first, then global default), that the next stage follows `stages.yaml`, that paused projects cannot advance, and that nothing advances without an approval. Only approvals on the stage's own output artifacts count, so a release-note approval after go-live (D-223) can never advance a stage. The final step from handover also sets `projects.status` to `closed` and `close_reason` to `completed` in the same call (D-220). SQL tests cover each rule, including the two-step prototype gate and the client-only PRD gate.
 
 - [ ] **P1-T08 Automated RLS tests**  

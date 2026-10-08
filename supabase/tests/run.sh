@@ -10,10 +10,10 @@ db="${WPE_TEST_DB:-wpe_test}"
 
 dropdb --if-exists "$db" >/dev/null 2>&1
 createdb "$db" || { echo "cannot create database $db" >&2; exit 2; }
-for f in "$here/stub_auth.sql" "$repo/supabase/migrations/0001_init.sql" "$here/fixtures.sql"; do
+for f in "$here/stub_auth.sql" "$repo"/supabase/migrations/*.sql "$here/fixtures.sql"; do
   psql -X -q -v ON_ERROR_STOP=1 -d "$db" -f "$f" >/dev/null || { echo "failed to load $f" >&2; exit 2; }
 done
-out="$(psql -X -q -tA -d "$db" -f "$here/rls_suite.sql" 2>&1)"
+out="$(for s in rls_suite advance_suite; do psql -X -q -tA -d "$db" -f "$here/$s.sql" 2>&1; done)"
 grep -E '^(PASS|FAIL)' <<<"$out"
 pass=$(grep -c '^PASS' <<<"$out"); fail=$(grep -c '^FAIL' <<<"$out"); err=$(grep -c -E 'ERROR|psql:' <<<"$out")
 echo "---"; echo "PASS: $pass  FAIL: $fail  ERRORS: $err"
