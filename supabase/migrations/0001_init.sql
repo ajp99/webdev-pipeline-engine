@@ -3,7 +3,7 @@
 -- docs/spec/12-security.md and docs/spec/gates.yaml.
 --
 -- DRAFT: column types and constraints are the drafter's choices where the spec lists only
--- field names; the owner has accepted the choices recorded in DECISIONS.md (D-038 to D-100).
+-- field names; the owner has accepted the choices recorded in DECISIONS.md (D-038 to D-215).
 -- Review once more in phase 1 (task P1-T02) before applying to a real project.
 -- Not yet implemented: Storage bucket policies for uploads (task P2-T03), client email records (P2-T11), the approval checks
 -- inside advance_stage() (task P1-T07), and the queue claim function (task P2-T04).
@@ -24,13 +24,22 @@ create type approver_role as enum ('owner', 'client');
 create type artifact_status as enum ('draft', 'approved', 'superseded');
 create type asked_by as enum ('template', 'agent');
 create type comment_disposition as enum ('forwarded', 'change_request', 'ignored');
-create type change_decision as enum ('accept_current_round', 'defer', 'decline');
+-- D-174: after go-live an accepted change request runs as a mini-round (accept_mini_round).
+create type change_decision as enum ('accept_current_round', 'accept_mini_round', 'defer', 'decline');
+-- D-193: the client dashboard shows each change request's status; no email.
+create type change_status as enum ('received', 'accepted', 'deferred', 'declined', 'deployed');
 create type skill_scope as enum ('project', 'candidate', 'library', 'deprecated');
 create type skill_mark as enum ('good', 'bad');
 create type template_status as enum ('draft', 'approved', 'archived');
 -- D-041: status lifecycles as enums (values proposed by the drafter, accepted by the owner).
 create type round_status as enum ('planned', 'building', 'in_review', 'approved');
-create type run_status as enum ('queued', 'running', 'succeeded', 'failed', 'cancelled');
+-- D-130, D-132: a run waits for the owner's answer to a risky-command request and keeps its slot.
+create type run_status as enum ('queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled');
+create type run_approval_status as enum ('pending', 'approved', 'denied');
+-- D-134: the owner chooses per ask-client answer whether it waits or triggers an immediate fix.
+create type answer_action as enum ('next_round', 'immediate_fix');
+-- D-113, D-118: client notes on the prototype, and on the final screenshots after QC.
+create type comment_kind as enum ('prototype', 'final_screenshots');
 create type backlog_status as enum ('open', 'answered', 'assumption_accepted');
 -- D-078, D-079: a client can write only while a round is open; 'reviewed' locks it.
 create type intake_round_status as enum ('open', 'submitted', 'reviewed');
@@ -87,8 +96,12 @@ create table projects (
   stage stage not null default 'intake',
   status project_status not null default 'active',
   close_reason close_reason,
-  cost_warn_threshold numeric(10, 2),
+  -- D-109, D-138, D-140: proposed by the plan, confirmed by the owner; tokens only, shown as a
+  -- progress bar with no warnings.
+  token_budget bigint,
   retention_until timestamptz,
+  -- D-169: set by the scheduled deletion job once uploads, intake data and run logs are deleted.
+  data_deleted_at timestamptz,
   round_plan jsonb,
   created_at timestamptz not null default now(),
   constraint close_reason_needs_closed check (close_reason is null or status = 'closed')
@@ -147,6 +160,8 @@ create table uploads (
   created_at timestamptz not null default now(),
   -- D-075, D-100: 25 MB maximum; no zip files.
   constraint upload_size_limit check (size_bytes > 0 and size_bytes <= 26214400),
+  -- D-211: site images over 5 MB are rejected at upload; documents and video keep 25 MB.
+  constraint upload_image_size_limit check (mime_type not like 'image/%' or size_bytes <= 5242880),
   constraint upload_allowed_types check (mime_type in (
     'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -192,8 +207,14 @@ create table rounds (
   branch text,
   pr_number int,
   pr_url text,
+  -- D-133: at most 3 Feedback loops per round, then the owner must Accept or Reject.
+  feedback_count int not null default 0,
+  -- D-143, D-146: claim markers listed in the round summary; approving the round clears them.
+  claims jsonb not null default '[]'::jsonb,
+  claims_cleared_at timestamptz,
   status round_status not null default 'planned',
-  unique (project_id, number)
+  unique (project_id, number),
+  constraint feedback_limit check (feedback_count between 0 and 3)
 );
 
 create table backlog_items (
@@ -206,6 +227,7 @@ create table backlog_items (
   owner_answer text,
   ask_client boolean not null default false,
   client_answer text,
+  answer_action answer_action,
   status backlog_status not null default 'open',
   created_at timestamptz not null default now()
 );
@@ -215,6 +237,8 @@ create table comments (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects (id) on delete cascade,
   body text not null,
+  kind comment_kind not null default 'prototype',
+  artifact_id uuid references artifacts (id),
   owner_disposition comment_disposition,
   created_by uuid references auth.users (id),
   created_at timestamptz not null default now()
@@ -227,12 +251,16 @@ create table change_requests (
   description text not null,
   impact_note text,
   decision change_decision,
+  status change_status not null default 'received',
   -- D-090: clients may submit change requests from go-live until handover is complete.
   submitted_by approver_role not null default 'owner',
   created_by uuid references auth.users (id),
   created_at timestamptz not null default now()
 );
 create index change_requests_project_idx on change_requests (project_id);
+
+-- D-174: a change-request mini-round is a round on a cr-N branch tied to the request it builds.
+alter table rounds add column change_request_id uuid references change_requests (id);
 
 create table qc_runs (
   id uuid primary key default gen_random_uuid(),
@@ -269,7 +297,6 @@ create table stage_runs (
   heartbeat_at timestamptz,
   attempts int not null default 0,
   tokens_used bigint not null default 0,
-  cost numeric(10, 4) not null default 0,
   started_at timestamptz,
   finished_at timestamptz,
   -- D-082: one automatic retry, so at most 2 attempts.
@@ -287,6 +314,20 @@ create table run_logs (
   created_at timestamptz not null default now()
 );
 create index run_logs_run_idx on run_logs (run_id, id);
+
+-- D-130: a run asks the owner before a risky command (deleting a directory or many files,
+-- force-pushing or rewriting git history). The run waits, and keeps its slot, until decided.
+create table run_approvals (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references stage_runs (id) on delete cascade,
+  kind text not null check (kind in ('delete_files', 'rewrite_history')),
+  command text not null,
+  status run_approval_status not null default 'pending',
+  requested_at timestamptz not null default now(),
+  decided_at timestamptz,
+  decided_by uuid references auth.users (id)
+);
+create index run_approvals_run_idx on run_approvals (run_id);
 
 -- D-096: private owner notes. A separate table because clients can read their own projects row.
 create table owner_notes (
@@ -397,10 +438,10 @@ begin
     return new;
   end if;
   if (new.id, new.project_id, new.round, new.question, new.context, new.assumption,
-      new.owner_answer, new.ask_client, new.status, new.created_at)
+      new.owner_answer, new.ask_client, new.answer_action, new.status, new.created_at)
      is distinct from
      (old.id, old.project_id, old.round, old.question, old.context, old.assumption,
-      old.owner_answer, old.ask_client, old.status, old.created_at) then
+      old.owner_answer, old.ask_client, old.answer_action, old.status, old.created_at) then
     raise exception 'clients may only change client_answer';
   end if;
   return new;
@@ -453,6 +494,7 @@ alter table stage_runs        enable row level security;
 alter table gate_config       enable row level security;
 alter table skill_uses        enable row level security;
 alter table run_logs           enable row level security;
+alter table run_approvals      enable row level security;
 alter table owner_notes        enable row level security;
 alter table prd_feedback       enable row level security;
 
@@ -464,7 +506,7 @@ begin
     'owners', 'projects', 'clients', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
     'approvals', 'rounds', 'backlog_items', 'comments', 'change_requests', 'qc_runs',
     'skills_registry', 'stage_runs', 'gate_config', 'skill_uses',
-    'intake_rounds', 'run_logs', 'owner_notes', 'prd_feedback'
+    'intake_rounds', 'run_logs', 'owner_notes', 'prd_feedback', 'run_approvals'
   ] loop
     execute format(
       'create policy owner_all on %I for all to authenticated using (public.is_owner()) with check (public.is_owner())',
@@ -546,12 +588,20 @@ create policy client_answer_ask_client_items on backlog_items
 
 create policy client_read_comments on comments
   for select to authenticated using (project_id = public.client_project_id());
-create policy client_add_prototype_comment on comments
+-- D-113 and D-118: one note per revision on the prototype (while the stage is prototype), and
+-- notes on the final screenshots (shared after QC, so while the stage is deploy_prep).
+create policy client_add_comment on comments
   for insert to authenticated with check (
     project_id = public.client_project_id()
     and created_by = auth.uid()
     and owner_disposition is null
-    and exists (select 1 from projects p where p.id = project_id and p.stage = 'prototype')
+    and (
+      (kind = 'prototype'
+        and exists (select 1 from projects p where p.id = project_id and p.stage = 'prototype'))
+      or
+      (kind = 'final_screenshots'
+        and exists (select 1 from projects p where p.id = project_id and p.stage = 'deploy_prep'))
+    )
   );
 
 create policy client_read_prd_feedback on prd_feedback
@@ -572,11 +622,12 @@ create policy client_submit_change_request on change_requests
   for insert to authenticated with check (
     project_id = public.client_project_id()
     and submitted_by = 'client' and created_by = auth.uid()
-    and impact_note is null and decision is null
+    and impact_note is null and decision is null and status = 'received'
     and exists (select 1 from projects p
                 where p.id = project_id and p.stage = 'handover' and p.status = 'active')
   );
 
 -- owners, intake_templates (clients read the snapshot on their own project row), rounds,
--- qc_runs, skills_registry, stage_runs, run_logs, owner_notes, gate_config and skill_uses have no
+-- qc_runs, skills_registry, stage_runs, run_logs, run_approvals, owner_notes, gate_config and
+-- skill_uses have no
 -- client policy: owner only. Clients get no update or delete on change_requests or prd_feedback.

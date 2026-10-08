@@ -8,7 +8,7 @@ The pipeline is one Next.js app on Vercel, a Supabase backend, and a stage runne
 flowchart TB
   subgraph vercel["Next.js app (Vercel) - apps/web"]
     owner["Owner console: approve, answer, edit"]
-    client["Client dashboard: intake, preview, comments"]
+    client["Client dashboard: intake, screenshots, feedback"]
     hook["GitHub webhook: merge = Accept"]
   end
   subgraph supabase["Supabase"]
@@ -27,12 +27,12 @@ flowchart TB
   workers --> api["Claude API: model calls"]
   repo -->|"Git integration"| deploy["Vercel: previews and production"]
   repo -->|"webhook"| hook
-  client -.->|"emails via Resend"| mail["Resend: client emails"]
+  client -.->|"emails over SMTP"| mail["Owner Gmail SMTP: client and owner emails"]
 ```
 
-Approvals are stored in Supabase; an approval enqueues the next run, and the stage runner starts a worker only for a queued, approved stage. Workers reach only the tools shown: the skills library, one client repo through a short-lived GitHub App token, and the Claude API. Vercel deploys from the repo through its Git integration, so workers hold no Vercel token.
+Approvals are stored in Supabase; an approval enqueues the next run, and the stage runner starts a worker only for a queued, approved stage. Workers reach only the tools shown: the skills library, one client repo through a short-lived GitHub App token, and the Claude API. Vercel deploys from the repo through its Git integration, so workers hold no Vercel token. Screenshots and QC measurements come from a local production build the worker serves itself; Vercel previews stay behind Vercel's login and only the owner views them.
 
-**Stack:** Next.js, TypeScript, Tailwind CSS, Supabase (Postgres, Auth, Storage), GitHub App, Vercel, Resend, Claude Agent SDK (TypeScript), Lighthouse CLI, Playwright.
+**Stack:** Next.js, TypeScript, Tailwind CSS, Supabase (Postgres, Auth, Storage), GitHub App, Vercel, Gmail SMTP for the pipeline's own email, Claude Agent SDK (TypeScript), Lighthouse CLI, Playwright.
 
 **Stage runner interface:** each stage is a function `run(stage, project)` that returns a result and the next gate. The runner polls the `stage_runs` queue every 15 to 30 seconds and claims work atomically (`FOR UPDATE SKIP LOCKED`), refreshing a heartbeat while it works; a stale heartbeat re-queues the run. A runner that was offline simply finds the queue waiting. Realtime may be added later purely as a speed-up. Moving to Inngest or Trigger.dev later means replacing only the runner, not the stages.
 
