@@ -1,6 +1,6 @@
 # Data model (Supabase)
 
-> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 The core is a project row with a stage, plus append-only versioned artifacts and approval records. Row-level security limits clients to their own project's client-facing data. The draft SQL, including row-level security policies, is in `supabase/migrations/`.
 
@@ -13,7 +13,7 @@ The core is a project row with a stage, plus append-only versioned artifacts and
 | intake_rounds | Intake rounds and their lock state | project_id, round, status (open, submitted, reviewed), submitted_at, reviewed_at |
 | intake_responses | Answers by round; the owner's edits overwrite | project_id, round, question_id, answer, asked_by (template or agent) |
 | uploads | Client assets | project_id, kind, storage_path, optional, mime_type, size_bytes (25 MB maximum; images 5 MB maximum), scan_status (pending, clean, infected) |
-| artifacts | Versioned agent outputs (PRD, its internal prd_notes, plan, report, handover docs) | project_id, type, version, content, status (draft, approved, superseded) |
+| artifacts | Versioned agent outputs. Types include `prd`, `prototype`, `plan`, `report`, `handover_guide` (client-visible, and the only artifact a client can read after close) and `release_note` (one per change-request mini-round; the owner's deploy approval attaches to it) | project_id, type, version, content, status (draft, approved, superseded) |
 | approvals | Immutable approval log | artifact_id, approved_by, role (owner or client), gate_type (soft, hard, client), at |
 | rounds | Build rounds | project_id, number, scope, preview_url, branch, pr_number, pr_url, feedback_count (at most 3), claims, claims_cleared_at, change_request_id, status (planned, building, in_review, approved) |
 | backlog_items | Questions and assumptions from building | project_id, round, question, context, assumption, owner_answer, ask_client, client_answer, answer_action (next_round or immediate_fix), status (open, answered, assumption_accepted) |
@@ -26,6 +26,7 @@ The core is a project row with a stage, plus append-only versioned artifacts and
 | skill_uses | Optional good or bad marks on skill use | project_id, stage, skill, mark (good or bad), marked_at |
 | run_logs | Text log lines for each run; deleted 90 days after project close | run_id, level, message, created_at |
 | owner_notes | Private owner notes that agents read; owner-only | project_id, body, updated_at |
+| email_log | Every email the worker sends or tries to send; the unique dedupe key is claimed before sending; owner-only | project_id (null for owner alerts), recipient_role, recipient, event, dedupe_key, claimed_at, sent_at, error |
 | prd_feedback | A client's Request changes note on a PRD version; goes to the owner | project_id, artifact_id, body, created_by, created_at |
 | run_approvals | A run's request to the owner before a risky command (deleting files, rewriting history); owner-only | run_id, kind, command, status (pending, approved, denied), requested_at, decided_at, decided_by |
 

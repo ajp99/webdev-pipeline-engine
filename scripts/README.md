@@ -5,7 +5,7 @@ Owner-run and maintenance scripts. Nothing here runs automatically except where 
 | Script | Task | Purpose |
 | --- | --- | --- |
 | provisioning | P3-T09 | Creates a client repo from the master starter, installs the GitHub App, links the Vercel project, records the IDs |
-| backup | P1-T10 | Encrypted database export, scheduled and before project close |
+| backup | P1-T10 | Encrypted database export, scheduled and before project close; deletes exports older than 180 days |
 | bootstrap owner | P1-T05 | Inserts the owner row into `owners` with the service role |
 | handover | P5-T10 | Pushes one clean commit into the empty repo the client creates and shares |
 
