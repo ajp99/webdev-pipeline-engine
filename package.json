@@ -4,6 +4,6 @@
   "private": true,
   "description": "Internal pipeline that takes marketing-site clients from intake to handover, with agents doing the work and the owner approving every step.",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

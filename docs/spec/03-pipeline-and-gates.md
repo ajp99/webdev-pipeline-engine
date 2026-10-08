@@ -1,6 +1,6 @@
 # Pipeline phases and gates
 
-> Snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (as of 2026-10-05). From this commit the repo is the source of truth. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 The pipeline has eight stages, and each one ends with a stored approval before the next begins. Machine-readable definitions: [stages.yaml](stages.yaml) and [gates.yaml](gates.yaml).
 
@@ -18,7 +18,7 @@ flowchart LR
 
 The client approves at the PRD and the prototype; every other gate is the owner's. Feedback sends an artifact back to its agent as a new version with the owner's notes, Reject sends the stage back without a new version, and the stage stays open until the owner accepts.
 
-**Stage outputs:** intake record, PRD v1.0, plan with skill set and round scope, prototype preview, one preview and backlog per round, QC results and report, deployment checklist, handover pack.
+**Stage outputs:** intake record, PRD v1.0, plan with skill set, design brief, token budget and round scope, prototype screenshots, one pull request, preview and backlog per round, QC results and report, final screenshots, deployment checklist, handover pack.
 
 ### Gate types
 
@@ -30,7 +30,7 @@ Every stage ends in one of three gate types. None advances automatically: the ow
 | Hard | Irreversible actions: deploy prep, handover | Owner | Same Accept action as the other gates; the type is a label in the queue and tables |
 | Client | Client-attributed approvals: PRD lock, prototype sign-off | Client | Recorded as a client approval |
 
-**Gate actions:** Accept approves and advances. Feedback sends notes back and the agent produces a new version. Reject sends the stage back without a new version.
+**Gate actions:** Accept approves and advances. Feedback sends notes back and the agent produces a new version. Reject sends the stage back without a new version. In build rounds, a merge of the round's pull request into `staging` by the owner's own GitHub account also counts as Accept (see 07-build-rounds.md).
 
 **Gate classification:**
 
@@ -49,7 +49,8 @@ Per-stage values live in `gate_config`: global defaults, with per-project overri
 
 **Loops and limits:**
 
-- Prototype: at most 2 revision cycles; further changes need the owner's decision, for example a change request.
+- Prototype: at most 2 revision cycles. A cycle starts each time the owner sends feedback to the agent for a new prototype version; the first version does not count. Further changes need the owner's decision, for example a change request.
+- Rounds: at most 3 Feedback loops per round, then the owner must Accept or Reject. After each approved round the Planner re-plans the remaining rounds and the owner approves the updated plan before the next round starts.
 - QC: at most 2 fix loops; after that the report lists the remaining issues for the owner to accept or fix manually.
 - Paused: the owner can pause a project at any time; agents stop and data is kept. A cancelled project is closed and archived like a finished one.
-- Cost: a warning threshold set per project shows when token cost approaches it; nothing pauses automatically.
+- Cost: token use is shown as a progress bar against the project's token budget (tokens only, no dollar amounts, no warnings); nothing pauses automatically.

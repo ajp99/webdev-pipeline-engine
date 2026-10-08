@@ -29,7 +29,9 @@ gates:
       - { gate_type: client, gatekeeper: client }
   - stage: build_rounds
     approvals:
-      - { gate_type: soft, gatekeeper: owner, per: round }
+      # D-058: Accept comes from the console, or from a merge of the round's pull request into
+      # staging by the owner's GitHub account (webhook).
+      - { gate_type: soft, gatekeeper: owner, per: round, accept_via: [console, github_merge] }
   - stage: qc_report
     # QC results and report are approved together in one gate.
     approvals:
