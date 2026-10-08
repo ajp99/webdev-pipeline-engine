@@ -9,7 +9,7 @@ Reusable SKILL.md files that agents load for specific work. Grouped by area; one
 | `seo/` | SEO basics and checks |
 | `accessibility-basics/` | Accessibility basics |
 | `mdx-content-structure/` | MDX/JSON content layout the client edits |
-| `resend-contact-form/` | The Resend contact form route and spam protection |
+| `smtp-contact-form/` | The SMTP contact form route, transports and spam protection |
 | `deployment/` | Production deploy and DNS steps |
 | `handover/` | Documentation, editor guide, ownership transfer |
 

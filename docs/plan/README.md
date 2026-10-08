@@ -6,7 +6,7 @@ Five phases, built in order. Each phase is closed by one gate that only the owne
 | --- | --- | --- | --- |
 | 1 | [Foundation](phase-1-foundation.md) | An approved dummy artifact moves a project stage | not started |
 | 2 | [Intake and PRD](phase-2-intake-and-prd.md) | A test client signs off a PRD | not started |
-| 3 | [Plan and prototype](phase-3-plan-and-prototype.md) | Prototype approved from a live preview | not started |
+| 3 | [Plan and prototype](phase-3-plan-and-prototype.md) | Prototype approved from screenshots | not started |
 | 4 | [Build rounds](phase-4-build-rounds.md) | A full round runs with its backlog triaged | not started |
 | 5 | [QC, report, handover](phase-5-qc-report-handover.md) | A pilot site is handed over | not started |
 
@@ -20,5 +20,5 @@ Task IDs look like `P2-T04` (phase 2, task 4). Tasks and acceptance criteria wer
 ## Open items for the owner
 
 - **CI and branch protection** are deferred (D-046). Until CI exists, an agent's report that tests pass is unverified. The owner decides when to add them.
-- **Pipeline domain and email sender:** the owner supplies them for the client emails (task P2-T11).
+- **Pipeline email account:** the owner supplies a Gmail app password for the pipeline's client and owner emails and for Supabase's custom SMTP (tasks P2-T11 and P2-T12).
 - No unresolved spec items remain; see `docs/proposals/` for how earlier ones were decided.
