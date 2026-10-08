@@ -10,7 +10,7 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
   const session = await requireRole('owner', '/owner');
   const supabase = await createClient();
   const queue = buildQueue(await loadQueueInput(supabase));
-  const waiting = queue.items.filter((i) => i.actionable).length;
+  const waiting = queue.items.filter((i) => i.actionable).length + queue.ready.length;
   const overdue = queue.items.filter((i) => i.overdue).length;
   return (
     <div className="min-h-screen">

@@ -4,6 +4,7 @@ The agent built and tested everything it could without a Supabase project, Docke
 
 1. **Create the Supabase project (P1-T02).** Free plan, a region near you, a database password saved in your password manager. Note the project reference.
 2. **Review the schema once more.** Read `supabase/migrations/0001_init.sql` and `0002_advance_stage.sql`. Say so in the PR if anything should change; changes go into a new migration, never an edited one.
+2b. **Turn off public sign-ups.** Supabase dashboard, Authentication, Providers/Sign In: switch off "Allow new users to sign up". Logins are created by you (the owner bootstrap script) or by invite (phase 2), never by strangers.
 3. **Apply the migrations.** `supabase login`, `supabase link --project-ref <ref>`, `supabase db push`. Check in the dashboard that there are 23 tables.
 4. **Fill in the secrets.** `apps/web/.env.local`: the project URL and the anon key. `apps/worker/.env`: the URL, the service role key, `OWNER_EMAIL`, `OWNER_PASSWORD` (12 characters or more). Both files are gitignored.
 5. **Regenerate the database types.** `SUPABASE_DB_URL=<connection string> scripts/gen-types.sh`. The result should be identical to the committed file.

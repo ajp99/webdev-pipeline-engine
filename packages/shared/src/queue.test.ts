@@ -163,7 +163,9 @@ describe('buildQueue', () => {
           { project_id: 'p1', number: 1, status: 'approved' },
           { project_id: 'p1', number: 2, status: 'in_review' },
         ],
-        artifacts: [art({ id: 'rs2', type: 'round_summary', version: 2, created_at: hoursAgo(5) })],
+        artifacts: [
+          art({ id: 'rs2', type: 'round_summary', version: 3, round: 2, created_at: hoursAgo(5) }),
+        ],
       }),
     );
     expect(q.items).toHaveLength(1);
@@ -173,6 +175,37 @@ describe('buildQueue', () => {
       artifactId: 'rs2',
       actionable: true,
     });
+  });
+
+  it("finds a round's summary by its round number, using the newest version after Feedback", () => {
+    const q = buildQueue(
+      input({
+        projects: [{ id: 'p1', name: 'Dental', stage: 'build_rounds', status: 'active' }],
+        rounds: [{ project_id: 'p1', number: 1, status: 'in_review' }],
+        artifacts: [
+          art({ id: 'rs1', type: 'round_summary', version: 1, round: 1, status: 'superseded' }),
+          art({ id: 'rs2', type: 'round_summary', version: 2, round: 1 }),
+          art({ id: 'other', type: 'round_summary', version: 3, round: 2 }),
+        ],
+      }),
+    );
+    expect(q.items.map((i) => i.artifactId)).toEqual(['rs2']);
+  });
+
+  it('lists a project whose gates are all approved as ready to advance, with the next stage', () => {
+    const q = buildQueue(
+      input({
+        artifacts: [art()],
+        approvals: [{ artifact_id: 'a1', gate_type: 'soft', at: hoursAgo(1) }],
+      }),
+    );
+    expect(q.items).toEqual([]);
+    expect(q.ready.map((r) => [r.project.id, r.nextStage])).toEqual([['p1', 'requirements']]);
+  });
+
+  it('does not call a project ready while a gate is open or the agent has not produced the artifact', () => {
+    expect(buildQueue(input({ artifacts: [art()] })).ready).toEqual([]);
+    expect(buildQueue(input()).ready).toEqual([]);
   });
 
   it('sorts the longest wait first', () => {

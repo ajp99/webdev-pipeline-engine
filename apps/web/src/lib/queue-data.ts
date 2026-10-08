@@ -8,7 +8,9 @@ export async function loadQueueInput(supabase: SupabaseClient<Database>): Promis
     supabase
       .from('gate_config')
       .select('stage, project_id, gate_type, gatekeeper, escalate_after_hours'),
-    supabase.from('artifacts').select('id, project_id, type, version, status, created_at'),
+    supabase
+      .from('artifacts')
+      .select('id, project_id, type, version, status, created_at, round:content->round'),
     supabase.from('approvals').select('artifact_id, gate_type, at'),
     supabase.from('rounds').select('project_id, number, status'),
   ]);
@@ -19,7 +21,10 @@ export async function loadQueueInput(supabase: SupabaseClient<Database>): Promis
     now: new Date(),
     projects: projects.data ?? [],
     gateConfig: gateConfig.data ?? [],
-    artifacts: artifacts.data ?? [],
+    artifacts: (artifacts.data ?? []).map((a) => ({
+      ...a,
+      round: typeof a.round === 'number' ? a.round : null,
+    })),
     approvals: approvals.data ?? [],
     rounds: rounds.data ?? [],
   };

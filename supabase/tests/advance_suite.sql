@@ -37,17 +37,22 @@ end $$;
 -- Setup builders. One scratch project, id C, in the stage and status given.
 create function t.proj(stg text, st text default 'active') returns text language sql as
 $$ select format('insert into projects(id,name,stage,status) values (%L,%L,%L,%L)',
-  'cccccccc-0000-0000-0000-000000000001','C',stg,st) $$;
-create function t.art(typ text, ver int default 1, st text default 'draft') returns text language sql as
-$$ select format('insert into artifacts(project_id,type,version,status) values (%L,%L,%s,%L)',
-  'cccccccc-0000-0000-0000-000000000001',typ,ver,st) $$;
+  'cccccccc-0000-0000-0000-000000000001','C',stg,st)
+  || '; insert into auth.users(id,email) values (''00000000-0000-0000-0000-0000000000c1'',''c@x'')'
+  || '; insert into clients(id,email,project_id) values (''00000000-0000-0000-0000-0000000000c1'',''c@x'',''cccccccc-0000-0000-0000-000000000001'')' $$;
+create function t.art(typ text, ver int default 1, st text default 'draft', content text default '{}') returns text language sql as
+$$ select format('insert into artifacts(project_id,type,version,status,content) values (%L,%L,%s,%L,%L)',
+  'cccccccc-0000-0000-0000-000000000001',typ,ver,st,content) $$;
+-- A round summary for round n (D-133: Feedback makes a new version of the same round's summary).
+create function t.rs(n int, ver int default 1, st text default 'draft') returns text language sql as
+$$ select t.art('round_summary', ver, st, format('{"round": %s}', n)) $$;
 -- An approval by the owner (role owner) or the client (role client) at a fixed time offset (minutes).
-create function t.appr(typ text, ver int, gate text, mins int default 0) returns text language sql as
+create function t.appr(typ text, ver int, gate text, mins int default 0, by text default null, rl text default null) returns text language sql as
 $$ select format('insert into approvals(artifact_id,approved_by,role,gate_type,at)
   select id,%L,%L,%L,timestamptz ''2026-01-01 10:00'' + interval ''%s minutes''
   from artifacts where project_id=%L and type=%L and version=%s',
-  case when gate='client' then '00000000-0000-0000-0000-0000000000a1' else '00000000-0000-0000-0000-0000000000a0' end,
-  case when gate='client' then 'client' else 'owner' end, gate, mins,
+  coalesce(by, case when gate='client' then '00000000-0000-0000-0000-0000000000c1' else '00000000-0000-0000-0000-0000000000a0' end),
+  coalesce(rl, case when gate='client' then 'client' else 'owner' end), gate, mins,
   'cccccccc-0000-0000-0000-000000000001', typ, ver) $$;
 create function t.rnd(n int, st text, cr boolean default false) returns text language sql as
 $$ select format('insert into rounds(project_id,number,status,change_request_id) values (%L,%s,%L,%s)',
@@ -70,12 +75,21 @@ select t.adv('a client cannot call advance_stage', t.proj('intake')||';'||t.art(
 select t.adv('skipping a stage is refused', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('plan'), 'error:is not the stage after');
 select t.adv('going backwards is refused', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'error:is not the stage after');
 select t.adv('a paused project cannot advance', t.proj('intake','paused')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'error:paused');
-select t.adv('a closed project cannot advance', t.proj('closed','closed'), :'O', 'authenticated', t.go('closed'), 'error:closed');
+select t.adv('a closed project cannot advance', t.proj('closed','closed'), :'O', 'authenticated', t.go('closed'), 'error:only an active project');
+select t.adv('a project in the closed stage cannot advance even if marked active', t.proj('closed','active'), :'O', 'authenticated', t.go('closed'), 'error:already closed');
 select t.adv('an unknown project is refused', 'select 1', :'O', 'authenticated', t.go('requirements'), 'error:not found');
 select t.adv('an approval on the wrong artifact type does not count', t.proj('plan')||';'||t.art('prd')||';'||t.appr('prd',1,'soft')||';'||t.art('plan'), :'O', 'authenticated', t.go('prototype'), 'error:soft approval');
 select t.adv('an approval on a superseded version does not count', t.proj('plan')||';'||t.art('plan',1,'superseded')||';'||t.appr('plan',1,'soft')||';'||t.art('plan',2), :'O', 'authenticated', t.go('prototype'), 'error:soft approval');
 select t.adv('a superseded newest artifact does not count', t.proj('plan')||';'||t.art('plan',1,'superseded')||';'||t.appr('plan',1,'soft'), :'O', 'authenticated', t.go('prototype'), 'error');
-select t.adv('the stage trigger still blocks a direct update after an advance', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('requirements')||'; update projects set stage=''plan'' where id=''cccccccc-0000-0000-0000-000000000001''', 'error:advance_stage');
+select t.adv('the stage trigger still blocks a direct update after an advance', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('requirements')||'; update projects set stage=''plan'' where id=''cccccccc-0000-0000-0000-000000000001''', 'error:can only change through');
+
+-- who gave the approval
+select t.adv('identity: a client-role approval by the owner does not stand in for the client', t.proj('requirements')||';'||t.art('prd')||';'||t.appr('prd',1,'client',0,'00000000-0000-0000-0000-0000000000a0'), :'O', 'authenticated', t.go('plan'), 'error:client approval');
+select t.adv('identity: a client of another project cannot sign off this PRD', t.proj('requirements')||';'||t.art('prd')||';'||t.appr('prd',1,'client',0,'00000000-0000-0000-0000-0000000000a1'), :'O', 'authenticated', t.go('plan'), 'error:client approval');
+select t.adv('identity: an owner-role approval by someone who is not an owner is refused', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft',0,'00000000-0000-0000-0000-0000000000c1'), :'O', 'authenticated', t.go('prototype'), 'error:soft approval');
+select t.adv('an approval dated in the future is stored as now', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
+  'insert into approvals(artifact_id,approved_by,role,gate_type,at) select id,''00000000-0000-0000-0000-0000000000a0'',''owner'',''soft'',timestamptz ''2099-01-01'' from artifacts where type=''plan'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'ok',
+  '(select max(at) from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id=''cccccccc-0000-0000-0000-000000000001'') <= now()');
 
 -- requirements: the client gate
 select t.adv('requirements: an owner approval is not enough', t.proj('requirements')||';'||t.art('prd')||';'||t.appr('prd',1,'soft'), :'O', 'authenticated', t.go('plan'), 'error:client approval');
@@ -96,11 +110,15 @@ select t.adv('another project''s override is ignored', t.proj('plan')||';'||t.ar
 
 -- build rounds
 select t.adv('rounds: none planned is refused', t.proj('build_rounds'), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
-select t.adv('rounds: one still in review is refused', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.art('round_summary',1)||';'||t.appr('round_summary',1,'soft')||';'||t.rnd(2,'in_review'), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
-select t.adv('rounds: an approved round without an approval record is refused', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.art('round_summary',1), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
-select t.adv('rounds: an approval on a superseded round summary does not count', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.art('round_summary',1,'superseded')||';'||t.appr('round_summary',1,'soft'), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
-select t.adv('rounds: all approved with records advances', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.art('round_summary',1)||';'||t.appr('round_summary',1,'soft')||';'||t.rnd(2,'approved')||';'||t.art('round_summary',2)||';'||t.appr('round_summary',2,'soft'), :'O', 'authenticated', t.go('qc_report'), 'ok', '(' || t.cs() || ') = ''qc_report''');
-select t.adv('rounds: a change-request round is ignored', t.proj('build_rounds')||';insert into change_requests(id,project_id,description,submitted_by) values (''dddddddd-0000-0000-0000-000000000001'',''cccccccc-0000-0000-0000-000000000001'',''cr'',''owner'')'||';'||t.rnd(1,'approved')||';'||t.art('round_summary',1)||';'||t.appr('round_summary',1,'soft')||';insert into rounds(project_id,number,status,change_request_id) values (''cccccccc-0000-0000-0000-000000000001'',2,''planned'',''dddddddd-0000-0000-0000-000000000001'')', :'O', 'authenticated', t.go('qc_report'), 'ok');
+select t.adv('rounds: one still in review is refused', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1)||';'||t.appr('round_summary',1,'soft')||';'||t.rnd(2,'in_review'), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
+select t.adv('rounds: an approved round without an approval record is refused', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
+select t.adv('rounds: an approval on a superseded round summary does not count', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1,1,'superseded')||';'||t.appr('round_summary',1,'soft'), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
+select t.adv('rounds: a round revised after Feedback passes on its newest summary', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1,1,'superseded')||';'||t.rs(1,2)||';'||t.appr('round_summary',2,'soft'), :'O', 'authenticated', t.go('qc_report'), 'ok');
+select t.adv('rounds: a revised round whose newest summary has no approval is refused', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1,1,'superseded')||';'||t.appr('round_summary',1,'soft')||';'||t.rs(1,2), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
+select t.adv('rounds: an old approved summary does not count once a newer version exists', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1,1,'approved')||';'||t.appr('round_summary',1,'soft')||';'||t.rs(1,2), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
+select t.adv('rounds: a second round without its own approval is refused', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1,1)||';'||t.appr('round_summary',1,'soft')||';'||t.rnd(2,'approved')||';'||t.rs(2,2), :'O', 'authenticated', t.go('qc_report'), 'error:build round');
+select t.adv('rounds: all approved with records advances', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1)||';'||t.appr('round_summary',1,'soft')||';'||t.rnd(2,'approved')||';'||t.rs(2,2)||';'||t.appr('round_summary',2,'soft'), :'O', 'authenticated', t.go('qc_report'), 'ok', '(' || t.cs() || ') = ''qc_report''');
+select t.adv('rounds: a change-request round is ignored', t.proj('build_rounds')||';insert into change_requests(id,project_id,description,submitted_by) values (''dddddddd-0000-0000-0000-000000000001'',''cccccccc-0000-0000-0000-000000000001'',''cr'',''owner'')'||';'||t.rnd(1,'approved')||';'||t.rs(1)||';'||t.appr('round_summary',1,'soft')||';insert into rounds(project_id,number,status,change_request_id) values (''cccccccc-0000-0000-0000-000000000001'',2,''planned'',''dddddddd-0000-0000-0000-000000000001'')', :'O', 'authenticated', t.go('qc_report'), 'ok');
 
 -- later stages
 select t.adv('qc_report: report approval advances', t.proj('qc_report')||';'||t.art('report')||';'||t.appr('report',1,'soft'), :'O', 'authenticated', t.go('deploy_prep'), 'ok');

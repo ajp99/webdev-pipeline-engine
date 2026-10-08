@@ -964,6 +964,17 @@ export type Database = {
         Args: { p_next: Database['public']['Enums']['stage']; p_project: string };
         Returns: undefined;
       };
+      approval_is_valid: {
+        Args: {
+          ap: Omit<
+            Database['public']['Tables']['approvals']['Row'],
+            Database['public']['Tables']['approvals']['ComputedFields']
+          >;
+          p_project: string;
+        };
+        Returns: boolean;
+      };
+      artifact_has_owner_approval: { Args: { p_artifact: string }; Returns: boolean };
       client_project_id: { Args: Record<PropertyKey, never>; Returns: string };
       client_project_in: {
         Args: { p_stages: Database['public']['Enums']['stage'][] };

@@ -2,6 +2,7 @@ import { buildQueue } from '@wpe/shared';
 import { loadQueueInput } from '@/lib/queue-data';
 import { createClient } from '@/lib/supabase/server';
 import { QueueItemCard } from '@/components/QueueItemCard';
+import { advanceProject } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,9 +12,36 @@ export default async function QueuePage() {
   return (
     <main className="mx-auto max-w-3xl p-6">
       <h1 className="text-xl font-semibold">Approval queue</h1>
-      {queue.items.length === 0 ? (
+      {queue.ready.length > 0 ? (
+        <section className="mt-4">
+          <h2 className="text-sm font-medium text-neutral-600">Ready to advance</h2>
+          <ul className="mt-2 flex flex-col gap-2">
+            {queue.ready.map(({ project, nextStage }) => (
+              <li
+                key={project.id}
+                className="flex flex-wrap items-center gap-3 rounded border border-neutral-200 p-3"
+              >
+                <span className="font-medium">{project.name}</span>
+                <span className="text-sm text-neutral-600">
+                  {project.stage.replace('_', ' ')} is approved
+                </span>
+                <form action={advanceProject} className="ml-auto">
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <button
+                    type="submit"
+                    className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white"
+                  >
+                    Advance to {nextStage.replace('_', ' ')}
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {queue.items.length === 0 && queue.ready.length === 0 ? (
         <p className="mt-4 text-neutral-600">Nothing is waiting for you.</p>
-      ) : (
+      ) : queue.items.length === 0 ? null : (
         <ul className="mt-4 flex flex-col gap-3">
           {queue.items.map((item) => (
             <QueueItemCard key={item.key} item={item} />

@@ -15,7 +15,7 @@ Scripts that need privileged credentials are run by the owner, never by an agent
 
 ```
 cp scripts/.env.backup.example scripts/.env.backup     # fill in; the real file is gitignored
-age-keygen -o key.txt                                  # keep key.txt in your password manager, then delete it
+age-keygen -o ~/wpe-age-key.txt                        # outside the repo; copy it into your password manager, then delete it
 bash scripts/backup.sh                                 # on demand
 bash scripts/backup.sh final-dental                    # before closing a project
 ```

@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@wpe/shared';
 
 export type BootstrapDeps = {
-  findUserId(email: string): Promise<string | null>;
+  findUser(email: string): Promise<{ id: string; confirmed: boolean } | null>;
   createUser(email: string, password: string): Promise<string>;
   insertOwner(userId: string): Promise<void>;
 };
@@ -17,10 +17,17 @@ export async function bootstrapOwner(
 ): Promise<{ userId: string; createdUser: boolean }> {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
     throw new Error('OWNER_EMAIL is not a valid email address');
-  const existing = await deps.findUserId(email);
+  const existing = await deps.findUser(email);
   if (existing) {
-    await deps.insertOwner(existing);
-    return { userId: existing, createdUser: false };
+    // Someone may have signed up with the owner's address before the owner did. Only adopt a login
+    // whose email was confirmed (or created by this script).
+    if (!existing.confirmed) {
+      throw new Error(
+        'A login with this email exists but its email is not confirmed. Delete it in the Supabase dashboard and run again.',
+      );
+    }
+    await deps.insertOwner(existing.id);
+    return { userId: existing.id, createdUser: false };
   }
   if (password.length < MIN_PASSWORD_LENGTH) {
     throw new Error(`OWNER_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters`);
@@ -33,12 +40,12 @@ export async function bootstrapOwner(
 /** Real dependencies on top of a service-role Supabase client. */
 export function supabaseDeps(admin: SupabaseClient<Database>): BootstrapDeps {
   return {
-    async findUserId(email) {
+    async findUser(email) {
       for (let page = 1; ; page++) {
         const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
         if (error) throw error;
         const hit = data.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-        if (hit) return hit.id;
+        if (hit) return { id: hit.id, confirmed: Boolean(hit.email_confirmed_at) };
         if (data.users.length < 200) return null;
       }
     },

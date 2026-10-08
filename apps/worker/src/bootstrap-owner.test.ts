@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { bootstrapOwner, type BootstrapDeps } from './bootstrap-owner';
 
-function fake(existingId: string | null = null) {
+function fake(existingId: string | null = null, confirmed = true) {
   const calls: string[] = [];
   const deps: BootstrapDeps = {
-    findUserId: async () => existingId,
+    findUser: async () => (existingId ? { id: existingId, confirmed } : null),
     createUser: async (email) => (calls.push(`create ${email}`), 'new-id'),
     insertOwner: async (id) => void calls.push(`owner ${id}`),
   };
@@ -23,6 +23,13 @@ describe('bootstrapOwner', () => {
     const r = await bootstrapOwner(deps, 'me@example.com', '');
     expect(r).toEqual({ userId: 'old-id', createdUser: false });
     expect(calls).toEqual(['owner old-id']);
+  });
+  it('refuses to make an unconfirmed existing login the owner', async () => {
+    const { deps, calls } = fake('squatter', false);
+    await expect(bootstrapOwner(deps, 'me@example.com', 'a-long-enough-password')).rejects.toThrow(
+      /not confirmed/,
+    );
+    expect(calls).toEqual([]);
   });
   it('rejects a short password before creating anything', async () => {
     const { deps, calls } = fake();

@@ -1,5 +1,8 @@
 // What is waiting for the owner (P1-T06). Pure functions over rows read from the database.
 import type { Stage } from './index';
+import { STAGES } from './index';
+
+const STAGE_ORDER: readonly Stage[] = STAGES;
 
 export type GateType = 'soft' | 'hard' | 'client';
 
@@ -23,6 +26,8 @@ export type QueueArtifact = {
   version: number;
   status: 'draft' | 'approved' | 'superseded';
   created_at: string;
+  /** For round_summary artifacts: the round the summary belongs to (content.round). */
+  round?: number | null;
 };
 export type QueueApproval = { artifact_id: string; gate_type: GateType; at: string };
 export type QueueRound = { project_id: string; number: number; status: string };
@@ -54,7 +59,13 @@ export type QueueItem = {
   overdue: boolean;
 };
 
-export type Queue = { items: QueueItem[]; waitingForAgent: QueueProject[] };
+export type ReadyToAdvance = { project: QueueProject; nextStage: Stage };
+
+export type Queue = {
+  items: QueueItem[];
+  waitingForAgent: QueueProject[];
+  ready: ReadyToAdvance[];
+};
 
 /**
  * Which artifact type's approvals gate each stage. Must match the CASE in advance_stage()
@@ -75,14 +86,18 @@ const GATE_ORDER: GateType[] = ['soft', 'hard', 'client'];
 
 type PendingGate = Omit<QueueItem, 'key' | 'projectName' | 'hoursWaiting' | 'overdue'>;
 
-function latest(artifacts: QueueArtifact[], projectId: string, type: string, version?: number) {
+/** The newest summary of one round (Feedback makes a new version of the same round's summary). */
+function latestRoundSummary(artifacts: QueueArtifact[], projectId: string, round: number) {
   const mine = artifacts
-    .filter(
-      (a) =>
-        a.project_id === projectId &&
-        a.type === type &&
-        (version === undefined || a.version === version),
-    )
+    .filter((a) => a.project_id === projectId && a.type === ROUND_ARTIFACT && a.round === round)
+    .sort((a, b) => b.version - a.version);
+  const top = mine[0];
+  return top && top.status !== 'superseded' ? top : null;
+}
+
+function latest(artifacts: QueueArtifact[], projectId: string, type: string) {
+  const mine = artifacts
+    .filter((a) => a.project_id === projectId && a.type === type)
     .sort((a, b) => b.version - a.version);
   const top = mine[0];
   return top && top.status !== 'superseded' ? top : null;
@@ -102,8 +117,9 @@ function requiredGates(input: QueueInput, project: QueueProject) {
 function unapprovedGates(
   input: QueueInput,
   project: QueueProject,
-): { gates: PendingGate[]; waitingForAgent: boolean } {
-  if (project.status !== 'active') return { gates: [], waitingForAgent: false };
+): { gates: PendingGate[]; waitingForAgent: boolean; artifactReady: boolean } {
+  if (project.status !== 'active')
+    return { gates: [], waitingForAgent: false, artifactReady: false };
 
   if (project.stage === 'build_rounds') {
     const cfg = requiredGates(input, project)[0];
@@ -111,7 +127,7 @@ function unapprovedGates(
       (r) => r.project_id === project.id && r.status === 'in_review',
     );
     const gates = reviewing.map((r): PendingGate => {
-      const a = latest(input.artifacts, project.id, ROUND_ARTIFACT, r.number);
+      const a = latestRoundSummary(input.artifacts, project.id, r.number);
       return {
         projectId: project.id,
         stage: project.stage,
@@ -125,13 +141,13 @@ function unapprovedGates(
         escalateAfterHours: cfg?.escalate_after_hours ?? 24,
       };
     });
-    return { gates, waitingForAgent: gates.length === 0 };
+    return { gates, waitingForAgent: gates.length === 0, artifactReady: false };
   }
 
   const type = STAGE_ARTIFACT[project.stage];
-  if (!type) return { gates: [], waitingForAgent: false };
+  if (!type) return { gates: [], waitingForAgent: false, artifactReady: false };
   const art = latest(input.artifacts, project.id, type);
-  if (!art) return { gates: [], waitingForAgent: true };
+  if (!art) return { gates: [], waitingForAgent: true, artifactReady: false };
 
   const approvals = input.approvals.filter((a) => a.artifact_id === art.id);
   const gates: PendingGate[] = [];
@@ -157,7 +173,7 @@ function unapprovedGates(
     });
     earlierPending = true;
   }
-  return { gates, waitingForAgent: false };
+  return { gates, waitingForAgent: false, artifactReady: gates.length === 0 };
 }
 
 /** The unapproved gates of one project's current stage (used after Accept to decide whether to advance). */
@@ -169,9 +185,13 @@ export function remainingGates(input: QueueInput, projectId: string): PendingGat
 export function buildQueue(input: QueueInput): Queue {
   const items: QueueItem[] = [];
   const waitingForAgent: QueueProject[] = [];
+  const ready: ReadyToAdvance[] = [];
   for (const project of input.projects) {
-    const { gates, waitingForAgent: waiting } = unapprovedGates(input, project);
+    const { gates, waitingForAgent: waiting, artifactReady } = unapprovedGates(input, project);
     if (waiting) waitingForAgent.push(project);
+    // Every gate of the stage is approved but the project has not moved: the owner advances it.
+    const nextStage = STAGE_ORDER[STAGE_ORDER.indexOf(project.stage) + 1];
+    if (artifactReady && nextStage) ready.push({ project, nextStage });
     // Only the next gate to pass is shown; the ones behind it appear once it is approved.
     const shown = project.stage === 'build_rounds' ? gates : gates.slice(0, 1);
     for (const g of shown) {
@@ -186,5 +206,5 @@ export function buildQueue(input: QueueInput): Queue {
     }
   }
   items.sort((a, b) => b.hoursWaiting - a.hoursWaiting);
-  return { items, waitingForAgent };
+  return { items, waitingForAgent, ready };
 }
