@@ -1,0 +1,11 @@
+# Docs, spec and decision log are hand-formatted; spec files are read-only for agents.
+docs/
+DECISIONS.md
+AGENTS.md
+CLAUDE.md
+README.md
+**/README.md
+supabase/
+pnpm-lock.yaml
+.next/
+pnpm-workspace.yaml

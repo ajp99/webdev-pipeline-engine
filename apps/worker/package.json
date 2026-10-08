@@ -2,5 +2,19 @@
   "name": "@wpe/worker",
   "version": "0.0.0",
   "private": true,
-  "description": "Stage runner and Agent SDK workers. Runs on the owner's machine, never deployed to Vercel."
+  "description": "Stage runner and Agent SDK workers. Runs on the owner's machine, never deployed to Vercel.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  }
 }

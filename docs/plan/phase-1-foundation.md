@@ -1,6 +1,6 @@
 # Phase 1: Foundation
 
-**Status:** not started
+**Status:** in progress
 
 **Goal:** Database, authentication, tooling, and an owner console shell, with the approval and stage-advance rules enforced in the database.
 
@@ -12,7 +12,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 
 ## Tasks
 
-- [ ] **P1-T01 Set up tooling and workspaces**  
+- [x] **P1-T01 Set up tooling and workspaces**  
   Acceptance: Node 22 or newer (`.nvmrc`). Approved dependencies: next, react, react-dom, typescript, tailwindcss, eslint, prettier, vitest, yaml, @supabase/supabase-js, @supabase/ssr; standard dev tooling may be added without asking. `pnpm install` produces a lockfile; `pnpm --filter @wpe/web dev` serves a page; `pnpm -r typecheck`, `pnpm lint` and `pnpm test` run and pass; the Commands section of `AGENTS.md` lists them. The worker is developed and run inside WSL2 on Windows; a local Supabase runs through the Supabase CLI and Docker for development and tests; worker secrets live in a gitignored `.env` file (only `.env.example` is committed).
 
 - [ ] **P1-T02 Create the Supabase project and apply the migration**  

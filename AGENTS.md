@@ -56,4 +56,7 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 ## Commands
 
 - Database checks: `bash supabase/tests/run.sh` (needs a local Postgres; see `supabase/tests/README.md`). Run it after any change to `supabase/migrations/`.
-- Task P1-T01 adds `pnpm` scripts for install, dev, lint, typecheck and test; update this section when it lands.
+- Install: `pnpm install` (Node 22 or newer, `.nvmrc`).
+- Dev server: `pnpm dev` (runs `@wpe/web`).
+- Checks: `pnpm lint`, `pnpm typecheck` (all workspaces), `pnpm test` (all workspaces), `pnpm format:check`.
+- Formatting: `pnpm format` skips `docs/`, `supabase/` and the markdown files on purpose (see `.prettierignore`); spec files are read-only.
