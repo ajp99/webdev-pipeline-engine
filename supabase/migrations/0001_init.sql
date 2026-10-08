@@ -3,7 +3,7 @@
 -- docs/spec/12-security.md and docs/spec/gates.yaml.
 --
 -- DRAFT: column types and constraints are the drafter's choices where the spec lists only
--- field names; the owner has accepted the choices recorded in DECISIONS.md (D-038 to D-215).
+-- field names; the owner has accepted the choices recorded in DECISIONS.md (see DECISIONS.md).
 -- Review once more in phase 1 (task P1-T02) before applying to a real project.
 -- Not yet implemented: Storage bucket policies for uploads (task P2-T03), client email records (P2-T11), the approval checks
 -- inside advance_stage() (task P1-T07), and the queue claim function (task P2-T04).
@@ -329,6 +329,25 @@ create table run_approvals (
 );
 create index run_approvals_run_idx on run_approvals (run_id);
 
+-- D-221: one row per email the worker sends or tries to send. The unique dedupe_key is claimed
+-- before sending, so a retry or a restart cannot send the same email twice. The row is updated
+-- with sent_at or error afterwards. Owner-only: clients never read it.
+create table email_log (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects (id) on delete cascade,
+  recipient_role approver_role not null,
+  recipient text not null,
+  event text not null check (event in (
+    'intake_followups_ready', 'prd_ready', 'prototype_ready', 'ask_client_waiting',
+    'gate_ready', 'pause_request_waiting', 'run_failed'
+  )),
+  dedupe_key text not null unique,
+  claimed_at timestamptz not null default now(),
+  sent_at timestamptz,
+  error text
+);
+create index email_log_project_idx on email_log (project_id);
+
 -- D-096: private owner notes. A separate table because clients can read their own projects row.
 create table owner_notes (
   id uuid primary key default gen_random_uuid(),
@@ -495,6 +514,7 @@ alter table gate_config       enable row level security;
 alter table skill_uses        enable row level security;
 alter table run_logs           enable row level security;
 alter table run_approvals      enable row level security;
+alter table email_log          enable row level security;
 alter table owner_notes        enable row level security;
 alter table prd_feedback       enable row level security;
 
@@ -506,7 +526,7 @@ begin
     'owners', 'projects', 'clients', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
     'approvals', 'rounds', 'backlog_items', 'comments', 'change_requests', 'qc_runs',
     'skills_registry', 'stage_runs', 'gate_config', 'skill_uses',
-    'intake_rounds', 'run_logs', 'owner_notes', 'prd_feedback', 'run_approvals'
+    'intake_rounds', 'run_logs', 'owner_notes', 'prd_feedback', 'run_approvals', 'email_log'
   ] loop
     execute format(
       'create policy owner_all on %I for all to authenticated using (public.is_owner()) with check (public.is_owner())',
@@ -516,6 +536,29 @@ begin
 end $$;
 
 -- Clients: only their own project's client-facing rows.
+-- D-216: client writes are accepted only while the project is 'active' (not paused or closed).
+-- D-217: each write is also tied to the stage it belongs to.
+-- D-216: after close, clients read only the handover guide; their projects and clients rows stay
+-- readable so they can still log in.
+create function public.client_project_in(p_stages stage[]) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.projects p
+    where p.id = public.client_project_id() and p.status = 'active' and p.stage = any (p_stages)
+  )
+$$;
+create function public.client_project_not_closed() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.projects p
+    where p.id = public.client_project_id() and p.status <> 'closed'
+  )
+$$;
+revoke all on function public.client_project_in(stage[]) from public;
+revoke all on function public.client_project_not_closed() from public;
+grant execute on function public.client_project_in(stage[]) to authenticated, service_role;
+grant execute on function public.client_project_not_closed() to authenticated, service_role;
+
 create policy client_read_own_project on projects
   for select to authenticated using (id = public.client_project_id());
 
@@ -523,23 +566,24 @@ create policy client_read_self on clients
   for select to authenticated using (id = auth.uid());
 
 create policy client_read_rounds on intake_rounds
-  for select to authenticated using (project_id = public.client_project_id());
+  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
 -- Submit or reopen only: the trigger above blocks every other change.
 create policy client_submit_round on intake_rounds
   for update to authenticated
-  using (project_id = public.client_project_id() and status in ('open', 'submitted'))
-  with check (project_id = public.client_project_id() and status in ('open', 'submitted'));
+  using (project_id = public.client_project_id() and status in ('open', 'submitted')
+         and public.client_project_in(array['intake']::stage[]))
+  with check (project_id = public.client_project_id() and status in ('open', 'submitted')
+              and public.client_project_in(array['intake']::stage[]));
 
 create policy client_read_responses on intake_responses
-  for select to authenticated using (project_id = public.client_project_id());
+  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
 create policy client_write_responses on intake_responses
   for insert to authenticated with check (
     project_id = public.client_project_id()
     and exists (select 1 from intake_rounds r
                 where r.project_id = intake_responses.project_id
                   and r.round = intake_responses.round and r.status = 'open')
-    and exists (select 1 from projects p
-                where p.id = project_id and p.stage = 'intake' and p.status = 'active')
+    and public.client_project_in(array['intake']::stage[])
   );
 -- D-079: while any round is open, earlier answers can be changed too.
 create policy client_update_responses on intake_responses
@@ -548,46 +592,65 @@ create policy client_update_responses on intake_responses
     project_id = public.client_project_id()
     and exists (select 1 from intake_rounds r
                 where r.project_id = intake_responses.project_id and r.status = 'open')
-    and exists (select 1 from projects p
-                where p.id = project_id and p.stage = 'intake' and p.status = 'active')
+    and public.client_project_in(array['intake']::stage[])
   )
   with check (project_id = public.client_project_id());
 
 create policy client_read_uploads on uploads
-  for select to authenticated using (project_id = public.client_project_id());
+  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
+-- D-217, D-218: uploads are added and deleted only while an intake round is open.
 create policy client_add_uploads on uploads
   for insert to authenticated with check (
     project_id = public.client_project_id() and scan_status = 'pending'
+    and exists (select 1 from intake_rounds r
+                where r.project_id = uploads.project_id and r.status = 'open')
+    and public.client_project_in(array['intake']::stage[])
   );
 create policy client_delete_uploads on uploads
-  for delete to authenticated using (project_id = public.client_project_id());
+  for delete to authenticated using (
+    project_id = public.client_project_id()
+    and exists (select 1 from intake_rounds r
+                where r.project_id = uploads.project_id and r.status = 'open')
+    and public.client_project_in(array['intake']::stage[])
+  );
 
+-- D-216: after close the only artifact a client can read is the handover guide.
 create policy client_read_visible_artifacts on artifacts
   for select to authenticated using (
     project_id = public.client_project_id() and client_visible
+    and (public.client_project_not_closed() or type = 'handover_guide')
   );
 
 create policy client_read_approvals on approvals
   for select to authenticated using (
     exists (select 1 from artifacts a
-            where a.id = artifact_id and a.project_id = public.client_project_id() and a.client_visible)
+            where a.id = artifact_id and a.project_id = public.client_project_id() and a.client_visible
+              and (public.client_project_not_closed() or a.type = 'handover_guide'))
   );
+-- D-217: a client approves the PRD only during requirements and the prototype only during
+-- prototype. Approvals are append-only, so a stray one would be permanent.
 create policy client_add_approval on approvals
   for insert to authenticated with check (
     role = 'client' and gate_type = 'client' and approved_by = auth.uid()
     and exists (select 1 from artifacts a
-                where a.id = artifact_id and a.project_id = public.client_project_id() and a.client_visible)
+                where a.id = artifact_id and a.project_id = public.client_project_id()
+                  and a.client_visible and a.status <> 'superseded'
+                  and ((a.type = 'prd' and public.client_project_in(array['requirements']::stage[]))
+                    or (a.type = 'prototype' and public.client_project_in(array['prototype']::stage[]))))
   );
 
 create policy client_read_ask_client_items on backlog_items
-  for select to authenticated using (project_id = public.client_project_id() and ask_client);
+  for select to authenticated using (
+    project_id = public.client_project_id() and ask_client and public.client_project_not_closed()
+  );
 create policy client_answer_ask_client_items on backlog_items
   for update to authenticated
-  using (project_id = public.client_project_id() and ask_client)
+  using (project_id = public.client_project_id() and ask_client
+         and public.client_project_in(array['build_rounds', 'handover']::stage[]))
   with check (project_id = public.client_project_id() and ask_client);
 
 create policy client_read_comments on comments
-  for select to authenticated using (project_id = public.client_project_id());
+  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
 -- D-113 and D-118: one note per revision on the prototype (while the stage is prototype), and
 -- notes on the final screenshots (shared after QC, so while the stage is deploy_prep).
 create policy client_add_comment on comments
@@ -596,38 +659,36 @@ create policy client_add_comment on comments
     and created_by = auth.uid()
     and owner_disposition is null
     and (
-      (kind = 'prototype'
-        and exists (select 1 from projects p where p.id = project_id and p.stage = 'prototype'))
+      (kind = 'prototype' and public.client_project_in(array['prototype']::stage[]))
       or
-      (kind = 'final_screenshots'
-        and exists (select 1 from projects p where p.id = project_id and p.stage = 'deploy_prep'))
+      (kind = 'final_screenshots' and public.client_project_in(array['deploy_prep']::stage[]))
     )
   );
 
 create policy client_read_prd_feedback on prd_feedback
-  for select to authenticated using (project_id = public.client_project_id());
+  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
 create policy client_request_prd_changes on prd_feedback
   for insert to authenticated with check (
     project_id = public.client_project_id()
     and created_by = auth.uid()
     and exists (select 1 from artifacts a
-                where a.id = artifact_id and a.project_id = public.client_project_id() and a.client_visible)
-    and exists (select 1 from projects p where p.id = project_id and p.stage = 'requirements')
+                where a.id = artifact_id and a.project_id = public.client_project_id()
+                  and a.client_visible and a.type = 'prd')
+    and public.client_project_in(array['requirements']::stage[])
   );
 
 create policy client_read_change_requests on change_requests
-  for select to authenticated using (project_id = public.client_project_id());
--- Go-live happens at deployment preparation, so the live period is the handover stage.
+  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
+-- Go-live happens at deployment preparation, so the live period is the handover stage (D-219).
 create policy client_submit_change_request on change_requests
   for insert to authenticated with check (
     project_id = public.client_project_id()
     and submitted_by = 'client' and created_by = auth.uid()
     and impact_note is null and decision is null and status = 'received'
-    and exists (select 1 from projects p
-                where p.id = project_id and p.stage = 'handover' and p.status = 'active')
+    and public.client_project_in(array['handover']::stage[])
   );
 
 -- owners, intake_templates (clients read the snapshot on their own project row), rounds,
--- qc_runs, skills_registry, stage_runs, run_logs, run_approvals, owner_notes, gate_config and
--- skill_uses have no
+-- qc_runs, skills_registry, stage_runs, run_logs, run_approvals, email_log, owner_notes,
+-- gate_config and skill_uses have no
 -- client policy: owner only. Clients get no update or delete on change_requests or prd_feedback.

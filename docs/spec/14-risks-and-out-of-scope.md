@@ -1,6 +1,6 @@
 # Assumptions, risks and revisit triggers
 
-> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 The riskiest items are local workers going offline mid-stage, client unfamiliarity with the GitHub editor, and agent-written copy missing the client's voice.
 
@@ -26,6 +26,9 @@ The riskiest items are local workers going offline mid-stage, client unfamiliari
 | The client never uses the live site before go-live | Risk (accepted) | The client sees screenshots only; hover, menus, forms and animation are reviewed by the owner alone |
 | Owner edits overwrite client answers with no history | Risk (accepted) | The client's original wording is lost; the approval log does not record answer edits |
 | Silent clients stall the pipeline | Risk (accepted) | No reminder emails; the owner's overdue badge is the only signal |
+| Pipeline email comes from a personal Gmail and waits while the worker is offline | Risk (accepted) | Client emails carry the owner's personal address; an offline laptop delays every email, including the owner's own alerts; Gmail has daily sending limits |
+| Backups keep deleted client data for up to 180 days | Risk (accepted) | The privacy page says so; exports are deleted after 180 days |
+| The Claude Doc is a second copy of the spec | Risk (accepted) | It names the commit it was taken from; the repo is the source of truth |
 | A failed form submission can be lost | Risk (accepted) | No archive or fallback copy; the visitor sees the phone number and plain contact links |
 | Form delivery is not monitored after handover | Risk (accepted) | A broken mailbox login goes unnoticed until someone tests; the handover guide explains how |
 | Worker secrets in a plain `.env` file | Risk (accepted) | Relies on full-disk encryption; a password manager CLI or the OS keychain is the upgrade |

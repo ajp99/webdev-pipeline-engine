@@ -20,5 +20,5 @@ Task IDs look like `P2-T04` (phase 2, task 4). Tasks and acceptance criteria wer
 ## Open items for the owner
 
 - **CI and branch protection** are deferred (D-046). Until CI exists, an agent's report that tests pass is unverified. The owner decides when to add them.
-- **Pipeline email account:** the owner supplies a Gmail app password for the pipeline's client and owner emails and for Supabase's custom SMTP (tasks P2-T11 and P2-T12).
+- **Pipeline email account:** the owner supplies a Gmail app password (needs 2-step verification on the Google account) for the pipeline's client and owner emails and for Supabase's custom SMTP (tasks P2-T11 and P2-T12).
 - No unresolved spec items remain; see `docs/proposals/` for how earlier ones were decided.

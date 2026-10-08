@@ -1,6 +1,6 @@
 # Pipeline phases and gates
 
-> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 The pipeline has eight stages, and each one ends with a stored approval before the next begins. Machine-readable definitions: [stages.yaml](stages.yaml) and [gates.yaml](gates.yaml).
 
@@ -54,3 +54,4 @@ Per-stage values live in `gate_config`: global defaults, with per-project overri
 - QC: at most 2 fix loops; after that the report lists the remaining issues for the owner to accept or fix manually.
 - Paused: the owner can pause a project at any time; agents stop and data is kept. A cancelled project is closed and archived like a finished one.
 - Cost: token use is shown as a progress bar against the project's token budget (tokens only, no dollar amounts, no warnings); nothing pauses automatically.
+**Closing and releases (D-220, D-223):** marking the handover complete moves the project to stage `closed`, sets status `closed` and reason `completed` in one `advance_stage()` call. After go-live and before close, each accepted change request is built as a mini-round and ends in a hard-gate deploy approval by the owner, attached to a release-note artifact. That approval is not a stage gate, so it can never advance or close the project; `advance_stage()` counts only approvals on the stage's own output artifacts.

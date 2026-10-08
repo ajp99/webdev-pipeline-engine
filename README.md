@@ -2,7 +2,7 @@
 
 CreatePipeline Engine: an internal, single-owner pipeline that takes marketing-site clients from intake to handover. Agents do the work; the owner approves every step through soft, hard, and client gates.
 
-**Status:** specification locked (snapshot of 2026-10-05); empty scaffold; no application code yet. Next: phase 1 in [docs/plan/README.md](docs/plan/README.md).
+**Status:** specification locked; every decision is recorded in [DECISIONS.md](DECISIONS.md) and the spec files reflect them; empty scaffold, no application code yet. Next: phase 1 in [docs/plan/README.md](docs/plan/README.md).
 
 ## Where things are
 
@@ -13,7 +13,7 @@ CreatePipeline Engine: an internal, single-owner pipeline that takes marketing-s
 | [docs/plan/](docs/plan/README.md) | Five build phases with tasks, acceptance criteria and gates |
 | [docs/proposals/](docs/proposals/README.md) | Proposed spec changes awaiting the owner |
 | [DECISIONS.md](DECISIONS.md) | Decision log |
-| [supabase/migrations/](supabase/migrations) | Draft data model with row-level security |
+| [supabase/migrations/](supabase/migrations), [supabase/tests/](supabase/tests/README.md) | Draft data model with row-level security, and the database checks |
 | [skills/](skills/README.md) | Reusable SKILL.md library |
 | [templates/master-starter/](templates/master-starter/README.md) | Master site starter (empty until phase 3) |
 | [evals/](evals/README.md), [scripts/](scripts/README.md) | Agent evals (fictional fixtures) and owner-run scripts |
