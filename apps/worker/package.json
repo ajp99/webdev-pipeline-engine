@@ -5,11 +5,13 @@
   "description": "Stage runner and Agent SDK workers. Runs on the owner's machine, never deployed to Vercel.",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "bootstrap-owner": "tsx --env-file=.env src/bootstrap-owner-cli.ts"
   },
   "type": "module",
   "dependencies": {
-    "@supabase/supabase-js": "^2.117.3"
+    "@supabase/supabase-js": "^2.117.3",
+    "@wpe/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
