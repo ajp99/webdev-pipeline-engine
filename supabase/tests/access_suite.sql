@@ -51,3 +51,12 @@ select t.adv('the worker claims exactly one queued run', 'insert into stage_runs
   '(select count(*) from stage_runs where claimed_by=''w1'')=1 and (select stage::text from stage_runs where claimed_by=''w1'')=''intake'' and (select count(*) from stage_runs where status=''queued'')=1');
 select t.adv('a client cannot claim a run', 'insert into stage_runs(project_id,stage,status) values (''11111111-1111-1111-1111-111111111111'',''intake'',''queued'')', :'A', 'authenticated',
   'update stage_runs set status=''running'', claimed_by=''x''', 'ok', '(select count(*) from stage_runs where claimed_by=''x'')=0');
+
+\echo '### the console Accept sequence (P1-T06): approval, artifact approved, advance, all as the owner'
+select t.adv('the owner can run the Accept sequence for a plan', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
+  'insert into approvals(artifact_id,approved_by,role,gate_type) select id, ''00000000-0000-0000-0000-0000000000a0'', ''owner'', ''soft'' from artifacts where project_id=''cccccccc-0000-0000-0000-000000000001'' and type=''plan'';
+   update artifacts set status=''approved'' where project_id=''cccccccc-0000-0000-0000-000000000001'' and type=''plan'';
+   select advance_stage(''cccccccc-0000-0000-0000-000000000001'', ''prototype'')', 'ok',
+  '(select stage::text from projects where id=''cccccccc-0000-0000-0000-000000000001'')=''prototype'' and (select status::text from artifacts where project_id=''cccccccc-0000-0000-0000-000000000001'' and type=''plan'')=''approved''');
+select t.adv('the owner reads the queue inputs', t.proj('plan'), :'O', 'authenticated',
+  'select (select count(*) from projects)+(select count(*) from gate_config)+(select count(*) from artifacts)+(select count(*) from approvals)+(select count(*) from rounds)', 'ok');

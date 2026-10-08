@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { STAGES } from './index';
+import { STAGE_ARTIFACT } from './queue';
 import { Constants } from './database.types';
 
 // P1-T04: the SQL and the TypeScript constants must agree with docs/spec/stages.yaml and gates.yaml.
@@ -81,5 +82,15 @@ describe('generated database types (P1-T03)', () => {
 
   it('list the same stages as stages.yaml', () => {
     expect([...Constants.public.Enums.stage]).toEqual([...STAGES]);
+  });
+});
+
+describe('queue logic agrees with advance_stage() (P1-T06, P1-T07)', () => {
+  it('uses the same stage-to-artifact mapping as the SQL CASE', () => {
+    const caseBlock = sql.match(/atype := case v\.stage([\s\S]*?)end;/i)?.[1] ?? '';
+    const fromSql = Object.fromEntries(
+      [...caseBlock.matchAll(/when '(\w+)'\s+then '(\w+)'/g)].map((m) => [m[1]!, m[2]!]),
+    );
+    expect(fromSql).toEqual(STAGE_ARTIFACT);
   });
 });
