@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "bootstrap-owner": "tsx --env-file=.env src/bootstrap-owner-cli.ts"
+    "bootstrap-owner": "tsx --env-file=.env src/bootstrap-owner-cli.ts",
+    "seed-demo": "tsx --env-file=.env src/seed-demo-cli.ts"
   },
   "type": "module",
   "dependencies": {
