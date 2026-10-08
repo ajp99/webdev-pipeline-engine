@@ -15,3 +15,8 @@ Append one entry per finished task, newest at the bottom. Format:
 - What changed: pnpm workspaces with Next.js 16, React 19, Tailwind 4, TypeScript 6.0 (pinned; typescript-eslint does not support 7 yet), ESLint 10, Prettier, Vitest 5, yaml, supabase-js and @supabase/ssr; a minimal web page, a worker stub and a shared stage list with one test; `.prettierignore` keeps docs and spec files untouched.
 - Evidence: `pnpm lint` clean; `pnpm -r typecheck` clean in 3 workspaces; `pnpm test` 1 passed; `pnpm --filter @wpe/web build` succeeds; `pnpm dev` serves the page.
 - Follow-ups or blockers: local Supabase through the Supabase CLI and Docker is set up in P1-T08; the worker runs in WSL2 on the owner's laptop.
+
+## 2026-10-08 P1-T04 Stage and gate consistency test
+- What changed: `packages/shared/src/consistency.test.ts` parses `stages.yaml` and `gates.yaml` and checks the SQL stage, status and close-reason enums, the `gate_config` seed rows and the TypeScript `STAGES` constant against them, plus that the release-note approval is not a stage gate (D-223).
+- Evidence: 7 tests pass. Mutation check: reordering the SQL enum and changing a seed row made 2 tests fail; restored, all pass.
+- Follow-ups or blockers: none. The generated database types (P1-T03) will add to the TypeScript side.

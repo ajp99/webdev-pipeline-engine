@@ -21,7 +21,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P1-T03 Generate database types into packages/shared**  
   Acceptance: Types generated from the live schema live in `packages/shared`; a documented script regenerates them; `pnpm -r typecheck` passes.
 
-- [ ] **P1-T04 Stage and gate consistency test**  
+- [x] **P1-T04 Stage and gate consistency test**  
   Acceptance: A test parses `stages.yaml` and `gates.yaml` and fails if the SQL `stage` enum or the `gate_config` seed rows disagree with them. TypeScript types come from the generated database types (P1-T03); the console and `advance_stage()` read gate behavior from `gate_config`. No code generator.
 
 - [ ] **P1-T05 Authentication and roles**  
