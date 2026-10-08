@@ -1,6 +1,6 @@
 # Operations
 
-> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 This file collects the decisions made after the original spec snapshot that are about running the pipeline rather than the pipeline's stages. Decision IDs refer to `DECISIONS.md`.
 
@@ -12,11 +12,11 @@ This file collects the decisions made after the original spec snapshot that are 
 
 ## Notifications and mail (D-045, D-156, D-167, D-168, D-200)
 
-Clients receive emails for four events: intake follow-ups ready, PRD ready, prototype ready, and an ask-client question waiting. The pipeline sends them over SMTP from the owner's Gmail account with an app password, and Supabase's invite and password-reset emails use the same Gmail through Supabase's custom SMTP. The owner is emailed when a gate is ready, when a run is waiting on a pause request, and when a run fails; overdue gates stay a console badge only. Change-request status and final screenshots send no email. Resend is not used unless a PRD names it.
+Clients receive emails for four events: intake follow-ups ready, PRD ready, prototype ready, and an ask-client question waiting. The pipeline sends them over SMTP from the owner's Gmail account with an app password, and Supabase's invite and password-reset emails use the same Gmail through Supabase's custom SMTP. The owner is emailed when a gate is ready, when a run is waiting on a pause request, and when a run fails; overdue gates stay a console badge only. Change-request status and final screenshots send no email. Resend is not used unless a PRD names it. Every email is recorded in `email_log` with a unique dedupe key claimed before sending (D-221), and only the worker sends mail, so emails wait while the laptop is off (D-224). Gmail needs 2-step verification to create an app password and limits daily sending.
 
 ## Backups (D-049, D-062, D-069)
 
-The database is exported on a schedule and before each project close. Exports are encrypted, saved locally, and copied to the owner's own cloud drive. They never go into this repo. The key is kept in a password manager. There is no restore drill (accepted risk).
+The database is exported on a schedule and before each project close. Exports are encrypted, saved locally, and copied to the owner's own cloud drive. They never go into this repo. The key is kept in a password manager. Each export is deleted 180 days after it is made (D-222), so deleted client data can remain in backups for up to 180 days; the privacy page says so. There is no restore drill (accepted risk).
 
 ## Agent evals (D-065, D-067, D-068)
 
@@ -81,3 +81,10 @@ An accepted change request runs as a mini-round (`cr-N` branch, pull request int
 ## Phase 5 gate evidence (D-171)
 
 The pilot report against the pilot measures above, a cost report in tokens, and automated tests of the QC runner, the fix loop and a dry run of the handover script.
+## Database checks (D-225)
+
+`supabase/tests/run.sh` builds a scratch Postgres database from the migration and runs the row-level security and schema checks, including paused, closed and wrong-stage cases. It is run by hand until CI exists; task P1-T08 moves it onto a local Supabase and extends it.
+
+## The Claude Doc (D-226)
+
+After this change set is merged, the Claude Doc is replaced with a snapshot of the spec taken from the merged commit, with a banner naming that commit and saying the repo is the source of truth. It is a second copy and can go stale again.

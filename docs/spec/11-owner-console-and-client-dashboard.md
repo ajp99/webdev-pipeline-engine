@@ -1,6 +1,6 @@
 # Owner console and client dashboard
 
-> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 One Next.js app serves both views, split by role. The owner console centers on an approval queue; the owner is also emailed when a gate is ready, a run waits on a pause request, or a run fails.
 
@@ -32,7 +32,7 @@ One Next.js app serves both views, split by role. The owner console centers on a
 - Final screenshots after QC, with a comment box (a note comes to the owner; approval stays with the owner; no email)
 - No editing of site content before handover
 - Change requests from go-live until handover is complete, each showing its status (received, accepted, deferred, declined, deployed); no email
-- A privacy page the agent drafts and the owner reviews (what is stored, who processes it, the 90-day retention)
+- A privacy page the agent drafts and the owner reviews (what is stored, who processes it, the 90-day retention, and that deleted data can remain in backups for up to 180 days)
 - After the handover is marked complete the dashboard is read-only and shows only the handover guide and its PDF
 - Mobile-first layout, since clients will often approve from a phone
 - Final report summary once the owner chooses to share it
@@ -40,3 +40,4 @@ One Next.js app serves both views, split by role. The owner console centers on a
 Clients never see internal plans, costs, agent logs, or the question backlog unless the owner marks an item as ask-client.
 
 Clients also receive emails (sent over SMTP from the owner's Gmail) when intake follow-ups, the PRD, the prototype, or an ask-client question is waiting for them.
+**What clients can do, and when (D-216 to D-218):** client writes are accepted only while the project is `active`, and each is tied to its stage: sign-off on the PRD during requirements, approval of the prototype during prototype, uploads only while an intake round is open (and deleted only then), ask-client answers during build rounds and handover, prototype notes during prototype, final-screenshot notes during deploy prep, and change requests during handover. The database enforces this, not only the screens. A paused project still shows what a client could read; a closed project shows only the handover guide.

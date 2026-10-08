@@ -36,6 +36,7 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 | `apps/worker` | Stage runner and Agent SDK workers (runs on the owner's machine) |
 | `packages/shared` | Shared stage and gate types, generated database types |
 | `supabase/migrations` | Database schema and row-level security |
+| `supabase/tests` | Database checks (`bash supabase/tests/run.sh`, needs a local Postgres) |
 | `skills` | Reusable SKILL.md library, grouped by area |
 | `evals` | Agent eval fixtures (fictional clients only) and harness |
 | `scripts` | Owner-run and maintenance scripts |
@@ -54,4 +55,5 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 
 ## Commands
 
-None yet. Task P1-T01 adds `pnpm` scripts for install, dev, lint, typecheck and test; update this section when it lands.
+- Database checks: `bash supabase/tests/run.sh` (needs a local Postgres; see `supabase/tests/README.md`). Run it after any change to `supabase/migrations/`.
+- Task P1-T01 adds `pnpm` scripts for install, dev, lint, typecheck and test; update this section when it lands.

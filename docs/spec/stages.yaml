@@ -41,6 +41,8 @@ stages:
     order: 8
     name: Handover
     outputs: [handover_pack]
+  # D-220: reached only from handover, through advance_stage(), which also sets projects.status to
+  # closed and close_reason to completed in the same call.
   - id: closed
     order: 9
     name: Closed

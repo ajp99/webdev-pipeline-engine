@@ -1,6 +1,6 @@
 # Security and credentials
 
-> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file includes the owner-approved decisions D-038 to D-069 recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
 
 The main risks are agents with shell access on the owner's own machine, client data in Supabase, and credentials in the handover.
 
@@ -13,7 +13,7 @@ The main risks are agents with shell access on the owner's own machine, client d
 - **Data handling:** uploaded assets are stored in private Supabase storage and deleted, together with intake data, 90 days after close (adjustable per project).
 - **Agent safety:** treat client-supplied text and uploads as untrusted input to agents (prompt-injection risk); agents cannot run commands outside the project directory, and destructive commands require owner approval.
 - **GitHub webhook:** verify GitHub's signature, accept a merge as Accept only when the merger is the owner's GitHub account, and make it idempotent so a console-triggered merge is not recorded twice.
-- **Backups:** the database is exported on a schedule and before each project close, encrypted, saved locally and copied to the owner's own cloud drive. Exports never go into this repo (`.gitignore` excludes them). The encryption key lives in a password manager. There is no restore drill (accepted risk).
+- **Backups:** the database is exported on a schedule and before each project close, encrypted, saved locally and copied to the owner's own cloud drive. Exports never go into this repo (`.gitignore` excludes them). The encryption key lives in a password manager. Exports are kept 180 days and then deleted (D-222), so deleted client data can remain in backups for up to 180 days. There is no restore drill (accepted risk).
 - **Repo hygiene:** the repo is public. GitHub secret scanning and push protection are on; CI and branch protection come later.
 - **Uploads:** allowed types are PNG, JPEG, WebP, SVG, PDF, DOCX, plain text, markdown, JSON and MP4, up to 25 MB each, with no zip files. Each upload is scanned for malware in the worker before any agent sees it, SVG is sanitized, agents never open documents with macros, and MP4 is treated as an asset only. The scanner is installed on the owner's machine.
 - **Owner notes:** stored in an owner-only table, because clients can read their own project row. The Requirements agent must not quote them in anything the client sees.
@@ -25,3 +25,5 @@ The main risks are agents with shell access on the owner's own machine, client d
 - **Reference-site tool:** opens only the client's listed URLs, public web addresses only (no localhost, private network ranges or cloud metadata addresses), with a short timeout; the agent receives screenshots, never page text; screenshots are stored privately and deleted with the project's other data.
 - **Form spam and abuse:** every form has a honeypot, a time check and a best-effort in-memory rate limit; an automatic reply is only added when the PRD asks, because an auto-reply to any address can be abused to send mail to third parties.
 - **Invites:** client invite links are valid for 7 days; Supabase's invite and reset emails use the same Gmail through Supabase's custom SMTP.
+- **Client write limits:** the database accepts client writes only while a project is `active` and only in the stage each write belongs to (D-216, D-217); after close a client reads only the handover guide. Approvals are append-only, so these limits stop a stray approval from becoming permanent.
+- **Email log:** `email_log` records every email with a unique dedupe key, is owner-only, and holds recipient addresses, so the retention job deletes a project's rows with its other data.

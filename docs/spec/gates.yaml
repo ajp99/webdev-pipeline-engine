@@ -42,3 +42,9 @@ gates:
   - stage: handover
     approvals:
       - { gate_type: hard, gatekeeper: owner }
+# D-223: not a stage gate. After go-live, each change-request mini-round gets a release-note
+# artifact and the owner's hard-gate deploy approval attaches to it. gate_config has no row for it,
+# and advance_stage() counts only approvals on a stage's own output artifacts, so a release
+# approval can never advance or close a project.
+releases:
+  - { artifact_type: release_note, gate_type: hard, gatekeeper: owner, per: change_request }
