@@ -1,6 +1,6 @@
 # Phase 1: Foundation
 
-**Status:** not started
+**Status:** in progress
 
 **Goal:** Database, authentication, tooling, and an owner console shell, with the approval and stage-advance rules enforced in the database.
 
@@ -12,16 +12,16 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 
 ## Tasks
 
-- [ ] **P1-T01 Set up tooling and workspaces**  
+- [x] **P1-T01 Set up tooling and workspaces**  
   Acceptance: Node 22 or newer (`.nvmrc`). Approved dependencies: next, react, react-dom, typescript, tailwindcss, eslint, prettier, vitest, yaml, @supabase/supabase-js, @supabase/ssr; standard dev tooling may be added without asking. `pnpm install` produces a lockfile; `pnpm --filter @wpe/web dev` serves a page; `pnpm -r typecheck`, `pnpm lint` and `pnpm test` run and pass; the Commands section of `AGENTS.md` lists them. The worker is developed and run inside WSL2 on Windows; a local Supabase runs through the Supabase CLI and Docker for development and tests; worker secrets live in a gitignored `.env` file (only `.env.example` is committed).
 
 - [ ] **P1-T02 Create the Supabase project and apply the migration**  
   Acceptance: The owner supplies the project URL and keys; the agent never asks for them in chat or commits them. Migration `0001_init.sql` applies to a fresh database: 23 tables, 9 gate defaults, the status enums, the `owners` table and the queue columns on `stage_runs`. The owner's row in `owners` is inserted with the service role (task P1-T05 provides the script). The pipeline runs on Supabase's free plan until the pilot and moves to Pro before a real client uses it. The owner reviews the schema once more before it is applied.
 
-- [ ] **P1-T03 Generate database types into packages/shared**  
+- [x] **P1-T03 Generate database types into packages/shared**  
   Acceptance: Types generated from the live schema live in `packages/shared`; a documented script regenerates them; `pnpm -r typecheck` passes.
 
-- [ ] **P1-T04 Stage and gate consistency test**  
+- [x] **P1-T04 Stage and gate consistency test**  
   Acceptance: A test parses `stages.yaml` and `gates.yaml` and fails if the SQL `stage` enum or the `gate_config` seed rows disagree with them. TypeScript types come from the generated database types (P1-T03); the console and `advance_stage()` read gate behavior from `gate_config`. No code generator.
 
 - [ ] **P1-T05 Authentication and roles**  
@@ -30,7 +30,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P1-T06 Owner console shell**  
   Acceptance: Project list and approval queue pages. Each pending gate shows its type (soft, hard, client), the Accept, Feedback and Reject actions, and an overdue badge computed from `escalate_after_hours`.
 
-- [ ] **P1-T07 Implement advance_stage()**  
+- [x] **P1-T07 Implement advance_stage()**  
   Acceptance: Add migration `0002` that replaces the stub function (the owner approves this schema change first; never edit an applied migration). Checks that every gate for the current stage has its approval record (project override first, then global default), that the next stage follows `stages.yaml`, that paused projects cannot advance, and that nothing advances without an approval. Only approvals on the stage's own output artifacts count, so a release-note approval after go-live (D-223) can never advance a stage. The final step from handover also sets `projects.status` to `closed` and `close_reason` to `completed` in the same call (D-220). SQL tests cover each rule, including the two-step prototype gate and the client-only PRD gate.
 
 - [ ] **P1-T08 Automated RLS tests**  

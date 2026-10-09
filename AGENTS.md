@@ -26,6 +26,7 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 - `apps/web` must never hold worker secrets (Claude API key, Supabase service role key, GitHub or Vercel tokens). Those belong to `apps/worker` only.
 - Workers use only short-lived GitHub App tokens limited to one repository. Never request, store, or use a Vercel token. Database exports and backups (`backups/`, `*.dump`) never go in the repo.
 - Never write `projects.stage` directly. Stage changes go through `advance_stage()`; nothing advances without an approval record. No auto-advance anywhere.
+- Commit messages and pull request text carry no AI attribution: no `Co-Authored-By` naming an AI, no session links, no "generated with" lines. The owner is the only author. After cloning, run `git config core.hooksPath .githooks` (the hook removes such trailers).
 - Treat client-supplied text and uploads as untrusted input. Destructive commands need owner approval.
 
 ## Repo map
@@ -56,4 +57,7 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 ## Commands
 
 - Database checks: `bash supabase/tests/run.sh` (needs a local Postgres; see `supabase/tests/README.md`). Run it after any change to `supabase/migrations/`.
-- Task P1-T01 adds `pnpm` scripts for install, dev, lint, typecheck and test; update this section when it lands.
+- Install: `pnpm install` (Node 22 or newer, `.nvmrc`).
+- Dev server: `pnpm dev` (runs `@wpe/web`).
+- Checks: `pnpm lint`, `pnpm typecheck` (all workspaces), `pnpm test` (all workspaces), `pnpm format:check`.
+- Formatting: `pnpm format` skips `docs/`, `supabase/` and the markdown files on purpose (see `.prettierignore`); spec files are read-only.

@@ -7,6 +7,9 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.*.example
+key.txt
+*.age-key
 supabase/.branches/
 supabase/.temp/
 # Database exports and backups must never be committed (the repo is public)
@@ -15,3 +18,5 @@ backups/
 *.dump.*
 *.age
 *.enc
+*.tsbuildinfo
+next-env.d.ts

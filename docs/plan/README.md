@@ -4,7 +4,7 @@ Five phases, built in order. Each phase is closed by one gate that only the owne
 
 | Phase | Name | Gate | Status |
 | --- | --- | --- | --- |
-| 1 | [Foundation](phase-1-foundation.md) | An approved dummy artifact moves a project stage | not started |
+| 1 | [Foundation](phase-1-foundation.md) | An approved dummy artifact moves a project stage | in progress |
 | 2 | [Intake and PRD](phase-2-intake-and-prd.md) | A test client signs off a PRD | not started |
 | 3 | [Plan and prototype](phase-3-plan-and-prototype.md) | Prototype approved from screenshots | not started |
 | 4 | [Build rounds](phase-4-build-rounds.md) | A full round runs with its backlog triaged | not started |

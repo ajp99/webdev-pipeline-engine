@@ -64,6 +64,8 @@ select t.run('client cannot submit a change request before handover', '00000000-
 
 \echo '### stage prototype'
 do $$ begin perform set_config('app.stage_advance','on',true); update projects set stage='prototype' where id='11111111-1111-1111-1111-111111111111'; end $$;
+-- D-217 tightened in 0002: the client signs the prototype after the owner approved that version.
+insert into approvals (artifact_id, approved_by, role, gate_type) values ('aaaaaaa1-0000-0000-0000-000000000003', '00000000-0000-0000-0000-0000000000a0', 'owner', 'soft');
 select t.run('client A approves the prototype', '00000000-0000-0000-0000-0000000000a1'::uuid, 'authenticated', 'insert into approvals(artifact_id,approved_by,role,gate_type) values (''aaaaaaa1-0000-0000-0000-000000000003'',''00000000-0000-0000-0000-0000000000a1'',''client'',''client'')', 'ok:1');
 select t.run('client A cannot approve the PRD during prototype', '00000000-0000-0000-0000-0000000000a1'::uuid, 'authenticated', 'insert into approvals(artifact_id,approved_by,role,gate_type) values (''aaaaaaa1-0000-0000-0000-000000000001'',''00000000-0000-0000-0000-0000000000a1'',''client'',''client'')', 'error');
 select t.run('client A adds a prototype note', '00000000-0000-0000-0000-0000000000a1'::uuid, 'authenticated', 'insert into comments(project_id,body,kind,created_by) values (''11111111-1111-1111-1111-111111111111'',''n'',''prototype'',''00000000-0000-0000-0000-0000000000a1'')', 'ok:1');
