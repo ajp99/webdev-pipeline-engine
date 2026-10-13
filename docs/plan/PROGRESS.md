@@ -85,3 +85,8 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - What changed: `AGENTS.md` rule 2, the repo map, `docs/proposals/README.md`, the plan phase files and `.prettierignore` now say an agent may edit `docs/spec/` only for a proposal the owner has approved, in its own spec-only PR, with exactly the approved edits.
 - Evidence: format check clean; no file under `docs/spec/` changed.
 - Follow-ups or blockers: the comment on line 2 of `docs/spec/stages.yaml` still says spec files are read-only for agents; the owner approved that edit and it is applied in PR #8.
+
+## 2026-10-13 Review of the applied proposals (docs only)
+- What changed: Resume now means a new run from the last commit (D-250), console commands use a commands table (D-249), handover guides are client-visible only after the owner's approval (D-251), and the handover-script dry run moves to the start of Phase 5. Plan edits in P2-T21, P4-T12, P5-T05 and P5-T10. P5-T10 also names the migration for the change-request freeze, which no task owned.
+- Evidence: documents only; spec edits are in a separate spec-only PR.
+- Follow-ups or blockers: merge this PR before the spec PR (it cites D-249 to D-251).
