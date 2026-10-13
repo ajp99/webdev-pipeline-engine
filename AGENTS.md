@@ -16,7 +16,7 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 ## Rules
 
 1. **One phase at a time.** Work only on tasks from the current phase: the first phase in `docs/plan/README.md` whose status is not `done` (Phase 2 has parts 2a and 2b, each with its own gate). Do not start the next phase until the owner has accepted the current phase's gate and marked it done.
-2. **Spec files are read-only.** Never edit anything under `docs/spec/`. If the spec is wrong, unclear, or silent on something you need, write a proposal in `docs/proposals/` (copy `TEMPLATE.md`) and stop on that point for the owner to decide. Do not guess.
+2. **Spec files change only with the owner's approval.** Never edit anything under `docs/spec/` on your own. If the spec is wrong, unclear, or silent on something you need, write a proposal in `docs/proposals/` (copy `TEMPLATE.md`) and stop on that point for the owner to decide. Do not guess. Once the owner has approved a specific proposal (in chat, or by filling in its "Owner decision" section), you may make exactly those edits to the spec files, in their own PR containing only spec changes, and mark the proposal `accepted`. Nothing beyond the approved text, and no spec edit without an approval you can point to; if in doubt, ask.
 3. **Track your work.** After finishing each task, tick its checkbox in the phase file and append an entry to `docs/plan/PROGRESS.md` (format at the top of that file).
 4. **Ask before schema or dependency changes.** Ask the owner before changing the database schema (anything in `supabase/migrations/`) or adding an application dependency. Dependencies explicitly named in a task are already approved for that task, and standard dev tooling (linters, formatters, test runners, type packages) may be added without asking. Once a migration is applied to the real project it is frozen: later changes are new numbered, forward-only migrations. Every migration goes in its own PR.
 5. **Prove every database or access rule by breaking it.** For each new or changed rule (policy, trigger, function), make a deliberate break and show that at least one check fails, then restore it. Record this in `PROGRESS.md`.
@@ -46,7 +46,7 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 | `evals` | Agent eval fixtures (fictional clients only) and harness |
 | `scripts` | Owner-run and maintenance scripts |
 | `templates/master-starter` | Master site starter copied into each client repo (outside the workspaces) |
-| `docs/spec` | Locked spec (read-only), plus `stages.yaml` and `gates.yaml` |
+| `docs/spec` | Locked spec (edited only after the owner approves a proposal), plus `stages.yaml` and `gates.yaml` |
 | `docs/plan` | Phase files with tasks, acceptance criteria and gates; `PROGRESS.md` |
 | `docs/proposals` | Proposed spec changes awaiting the owner |
 | `DECISIONS.md` | Decision log |
@@ -64,4 +64,4 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 - Install: `pnpm install` (Node 22 or newer, `.nvmrc`).
 - Dev server: `pnpm dev` (runs `@wpe/web`).
 - Checks: `pnpm lint`, `pnpm typecheck` (all workspaces), `pnpm test` (all workspaces), `pnpm format:check`.
-- Formatting: `pnpm format` skips `docs/`, `supabase/` and the markdown files on purpose (see `.prettierignore`); spec files are read-only.
+- Formatting: `pnpm format` skips `docs/`, `supabase/` and the markdown files on purpose (see `.prettierignore`); spec files are hand-formatted.

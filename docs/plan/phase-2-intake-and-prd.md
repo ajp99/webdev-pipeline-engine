@@ -13,7 +13,7 @@
 
 **Spec to read:** [04-intake.md](../spec/04-intake.md), [05-requirements-and-change-control.md](../spec/05-requirements-and-change-control.md), [06-agents-skills-tools.md](../spec/06-agents-skills-tools.md), [02-architecture.md](../spec/02-architecture.md)
 
-Rules: work only on this phase's tasks; tick each box when its acceptance criteria are met and add an entry to [PROGRESS.md](PROGRESS.md). Ask the owner before schema changes or dependencies not named in a task. Spec files are read-only; propose changes in `docs/proposals/`.
+Rules: work only on this phase's tasks; tick each box when its acceptance criteria are met and add an entry to [PROGRESS.md](PROGRESS.md). Ask the owner before schema changes or dependencies not named in a task. Spec files change only with the owner's approval; propose changes in `docs/proposals/`.
 
 ## Tasks
 
