@@ -9,7 +9,7 @@
 
 The questionnaire collected every gap and piece of debt found in Phase 1. The owner answered it in chat. This proposal records the answers that change the spec, the decisions or the plan. Spec files and `DECISIONS.md` are the owner's to edit, so the draft rows are at the end. The plan files (`docs/plan/`) and `AGENTS.md` were edited in the same PR, as the owner asked.
 
-Question numbers (A1 to G4) refer to the questionnaire. All P0 and P1 rows were answered, which meets the owner's condition for closing Phase 1 (G1: "P0 and P1 both").
+Question numbers (A1 to G4) refer to the questionnaire; the questions and the recorded answers are in `2026-10-13-questionnaire-appendix.md`. All P0 and P1 rows were answered, which meets the owner's condition for closing Phase 1 (G1: "P0 and P1 both").
 
 ## Proposed change
 
@@ -17,11 +17,11 @@ Question numbers (A1 to G4) refer to the questionnaire. All P0 and P1 rows were 
 
 1. **Keep all of migration 0002** (A1). It is not applied anywhere yet.
 2. **Apply the six differences from the 2026-10-08 proposal as spec edits** (A2, option A for all six): gate artifact names, round summaries, who counts as an approver, "Ready to advance", public sign-ups off, and the two unbuilt items.
-3. **Rename `outputs` in `stages.yaml` to match the gating artifact names** (A3), instead of adding a `gate_artifact` field. `stages.yaml` is a spec file, so the owner edits it; the consistency test (`packages/shared/src/consistency.test.ts`) may need the same rename.
+3. **Rename `outputs` in `stages.yaml` to match the gating artifact names** (A3), instead of adding a `gate_artifact` field. `stages.yaml` is a spec file, so the owner edits it; no test reads `outputs`, so none needs to change.
 
 ### Gates and approvals (B1 to B9)
 
-4. **Cancel a project (B1).** Allowed from any stage before handover, with a typed confirmation and a reason, and only after the pre-close database export has been made. A database function and a console button (P2-T20).
+4. **Cancel a project (B1).** Allowed from any stage before handover, with a typed confirmation and a reason, and with no export required (the weekly backup is the safety net; owner's decision at the PR review, 2026-10-13). A database function and a console button (P2-T20).
 5. **`retention_until` is set by the function that closes a project** (B2): both the normal close and a cancel, so no closed project lacks a date. P5-T11 only reads it.
 6. **Advance stays an explicit click** (B3), with an email to the owner when a client approval makes a project ready. Already decided (D-234).
 7. **Reject only marks; Feedback is capped at 3** on the soft gates without a cap (B4, B5). Already decided (D-234).
@@ -59,9 +59,16 @@ Question numbers (A1 to G4) refer to the questionnaire. All P0 and P1 rows were 
 30. **Retention job (F3).** Runs at every worker start, so a missed date is caught up, and the console shows an overdue badge and a manual "Run retention now" button.
 31. **Kept as accepted:** no spend cap (F4), Gmail stays regardless of the deliverability test (F6), the Vercel plan check is ignored for now (F8), no safeguards for reference-site URLs in P3-T12 (F9).
 32. **Evals before the Planner (F5).** The three fictional client fixtures and expected-output checks are written before P3-T03.
-33. **Phase 2 splits in two (F7).** 2a: templates, intake form, runner, intake agent, owner intake review, scanning, design section and the new gate and console tasks. Gate (drafted by the agent, owner to adjust): a test client's intake runs through the real stage runner and intake agent to an accepted intake. 2b: PRD, client review, change requests, email, invites, dashboard basics. Gate: a test client signs off a PRD (the existing gate).
+33. **Phase 2 splits in two (F7).** 2a: templates, intake form, runner, intake agent, owner intake review, scanning, design section, client invites and the email sender (moved here at the PR review because the test client needs a login and the follow-up email), and the new gate and console tasks. Gate (drafted by the agent, owner to adjust): a test client's intake runs through the real stage runner and intake agent to an accepted intake. 2b: PRD, client review, change requests, dashboard basics (privacy page, mobile-first layout). Gate: a test client signs off a PRD (the existing gate).
 34. **Pilot (F10).** After Phase 5, with a dry run of the handover script on a throwaway repo after Phase 4.
 35. **Scope (G3, G4).** Nothing is cut and no extra problems were raised.
+
+### Decisions from the PR review (2026-10-13)
+
+36. **Stale heartbeat versus stopped.** A stale heartbeat (10 minutes) re-queues the run within the 2-attempt limit; only a live run with no progress becomes `stopped`. Rate-limit backoff counts as a sign of life. Recorded in the PR #6 review proposal (D-232).
+37. **Hosting.** The owner's Vercel account moves to a paid plan from the first real client (the pilot on the owner's own site may stay on the free plan); the Vercel terms are as far as the spec author knows non-commercial-only on the free plan, still unverified. D-155 (the client recreates the Vercel project at handover) stays. The dashboard stays on its `vercel.app` address, also after the pilot (D-197), with invites from the same Gmail (D-224).
+38. **Supabase MCP.** `.mcp.json` keeps full access, but agents use it for reads and docs only. Any write through it (data, schema, functions, storage, branches, migrations) needs the owner's approval first, and schema changes still follow `AGENTS.md` rule 4. Added to `AGENTS.md`.
+39. **One-time exception.** PR #6 contains migration 0002 with code and docs; the rule that every migration gets its own PR starts with the next migration.
 
 ## Handling of G2 ("all in one PR") against E3 and `AGENTS.md`
 
@@ -92,11 +99,13 @@ G2 asked for everything, including migrations, in one PR. E3 said migrations get
 | --- | --- | --- | --- | --- |
 | D-235 | Spec | Migration 0002 stays whole. The six differences in `2026-10-08-phase-1-spec-alignment.md` are applied to the spec. `stages.yaml` `outputs` are renamed to the gating artifact names instead of adding a `gate_artifact` field | Owner's answers A1 to A3 | Active |
 | D-236 | Docs | The Claude Doc spec copy is retired and deleted; the repo is the only source | Owner's choice (E8); removes a copy that could go stale. Supersedes D-226 | Active |
-| D-237 | Cancel and close | The owner can cancel a project from any stage before handover, with a typed confirmation, a reason and a database export first. The function that closes or cancels a project sets `retention_until`. Closing is blocked while an accepted change request is undeployed | Owner's answers B1, B2, B9 | Active |
+| D-237 | Cancel and close | The owner can cancel a project from any stage before handover, with a typed confirmation and a reason (no export required). The function that closes or cancels a project sets `retention_until`. Closing is blocked while an accepted change request is undeployed | Owner's answers B1, B2, B9 | Active |
 | D-238 | Gates | Edits after approval: while the stage is open a new version needs a fresh approval; after advance, new versions of that artifact are blocked (use a change request). A paused project must be resumed before approving. Each project has one named client signer | Owner's answers B6, B7, B8 | Active |
 | D-239 | Gates | Gate rules live in the database: a remaining-gates function feeds the console, and `accept_gate` records the approval, marks the artifact and advances in one transaction. Added early in Phase 2, each migration in its own PR with the owner's approval | Owner's answers D2, D3, E3 | Active |
 | D-240 | Process | CI (one GitHub Actions workflow) starts with Phase 2; applied migrations are frozen and forward-only; every database or access rule is proved by a mutation check; an independent review precedes every phase gate and migration PR; PRs are per cluster of 2 to 4 tasks; PROGRESS entries are short; the agent asks about applying proposals at the start and end of each phase | Owner's answers D4, D5, E3 to E7 | Active; partly supersedes D-046 and D-225 |
 | D-241 | Setup | A `pnpm doctor` preflight and one script per owner step where the tools allow; the database checks run once on a local Supabase under WSL2 Docker | Owner's answers A5, D1, E1 | Active |
 | D-242 | Security | Public sign-ups off; client minimum password 12; invite link lifetime follows Supabase's cap, with a Resend button. Kept as accepted risks: no owner MFA, no laptop-lost runbook, no restore drill, one age key copy, no rule on business details in public docs | Owner's answers C1 to C6, C9 | Active |
 | D-243 | Operations | The retention job runs at every worker start, with an overdue badge and a manual "Run retention now" button. The free-tier pause rule is checked at the live checks, with a weekly keep-alive if it applies. No spend cap; Gmail stays; the Vercel plan check and reference-URL safeguards are not pursued now | Owner's answers F1, F3, F4, F6, F8, F9 | Active |
-| D-244 | Plan | Phase 2 is split into 2a (intake through the real runner and intake agent) and 2b (PRD, client review, email, invites, change requests), each with its own gate. Eval fixtures are written before the Planner. The pilot is after Phase 5, with a handover dry run after Phase 4 | Owner's answers F5, F7, F10 | Active |
+| D-244 | Plan | Phase 2 is split into 2a (intake through the real runner and intake agent) and 2b (PRD, client review, email, invites, change requests), each with its own gate (invites and the email sender are in 2a). Eval fixtures are written before the Planner. The pilot is after Phase 5, with a handover dry run after Phase 4 | Owner's answers F5, F7, F10 | Active |
+| D-245 | Hosting | The owner's Vercel account moves to a paid plan from the first real client; the pilot on the owner's own site may stay on the free plan. D-155 stays. The dashboard stays on its `vercel.app` address, also after the pilot | Owner's choice at the PR review; the free plan's terms are unverified. Refines D-026 and D-191 | Active |
+| D-246 | Tooling | The Supabase MCP server in `.mcp.json` is for reads and docs; any write through it needs the owner's approval first | Owner's choice at the PR review; it has full access to the project | Active |

@@ -25,7 +25,7 @@ Every item is an answer the owner gave in the discussion. Draft `DECISIONS.md` r
 
 ### Runner and run controls
 
-5. **No-progress watchdog.** A run that shows no sign of life for a set time is stopped. Any streamed model output, tool call, file write, commit or command output line counts as a sign of life. Times, fixed once and applied to every project:
+5. **No-progress watchdog.** A run that shows no sign of life for a set time is stopped. Any streamed model output, tool call, file write, commit or command output line counts as a sign of life, and so does each backoff retry after a rate-limit or overload response (D-204; confirmed 2026-10-13). Times, fixed once and applied to every project:
 
 | Run kind | Minutes without progress |
 | --- | --- |
@@ -52,7 +52,7 @@ Every item is an answer the owner gave in the discussion. Draft `DECISIONS.md` r
 Please confirm or change these.
 
 - After a stop, the owner chooses in the console between Resume from the working folder, Rerun from scratch and End run.
-- The watchdog runs as a timer in the worker plus a database check that marks a run stopped when its heartbeat has been stale for 10 minutes, so a sleeping or hung worker is also caught.
+- The watchdog runs as a timer in the worker. A stale heartbeat (10 minutes: the worker has gone away or the laptop slept) re-queues the run within the existing limit of 2 attempts; only a run that is alive but shows no progress becomes `stopped` (confirmed 2026-10-13).
 
 ## Open points
 
@@ -82,6 +82,6 @@ Please confirm or change these.
 | D-229 | Handover | The GitHub web-editor guide, its PDF and the per-project content-file list are dropped. While a project is open, edits are change requests only; after close they are handled outside the pipeline. The client receives a README, the handover document and its PDF, and a short note on how to ask for changes | Owner's choice (review of PR #6). Partly supersedes D-027, D-154 and D-173 | Active |
 | D-230 | Change requests | The owner-run transfer script sets a freeze before it pushes; from then on no new change request is accepted and pending ones are decided first | Owner's choice. Narrows D-090 (the window ends at transfer start, not at close) | Active |
 | D-231 | Owner alerts | The owner is emailed once for each client change request, PRD note and final-screenshot comment; the email names the event and links to the console, with no client text | Owner's choice. Extends D-200 | Active |
-| D-232 | Runner | A no-progress watchdog stops a run after 10 minutes (template generation, intake review, PRD, Planner), 20 minutes (prototype, QC, reporter, handover agent, deployment preparation) or 45 minutes (build rounds, change-request rounds) without a sign of life. Waiting runs are exempt and are parked after 1 hour. A stopped run gets a new `stopped` status and is not retried automatically. The token budget never stops a run | Owner's choice; needs a migration the owner approves. Extends D-202 | Active |
+| D-232 | Runner | A no-progress watchdog stops a run after 10 minutes (template generation, intake review, PRD, Planner), 20 minutes (prototype, QC, reporter, handover agent, deployment preparation) or 45 minutes (build rounds, change-request rounds) without a sign of life. Waiting runs are exempt and are parked after 1 hour. A stopped run gets a new `stopped` status and is not retried automatically. The token budget never stops a run. A stale heartbeat still re-queues the run (2 attempts); rate-limit backoff counts as a sign of life | Owner's choice; needs a migration the owner approves. Extends D-202 and D-204 | Active |
 | D-233 | Console | Retry creates a new run with fresh attempts and keeps the old run as history. Cancel stops the run and keeps the folder, branch and pull request. A failed or stopped run shows its reason and timeline, last log lines, and Resume, Rerun from scratch and End run | Owner's choice | Active |
 | D-234 | Gates | Reject only marks the version rejected and starts no run. Feedback is capped at 3 loops on intake review, PRD, plan, deployment preparation and handover guide. Advance stays an explicit click, and the owner is emailed when a project is ready to advance | Owner's choice | Active |

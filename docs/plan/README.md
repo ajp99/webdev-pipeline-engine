@@ -22,4 +22,5 @@ Task IDs look like `P2-T04` (phase 2, task 4). Tasks and acceptance criteria wer
 
 - **CI** starts with Phase 2 (task P2-T17, draft D-240). Branch protection stays the owner's call. Until CI exists, an agent's report that tests pass is unverified.
 - **Pipeline email account:** the owner supplies a Gmail app password (needs 2-step verification on the Google account) for the pipeline's client and owner emails and for Supabase's custom SMTP (tasks P2-T11 and P2-T12).
+- **Hosting:** the owner's Vercel account goes to a paid plan from the first real client (draft D-245); check Vercel's terms before then.
 - Open proposals: `docs/proposals/2026-10-08-phase-1-spec-alignment.md`, `2026-10-09-pr6-review-changes.md` and `2026-10-13-questionnaire-answers.md`. The agent asks at the start and end of each phase whether to apply them.
