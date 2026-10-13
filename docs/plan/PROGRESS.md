@@ -80,6 +80,7 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - What changed: spec edits for the three accepted proposals (PR #8, spec files only, including `stages.yaml` line 2 and `outputs`); `DECISIONS.md` rows D-229 to D-248 with statuses on D-027, D-035, D-046, D-083, D-090, D-154, D-173, D-225, D-226; proposal statuses set to accepted; plan fixes for the handover guide (P5-T05, T06, T11) and a `stages.yaml` consistency test (P2-T17).
 - Evidence: yaml files parse, the 45 unit tests pass, format check clean, no stale web-editor, 7-day, "any client login" or "no time limit" wording left in `docs/spec/`.
 - Follow-ups or blockers: merge this PR before PR #8 (the spec cites D-229 and later). The change-request freeze and the named signer need migrations with their own field names (P5-T10, P2-T12).
+
 ## 2026-10-13 Spec edits allowed after owner approval (docs only)
 - What changed: `AGENTS.md` rule 2, the repo map, `docs/proposals/README.md`, the plan phase files and `.prettierignore` now say an agent may edit `docs/spec/` only for a proposal the owner has approved, in its own spec-only PR, with exactly the approved edits.
 - Evidence: format check clean; no file under `docs/spec/` changed.
