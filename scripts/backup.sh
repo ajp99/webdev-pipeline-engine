@@ -42,8 +42,34 @@ name="wpe-$(date -u +%Y%m%dT%H%M%SZ)${label:+-$label}.dump.age"
 tmp="$(mktemp "$dir/.partial-XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 
+# Split the connection string into the libpq environment variables, so the password never appears on a
+# command line (other processes of the same user can read command lines, not the environment of a child).
+command -v python3 >/dev/null || { echo "backup: python3 not found" >&2; exit 2; }
+conn="$(python3 -I -c '
+import os, sys, shlex
+from urllib.parse import urlsplit, unquote, parse_qsl
+u = urlsplit(os.environ["SUPABASE_DB_URL"])
+if u.scheme not in ("postgres", "postgresql") or not u.hostname:
+    sys.exit("backup: SUPABASE_DB_URL must look like postgresql://user:password@host:port/database")
+pairs = {
+    "PGHOST": u.hostname,
+    "PGPORT": str(u.port or 5432),
+    "PGUSER": unquote(u.username or ""),
+    "PGPASSWORD": unquote(u.password or ""),
+    "PGDATABASE": unquote(u.path.lstrip("/")) or "postgres",
+}
+for k, v in parse_qsl(u.query):
+    if k == "sslmode":
+        pairs["PGSSLMODE"] = v
+for k, v in pairs.items():
+    if v:
+        print("export %s=%s" % (k, shlex.quote(v)))
+')" || exit 2
+eval "$conn"; unset conn
+unset SUPABASE_DB_URL
+
 # public holds the data and the approval log; auth holds the logins that the rows point to.
-pg_dump --format=custom --no-owner --no-privileges --schema=public --schema=auth "$SUPABASE_DB_URL" \
+pg_dump --format=custom --no-owner --no-privileges --schema=public --schema=auth \
   | age --recipient "$BACKUP_AGE_RECIPIENT" --output "$tmp"
 [ -s "$tmp" ] || { echo "backup: the export is empty" >&2; exit 1; }
 

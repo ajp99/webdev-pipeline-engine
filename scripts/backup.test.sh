@@ -46,4 +46,21 @@ check "a missing key setting is refused" '[ $? -eq 2 ]'
 bash "$here/backup.sh" 'bad label!' >/dev/null 2>&1
 check "an unsafe label is refused" '[ $? -eq 2 ]'
 
+# The password must reach pg_dump through the environment, never on its command line.
+mkdir -p "$w/bin"
+cat > "$w/bin/pg_dump" <<WRAP
+#!/usr/bin/env bash
+printf '%s\\n' "\$@" > "$w/pg_dump.args"
+printf '%s' "\${PGPASSWORD:-}" > "$w/pg_dump.pw"
+exec "$(command -v pg_dump)" "\$@"
+WRAP
+chmod +x "$w/bin/pg_dump"
+pwurl="$(python3 -I -c 'import sys; from urllib.parse import urlsplit; u=urlsplit(sys.argv[1]); print(u._replace(netloc=(u.username or "postgres")+":s3cr3t%40pw@"+u.hostname+(":"+str(u.port) if u.port else "")).geturl())' "$url")"
+SUPABASE_DB_URL="$pwurl" PATH="$w/bin:$PATH" bash "$here/backup.sh" pwcheck >/dev/null 2>&1; code=$?
+check "a connection string with a password still dumps" '[ $code -eq 0 ]'
+check "pg_dump gets no connection string or password on its command line" '[ -f "$w/pg_dump.args" ] && ! grep -q -E "postgres(ql)?://|s3cr3t" "$w/pg_dump.args"'
+check "the decoded password reaches pg_dump through PGPASSWORD" '[ "$(cat "$w/pg_dump.pw")" = "s3cr3t@pw" ]'
+SUPABASE_DB_URL='not a url' bash "$here/backup.sh" >/dev/null 2>&1
+check "a malformed connection string is refused" '[ $? -eq 2 ]'
+
 echo "---"; [ $fails -eq 0 ] && echo "backup checks: all passed" || { echo "backup checks: $fails failed"; exit 1; }

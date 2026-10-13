@@ -13,6 +13,8 @@ Scripts that need privileged credentials are run by the owner, never by an agent
 
 ## Backups (P1-T10)
 
+Needs `pg_dump` (same major version as the Supabase server or newer), `age` and `python3`. The script splits `SUPABASE_DB_URL` into the `PG*` environment variables, so the password never appears on a command line.
+
 ```
 cp scripts/.env.backup.example scripts/.env.backup     # fill in; the real file is gitignored
 age-keygen -o ~/wpe-age-key.txt                        # outside the repo; copy it into your password manager, then delete it
