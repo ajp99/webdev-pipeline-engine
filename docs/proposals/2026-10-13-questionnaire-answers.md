@@ -1,6 +1,6 @@
 # Proposal: decisions from the post-Phase 1 refinement questionnaire
 
-- **Status:** open
+- **Status:** accepted (2026-10-13)
 - **Date:** 2026-10-13
 - **Raised by:** owner (answers to the 52-question refinement questionnaire), written up by the agent
 - **Task or spec reference:** all of Phases 2 to 5; `docs/spec/stages.yaml`, `03-pipeline-and-gates.md`, `09-deployment-and-handover.md`, `10-data-model.md`, `12-security.md`, `15-operations.md`, `DECISIONS.md`. Builds on `2026-10-08-phase-1-spec-alignment.md` and `2026-10-09-pr6-review-changes.md`.
@@ -70,6 +70,12 @@ Question numbers (A1 to G4) refer to the questionnaire; the questions and the re
 38. **Supabase MCP.** `.mcp.json` keeps full access, but agents use it for reads and docs only. Any write through it (data, schema, functions, storage, branches, migrations) needs the owner's approval first, and schema changes still follow `AGENTS.md` rule 4. Added to `AGENTS.md`.
 39. **One-time exception.** PR #6 contains migration 0002 with code and docs; the rule that every migration gets its own PR starts with the next migration.
 
+### Decisions while applying the proposals (2026-10-13)
+
+40. **After close the dashboard shows the whole handover guide**, including the handover document, which may contain credentials. The retention job erases the guide's contents and PDF at the retention date; manual sharing is no longer required; the README stays in the repo. Spec 12 now allows this one exception to "no client secrets in the database", recorded as an accepted risk (D-247).
+41. **Agents may edit the spec only after the owner approves a proposal**, in a PR with spec changes only (D-248; PR #7).
+42. **An accepted change request may create a new version of a past stage's artifact** (the PRD bump of spec 05), as the exception to "blocked once the project has advanced" (item 8).
+
 ## Handling of G2 ("all in one PR") against E3 and `AGENTS.md`
 
 G2 asked for everything, including migrations, in one PR. E3 said migrations get their own PR, and `AGENTS.md` rule 4 requires the owner's approval for each schema change. This PR therefore holds the proposal, the plan edits, the `AGENTS.md` rules and the `backup.sh` fix, and turns the migrations into Phase 2 tasks (P2-T18, P2-T20, P2-T12, and P2-T04 for the `stopped` status) that each get their own PR and approval. **Owner: confirm, or say if you want the migration files drafted here after all.**
@@ -91,7 +97,7 @@ G2 asked for everything, including migrations, in one PR. E3 said migrations get
 - **Spec files:** `stages.yaml`, `03-pipeline-and-gates.md`, `09-deployment-and-handover.md`, `10-data-model.md`, `12-security.md`, `15-operations.md`, and the banners at the top of the spec files that name the Claude Doc (`docs/spec/README.md`, `00-overview.md`, `07-build-rounds.md`, `10-data-model.md`, `11-owner-console-and-client-dashboard.md`, `13-cost.md`) and the `DECISIONS.md` header; the root `README.md` line was updated in this PR.
 - **Plan:** `docs/plan/README.md` (Phase 2 becomes 2a and 2b, CI no longer deferred) and phase files 2 to 5.
 - **Data model (each its own approved migration):** remaining-gates function and `accept_gate` (P2-T18), cancel and close functions with `retention_until` (P2-T20), named signer (P2-T12), `stopped` status (P2-T04), optional `retry_of`.
-- **Decisions affected:** D-046, D-069, D-090, D-167, D-225, D-226.
+- **Decisions affected:** D-027, D-035, D-046, D-069, D-083, D-090, D-154, D-167, D-173, D-225, D-226 (statuses updated in `DECISIONS.md`).
 
 ## Draft DECISIONS.md rows
 
@@ -100,7 +106,7 @@ G2 asked for everything, including migrations, in one PR. E3 said migrations get
 | D-235 | Spec | Migration 0002 stays whole. The six differences in `2026-10-08-phase-1-spec-alignment.md` are applied to the spec. `stages.yaml` `outputs` are renamed to the gating artifact names instead of adding a `gate_artifact` field | Owner's answers A1 to A3 | Active |
 | D-236 | Docs | The Claude Doc spec copy is retired and deleted; the repo is the only source | Owner's choice (E8); removes a copy that could go stale. Supersedes D-226 | Active |
 | D-237 | Cancel and close | The owner can cancel a project from any stage before handover, with a typed confirmation and a reason (no export required). The function that closes or cancels a project sets `retention_until`. Closing is blocked while an accepted change request is undeployed | Owner's answers B1, B2, B9 | Active |
-| D-238 | Gates | Edits after approval: while the stage is open a new version needs a fresh approval; after advance, new versions of that artifact are blocked (use a change request). A paused project must be resumed before approving. Each project has one named client signer | Owner's answers B6, B7, B8 | Active |
+| D-238 | Gates | Edits after approval: while the stage is open a new version needs a fresh approval; after advance, new versions of that artifact are blocked (use a change request; an accepted one creates the new version). A paused project must be resumed before approving. Each project has one named client signer | Owner's answers B6, B7, B8 | Active |
 | D-239 | Gates | Gate rules live in the database: a remaining-gates function feeds the console, and `accept_gate` records the approval, marks the artifact and advances in one transaction. Added early in Phase 2, each migration in its own PR with the owner's approval | Owner's answers D2, D3, E3 | Active |
 | D-240 | Process | CI (one GitHub Actions workflow) starts with Phase 2; applied migrations are frozen and forward-only; every database or access rule is proved by a mutation check; an independent review precedes every phase gate and migration PR; PRs are per cluster of 2 to 4 tasks; PROGRESS entries are short; the agent asks about applying proposals at the start and end of each phase | Owner's answers D4, D5, E3 to E7 | Active; partly supersedes D-046 and D-225 |
 | D-241 | Setup | A `pnpm doctor` preflight and one script per owner step where the tools allow; the database checks run once on a local Supabase under WSL2 Docker | Owner's answers A5, D1, E1 | Active |
@@ -109,3 +115,7 @@ G2 asked for everything, including migrations, in one PR. E3 said migrations get
 | D-244 | Plan | Phase 2 is split into 2a (intake through the real runner and intake agent) and 2b (PRD, client review, email, invites, change requests), each with its own gate (invites and the email sender are in 2a). Eval fixtures are written before the Planner. The pilot is after Phase 5, with a handover dry run after Phase 4 | Owner's answers F5, F7, F10 | Active |
 | D-245 | Hosting | The owner's Vercel account moves to a paid plan from the first real client; the pilot on the owner's own site may stay on the free plan. D-155 stays. The dashboard stays on its `vercel.app` address, also after the pilot | Owner's choice at the PR review; the free plan's terms are unverified. Refines D-026 and D-191 | Active |
 | D-246 | Tooling | The Supabase MCP server in `.mcp.json` is for reads and docs; any write through it needs the owner's approval first | Owner's choice at the PR review; it has full access to the project | Active |
+
+## Owner decision
+
+Accepted 2026-10-13. The spec edits are in PR #8 and the decisions are D-235 to D-248. Migrations stay Phase 2 tasks, each in its own PR with the owner's approval (the owner merged PR #6 with this handling).
