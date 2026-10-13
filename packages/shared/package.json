@@ -2,5 +2,21 @@
   "name": "@wpe/shared",
   "version": "0.0.0",
   "private": true,
-  "description": "Types and constants used by both apps: stages, gates, database types."
+  "description": "Types and constants used by both apps: stages, gates, database types.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "type": "module",
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
 }

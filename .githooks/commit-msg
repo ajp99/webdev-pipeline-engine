@@ -1,0 +1,6 @@
+#!/bin/sh
+# Strip AI attribution trailers (Co-Authored-By naming an AI, Claude-Session) from every commit message.
+f="$1"
+sed -E -i '/^(Co-Authored-By:.*([Cc]laude|[Aa]nthropic)|Claude-Session:)/Id' "$f"
+# drop trailing blank lines left behind
+sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$f"
