@@ -1,6 +1,6 @@
 # Cost estimate
 
-> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
 Expect roughly $15-35 of Claude tokens per marketing-site project, and about $50-130 a month in total for two projects. Token usage is a planning estimate, not measured; replace it with real numbers after the pilot project.
 
@@ -17,7 +17,7 @@ Expect roughly $15-35 of Claude tokens per marketing-site project, and about $50
 | --- | --- |
 | Claude API, Sonnet 5.5 at $2 / $10 per million input/output tokens, cache reads $0.20 | per project above; Opus 5.5 ($4 / $20) for build rounds roughly doubles it |
 | Supabase | $0 on free tier until the pilot, about $25 on Pro afterwards |
-| Vercel for client sites | about $20 on Pro (needed for commercial use; verify) |
+| Vercel for client sites | about $20 on Pro (from the first real client; terms unverified) |
 | Worker host | $0 (owner's machine) |
 | Lighthouse CI, Playwright, Gmail SMTP for the pipeline's emails | $0 at low volume |
 | 2 projects per month, all-in | about $50-130 |

@@ -1,5 +1,8 @@
 # Machine-readable stage definitions. Derived from docs/spec/03-pipeline-and-gates.md.
-# Spec files are read-only for agents; propose changes in docs/proposals/.
+# Spec files change only with the owner's approval; propose changes in docs/proposals/.
+# Each stage's outputs are artifact types. The type that gates a stage is the one in STAGE_ARTIFACT
+# (packages/shared/src/queue.ts): intake_record, prd, plan, prototype, round_summary, report,
+# deployment_checklist, handover_guide.
 version: 1
 snapshot_date: 2026-10-05
 stages:
@@ -18,7 +21,7 @@ stages:
   - id: prototype
     order: 4
     name: Prototype
-    outputs: [prototype_preview]
+    outputs: [prototype]
     max_revision_cycles: 2
   - id: build_rounds
     order: 5
@@ -40,7 +43,7 @@ stages:
   - id: handover
     order: 8
     name: Handover
-    outputs: [handover_pack]
+    outputs: [handover_guide]
   # D-220: reached only from handover, through advance_stage(), which also sets projects.status to
   # closed and close_reason to completed in the same call.
   - id: closed
