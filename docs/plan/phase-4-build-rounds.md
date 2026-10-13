@@ -19,7 +19,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Acceptance: Runs each stage in a per-project working directory with a short-lived GitHub App token limited to that project's repository (no Vercel token). Uses Sonnet 5.5, or Opus 5.5 for rounds the approved plan flags. Shell commands run from an allowlist: limited git (it pushes `round-N` branches, never `main`), installs without install scripts, build, lint, typecheck, test, Playwright, Lighthouse, and file access inside the project directory. Everything else, including other network requests, is refused and logged to the backlog. Keeps `.pipeline/NOTES.md` in the client repo and never copies the owner's private notes into it.
 
 - [ ] **P4-T03 Pause requests**  
-  Acceptance: Deleting a directory or many files, and force-pushing or rewriting git history, pause the run and create a `run_approvals` row; the run enters the `waiting` state and keeps its concurrency slot. The console shows the request and the owner approves or denies it; the run then continues or skips the command.
+  Acceptance: Deleting a directory or many files, and force-pushing or rewriting git history, pause the run and create a `run_approvals` row; the run enters the `waiting` state and keeps its concurrency slot for up to 1 hour; after that it is parked (state saved, slot freed) and resumes when the owner answers (D-232). Waiting runs are exempt from the no-progress watchdog. The console shows the request and the owner approves or denies it; the run then continues or skips the command.
 
 - [ ] **P4-T04 Round pull request and backlog logging**  
   Acceptance: Each round works on a `round-N` branch. Before the pull request opens, the build, lint, typecheck and content schema checks must pass. The PR goes into `staging`; Vercel attaches a preview (owner only); `rounds` records the branch, PR number and URL. The Builder logs every question and assumption with context, options considered and what it assumed; only a true blocker stops the round and is flagged to the owner.
@@ -46,7 +46,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Acceptance: An endpoint in `apps/web` verifies GitHub's signature. A merge of a round's pull request into `staging` by the owner's GitHub account is recorded as Accept (idempotent, so a console-triggered merge is not recorded twice). A pull request closed without merging records nothing.
 
 - [ ] **P4-T12 Phase 4 gate evidence**  
-  Acceptance: Record in `PROGRESS.md`: two real rounds on the dental fixture with a throwaway repo, exercising a re-plan, Feedback loops, a risky-command pause and an ask-client answer; an automated round-loop test with model and GitHub calls stubbed; table-driven tests of the command allowlist (allowed, refused and paused commands, including attempts to reword a refused one); and a cost report in tokens.
+  Acceptance: Record in `PROGRESS.md`: two real rounds on the dental fixture with a throwaway repo, exercising a re-plan, Feedback loops, a risky-command pause and an ask-client answer; an automated round-loop test with model and GitHub calls stubbed; table-driven tests of the command allowlist (allowed, refused and paused commands, including attempts to reword a refused one); and a cost report in tokens. Also a dry run of the handover script (P5-T10) on a throwaway repo (D-244).
 
 ## Gate
 

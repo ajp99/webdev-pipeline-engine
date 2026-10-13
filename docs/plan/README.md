@@ -5,7 +5,8 @@ Five phases, built in order. Each phase is closed by one gate that only the owne
 | Phase | Name | Gate | Status |
 | --- | --- | --- | --- |
 | 1 | [Foundation](phase-1-foundation.md) | An approved dummy artifact moves a project stage | in progress |
-| 2 | [Intake and PRD](phase-2-intake-and-prd.md) | A test client signs off a PRD | not started |
+| 2a | [Intake and runner](phase-2-intake-and-prd.md) | A test client's intake runs through the real stage runner and intake agent to an accepted intake | not started |
+| 2b | [PRD and client review](phase-2-intake-and-prd.md) | A test client signs off a PRD | not started |
 | 3 | [Plan and prototype](phase-3-plan-and-prototype.md) | Prototype approved from screenshots | not started |
 | 4 | [Build rounds](phase-4-build-rounds.md) | A full round runs with its backlog triaged | not started |
 | 5 | [QC, report, handover](phase-5-qc-report-handover.md) | A pilot site is handed over | not started |
@@ -19,6 +20,6 @@ Task IDs look like `P2-T04` (phase 2, task 4). Tasks and acceptance criteria wer
 
 ## Open items for the owner
 
-- **CI and branch protection** are deferred (D-046). Until CI exists, an agent's report that tests pass is unverified. The owner decides when to add them.
+- **CI** starts with Phase 2 (task P2-T17, draft D-240). Branch protection stays the owner's call. Until CI exists, an agent's report that tests pass is unverified.
 - **Pipeline email account:** the owner supplies a Gmail app password (needs 2-step verification on the Google account) for the pipeline's client and owner emails and for Supabase's custom SMTP (tasks P2-T11 and P2-T12).
-- No unresolved spec items remain; see `docs/proposals/` for how earlier ones were decided.
+- Open proposals: `docs/proposals/2026-10-08-phase-1-spec-alignment.md`, `2026-10-09-pr6-review-changes.md` and `2026-10-13-questionnaire-answers.md`. The agent asks at the start and end of each phase whether to apply them.

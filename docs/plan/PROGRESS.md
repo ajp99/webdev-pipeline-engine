@@ -1,6 +1,6 @@
 # Progress log
 
-Append one entry per finished task, newest at the bottom. Format:
+Append one entry per finished task, newest at the bottom. Keep entries short (what changed, evidence, open items); detail goes in the PR description. Format:
 
 ```
 ## YYYY-MM-DD P1-T03 Short title
@@ -65,3 +65,8 @@ Append one entry per finished task, newest at the bottom. Format:
 - What changed: `scripts/backup.sh` splits `SUPABASE_DB_URL` into `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` and `PGSSLMODE` (python3, URL-decoded, shell-quoted) and runs `pg_dump` without a connection string. This closes the deferred minor finding from the phase 1 branch review. `scripts/README.md` lists python3 as a requirement.
 - Evidence: `bash scripts/backup.test.sh` against the scratch Postgres, 20 checks pass (4 new: password in the URL still dumps over a password-protected connection, no connection string or password in the `pg_dump` arguments, the decoded password reaches `pg_dump` through `PGPASSWORD`, a malformed URL is refused). Mutation check: against the previous script, 3 of the new checks fail.
 - Follow-ups or blockers: none.
+
+## 2026-10-13 Questionnaire answers written up (docs only)
+- What changed: `docs/proposals/2026-10-13-questionnaire-answers.md` records the owner's answers with draft rows D-235 to D-244. Plan edits: Phase 2 split into 2a and 2b with new tasks P2-T17 to P2-T22; watchdog, `stopped` status, parking, gate controls, owner emails, named signer, cancel and run controls (P2-T04, P2-T06, P2-T08, P2-T10, P2-T11, P2-T12, P2-T19 to P2-T21); eval fixtures before the Planner (P3-T03, P3-T10); parked runs and handover dry run (P4-T03, P4-T12); handover pack, freeze, close and retention (P5-T05, T06, T07, T10, T11). `AGENTS.md` gains rules 5 to 7.
+- Evidence: documents only; no code or schema changed. The Claude Doc spec copy was deleted (D-236 draft).
+- Follow-ups or blockers: the migrations (gate functions, cancel and close, named signer, `stopped`) are tasks with their own PRs and owner approval, not files in this PR. Owner: C8 status, live checks, A5 local Supabase run, spec edits and DECISIONS rows.

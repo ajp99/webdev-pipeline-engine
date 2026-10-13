@@ -22,4 +22,4 @@ CreatePipeline Engine: an internal, single-owner pipeline that takes marketing-s
 ## Notes
 
 - This repo is public by the owner's choice. It must never contain secrets or client data.
-- The repo is the source of truth. The original Claude Doc "CreatePipeline Engine: Locked Spec" is a frozen snapshot.
+- The repo is the source of truth. The original Claude Doc "CreatePipeline Engine: Locked Spec" has been retired and deleted (draft D-236).

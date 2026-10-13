@@ -15,10 +15,13 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 
 ## Rules
 
-1. **One phase at a time.** Work only on tasks from the current phase: the first phase in `docs/plan/README.md` whose status is not `done`. Do not start the next phase until the owner has accepted the current phase's gate and marked it done.
+1. **One phase at a time.** Work only on tasks from the current phase: the first phase in `docs/plan/README.md` whose status is not `done` (Phase 2 has parts 2a and 2b, each with its own gate). Do not start the next phase until the owner has accepted the current phase's gate and marked it done.
 2. **Spec files are read-only.** Never edit anything under `docs/spec/`. If the spec is wrong, unclear, or silent on something you need, write a proposal in `docs/proposals/` (copy `TEMPLATE.md`) and stop on that point for the owner to decide. Do not guess.
 3. **Track your work.** After finishing each task, tick its checkbox in the phase file and append an entry to `docs/plan/PROGRESS.md` (format at the top of that file).
-4. **Ask before schema or dependency changes.** Ask the owner before changing the database schema (anything in `supabase/migrations/`) or adding an application dependency. Dependencies explicitly named in a task are already approved for that task, and standard dev tooling (linters, formatters, test runners, type packages) may be added without asking.
+4. **Ask before schema or dependency changes.** Ask the owner before changing the database schema (anything in `supabase/migrations/`) or adding an application dependency. Dependencies explicitly named in a task are already approved for that task, and standard dev tooling (linters, formatters, test runners, type packages) may be added without asking. Once a migration is applied to the real project it is frozen: later changes are new numbered, forward-only migrations. Every migration goes in its own PR.
+5. **Prove every database or access rule by breaking it.** For each new or changed rule (policy, trigger, function), make a deliberate break and show that at least one check fails, then restore it. Record this in `PROGRESS.md`.
+6. **Proposals and reviews.** At the start and at the end of each phase, ask the owner whether to apply the open proposals in `docs/proposals/` and offer a ready-to-apply patch. Before each phase gate and before each migration PR, an independent review by a fresh reviewer who has not seen the build is required.
+7. **PRs and progress entries.** Open one PR per cluster of 2 to 4 related tasks. Keep `PROGRESS.md` entries short: what changed, evidence, open items; put the detail in the PR description.
 
 ## Security rules
 
