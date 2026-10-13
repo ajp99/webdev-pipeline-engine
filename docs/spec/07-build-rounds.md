@@ -1,6 +1,6 @@
 # Build rounds and question backlog
 
-> Originally a snapshot of the Claude Doc "CreatePipeline Engine: Locked Spec" (2026-10-05). The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents must not edit files in `docs/spec/`; propose changes in `docs/proposals/` (see `AGENTS.md`).
+> Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
 The Planner sets the number of rounds from the page count and features in the locked PRD, using a rule of thumb: 5 pages or fewer and no blog is 2 rounds, otherwise 4. The owner can override it and approves the plan.
 
@@ -20,12 +20,13 @@ The Planner sets the number of rounds from the page count and features in the lo
 
 - A round cannot start until the previous round is approved, its backlog is triaged, and the updated plan is approved.
 - Assumptions the Builder made stay visible in the backlog until the owner confirms or corrects them.
+- Each round's summary is an artifact of type `round_summary` carrying the round number. Feedback makes a new version of the same round's summary, and a round passes with a soft approval on its newest summary.
 - Round 1 builds on the approved single-page prototype; later rounds extend pages, content, and polish as the plan defines.
 - All round work lives on the `staging` branch. `main`, the Vercel production branch, changes only at deployment preparation, so a site cannot go live early.
 - Dependencies named in the approved plan may be added; any others are allowed but flagged in the round summary and need the owner's approval at the round gate. Installs run without install scripts.
 - Every factual claim in agent-written copy is wrapped in a `<Claim>` marker that renders normally. Markers stay in `staging` until deployment preparation, where a script strips all cleared ones. QC fails if a marker belongs to a claim the owner has not cleared.
 
-**Command rules (D-130, D-131):** the Builder runs shell commands from an allowlist: limited git (it pushes `round-N` branches, never `main`), package installs without install scripts, build, lint, typecheck, test, Playwright, Lighthouse, and file reads and writes inside the project directory. Two kinds of command pause the run and ask the owner: deleting a directory or many files, and force-pushing or rewriting git history. A waiting run keeps its concurrency slot. Everything else, including other network requests, is refused and logged to the backlog so the owner sees what the Builder wanted.
+**Command rules (D-130, D-131):** the Builder runs shell commands from an allowlist: limited git (it pushes `round-N` branches, never `main`), package installs without install scripts, build, lint, typecheck, test, Playwright, Lighthouse, and file reads and writes inside the project directory. Two kinds of command pause the run and ask the owner: deleting a directory or many files, and force-pushing or rewriting git history. A waiting run keeps its concurrency slot for up to 1 hour and is then parked (its state saved and the slot freed) until the owner answers. Everything else, including other network requests, is refused and logged to the backlog so the owner sees what the Builder wanted.
 
 **Cost (D-138, D-140):** the console shows token use as a progress bar against the plan's token budget. There are no dollar amounts and no warnings.
 **Change-request mini-rounds (D-174, D-175):** after go-live an accepted change request runs as a mini-round: the Builder works on a `cr-N` branch with a pull request into `staging`, the owner Accepts, and a deploy step (a hard gate) merges `staging` into `main`. A mini-round gets the round checks only (build, lint, typecheck, content schema), with no QC re-run. The client dashboard shows the request's status (received, accepted, deferred, declined, deployed) and sends no email.
