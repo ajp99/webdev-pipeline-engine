@@ -1,4 +1,4 @@
-# Docs, spec and decision log are hand-formatted; spec files are read-only for agents.
+# Docs, spec and decision log are hand-formatted; spec files change only with the owner's approval.
 docs/
 DECISIONS.md
 AGENTS.md

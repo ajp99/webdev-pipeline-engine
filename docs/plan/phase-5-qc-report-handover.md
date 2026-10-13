@@ -8,7 +8,7 @@
 
 **Spec to read:** [08-qc-and-report.md](../spec/08-qc-and-report.md), [09-deployment-and-handover.md](../spec/09-deployment-and-handover.md), [12-security.md](../spec/12-security.md), [13-cost.md](../spec/13-cost.md)
 
-Rules: work only on this phase's tasks; tick each box when its acceptance criteria are met and add an entry to [PROGRESS.md](PROGRESS.md). Ask the owner before schema changes or dependencies not named in a task. Spec files are read-only; propose changes in `docs/proposals/`.
+Rules: work only on this phase's tasks; tick each box when its acceptance criteria are met and add an entry to [PROGRESS.md](PROGRESS.md). Ask the owner before schema changes or dependencies not named in a task. Spec files change only with the owner's approval; propose changes in `docs/proposals/`.
 
 ## Tasks
 
