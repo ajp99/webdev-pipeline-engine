@@ -1,6 +1,6 @@
 # Proposal: changes from the owner's review of PR #6
 
-- **Status:** open
+- **Status:** accepted (2026-10-13)
 - **Date:** 2026-10-09
 - **Raised by:** owner (review of PR #6), written up by the agent
 - **Task or spec reference:** P2-T04, P2-T11, P5-T05, P5-T06, P5-T07, P5-T10; `docs/spec/00-overview.md`, `03-pipeline-and-gates.md`, `09-deployment-and-handover.md`, `11-owner-console-and-client-dashboard.md`, `14-risks-and-out-of-scope.md`, `15-operations.md`
@@ -85,3 +85,7 @@ Please confirm or change these.
 | D-232 | Runner | A no-progress watchdog stops a run after 10 minutes (template generation, intake review, PRD, Planner), 20 minutes (prototype, QC, reporter, handover agent, deployment preparation) or 45 minutes (build rounds, change-request rounds) without a sign of life. Waiting runs are exempt and are parked after 1 hour. A stopped run gets a new `stopped` status and is not retried automatically. The token budget never stops a run. A stale heartbeat still re-queues the run (2 attempts); rate-limit backoff counts as a sign of life | Owner's choice; needs a migration the owner approves. Extends D-202 and D-204 | Active |
 | D-233 | Console | Retry creates a new run with fresh attempts and keeps the old run as history. Cancel stops the run and keeps the folder, branch and pull request. A failed or stopped run shows its reason and timeline, last log lines, and Resume, Rerun from scratch and End run | Owner's choice | Active |
 | D-234 | Gates | Reject only marks the version rejected and starts no run. Feedback is capped at 3 loops on intake review, PRD, plan, deployment preparation and handover guide. Advance stays an explicit click, and the owner is emailed when a project is ready to advance | Owner's choice | Active |
+
+## Owner decision
+
+Option A, accepted 2026-10-13: every item, with the confirmations noted in the text (stale heartbeat re-queues, rate-limit backoff counts as a sign of life). The spec edits are in PR #8 and the decisions are D-229 to D-234.

@@ -1,6 +1,6 @@
 # Proposal: align the spec with how phase 1 was built
 
-- **Status:** open
+- **Status:** accepted (2026-10-13)
 - **Date:** 2026-10-08
 - **Raised by:** agent (phase 1 build)
 - **Task or spec reference:** P1-T06, P1-T07; `docs/spec/stages.yaml`, `docs/spec/10-data-model.md`, `docs/spec/03-pipeline-and-gates.md`, `docs/spec/12-security.md`
@@ -29,4 +29,4 @@ Building `advance_stage()` and the approval queue needed choices the spec does n
 
 ## Owner decision
 
-(Left blank for the owner.)
+Option A, accepted 2026-10-13 (questionnaire A2 and A3). The spec edits are in PR #8, with `stages.yaml` `outputs` renamed to match the gating artifact names (`prototype`, `handover_guide`). Item 6 (cancel, `retention_until`) is covered by D-237 and tasks P2-T20 and P5-T06. Recorded as D-235.
