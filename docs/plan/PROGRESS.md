@@ -75,3 +75,8 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - What changed: a full review found and fixed five contradictions in the plan and proposals: the 2a gate needed client logins and emails that were in 2b (P2-T11 and P2-T12 moved to 2a); P2-T04 said both "stale heartbeat re-queues" and "stale heartbeat stops" (now: re-queue, and only no-progress becomes `stopped`); rate-limit waits could be stopped by the watchdog (now a sign of life); P2-T09 still said any client login signs off (now the named signer); Cancel required an export the database cannot check (rule dropped). Added: `AGENTS.md` rule for the Supabase MCP, the questionnaire appendix, hosting decisions (draft D-245, D-246).
 - Evidence: lint, typecheck, 45 unit tests, format check, `next build`, 204 database checks and 20 backup checks pass on this branch; no AI attribution in any of the 16 commit messages.
 - Follow-ups or blockers: C8 (secret scanning, push protection, old token), live checks, and the owner edits to the spec and `DECISIONS.md` are still open.
+
+## 2026-10-13 Spec edits allowed after owner approval (docs only)
+- What changed: `AGENTS.md` rule 2, the repo map, `docs/proposals/README.md`, the plan phase files and `.prettierignore` now say an agent may edit `docs/spec/` only for a proposal the owner has approved, in its own spec-only PR, with exactly the approved edits.
+- Evidence: format check clean; no file under `docs/spec/` changed.
+- Follow-ups or blockers: the comment on line 2 of `docs/spec/stages.yaml` still says spec files are read-only for agents; the owner updates it (or approves that edit).
