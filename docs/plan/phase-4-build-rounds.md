@@ -46,7 +46,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Acceptance: An endpoint in `apps/web` verifies GitHub's signature. A merge of a round's pull request into `staging` by the owner's GitHub account is recorded as Accept (idempotent, so a console-triggered merge is not recorded twice). A pull request closed without merging records nothing.
 
 - [ ] **P4-T12 Phase 4 gate evidence**  
-  Acceptance: Record in `PROGRESS.md`: two real rounds on the dental fixture with a throwaway repo, exercising a re-plan, Feedback loops, a risky-command pause and an ask-client answer; an automated round-loop test with model and GitHub calls stubbed; table-driven tests of the command allowlist (allowed, refused and paused commands, including attempts to reword a refused one); and a cost report in tokens. Also a dry run of the handover script (P5-T10) on a throwaway repo (D-244).
+  Acceptance: Record in `PROGRESS.md`: two real rounds on the dental fixture with a throwaway repo, exercising a re-plan, Feedback loops, a risky-command pause and an ask-client answer; an automated round-loop test with model and GitHub calls stubbed; table-driven tests of the command allowlist (allowed, refused and paused commands, including attempts to reword a refused one); and a cost report in tokens.
 
 ## Gate
 

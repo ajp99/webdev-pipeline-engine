@@ -60,7 +60,7 @@ Question numbers (A1 to G4) refer to the questionnaire; the questions and the re
 31. **Kept as accepted:** no spend cap (F4), Gmail stays regardless of the deliverability test (F6), the Vercel plan check is ignored for now (F8), no safeguards for reference-site URLs in P3-T12 (F9).
 32. **Evals before the Planner (F5).** The three fictional client fixtures and expected-output checks are written before P3-T03.
 33. **Phase 2 splits in two (F7).** 2a: templates, intake form, runner, intake agent, owner intake review, scanning, design section, client invites and the email sender (moved here at the PR review because the test client needs a login and the follow-up email), and the new gate and console tasks. Gate (drafted by the agent, owner to adjust): a test client's intake runs through the real stage runner and intake agent to an accepted intake. 2b: PRD, client review, change requests, dashboard basics (privacy page, mobile-first layout). Gate: a test client signs off a PRD (the existing gate).
-34. **Pilot (F10).** After Phase 5, with a dry run of the handover script on a throwaway repo after Phase 4.
+34. **Pilot (F10).** After Phase 5, with a dry run of the handover script on a throwaway repo (moved from after Phase 4 to the start of Phase 5, D-250, because the script is built in Phase 5).
 35. **Scope (G3, G4).** Nothing is cut and no extra problems were raised.
 
 ### Decisions from the PR review (2026-10-13)
@@ -119,3 +119,9 @@ G2 asked for everything, including migrations, in one PR. E3 said migrations get
 ## Owner decision
 
 Accepted 2026-10-13. The spec edits are in PR #8 and the decisions are D-235 to D-248. Migrations stay Phase 2 tasks, each in its own PR with the owner's approval (the owner merged PR #6 with this handling).
+
+### Decisions from the review of the applied proposals (2026-10-13)
+
+43. **Resume (D-250).** Resume starts a new run on the same branch from the last commit; uncommitted work is lost and D-203 stays.
+44. **Console commands (D-249).** A commands table written by the console and polled by the worker; the assistant's default when the owner was unsure.
+45. **Handover guide visibility (D-251).** Client-visible only after the owner's hard-gate approval; enforced in the database.
