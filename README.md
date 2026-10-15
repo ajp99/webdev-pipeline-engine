@@ -2,7 +2,7 @@
 
 CreatePipeline Engine: an internal, single-owner pipeline that takes marketing-site clients from intake to handover. Agents do the work; the owner approves every step through soft, hard, and client gates.
 
-**Status:** specification locked; every decision is recorded in [DECISIONS.md](DECISIONS.md) and the spec files reflect them; empty scaffold, no application code yet. Next: phase 1 in [docs/plan/README.md](docs/plan/README.md).
+**Status:** specification locked; every decision is recorded in [DECISIONS.md](DECISIONS.md). Phase 1 is in progress: tooling, the database migrations with their checks and the stage-advance function are built; the console, sign-in and the runner are not. Development is dev-only on a local Supabase until go-live ([checklist](docs/plan/go-live-readiness.md)). See [docs/plan/README.md](docs/plan/README.md).
 
 ## Where things are
 
