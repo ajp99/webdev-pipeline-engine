@@ -17,3 +17,10 @@ end $$;
 grant usage on schema auth to anon, authenticated, service_role;
 grant select on auth.users to authenticated, service_role;
 grant execute on function auth.uid(), auth.role() to anon, authenticated, service_role;
+
+-- Supabase's default privileges: objects created in public are granted to anon, authenticated and
+-- service_role, and functions are executable by PUBLIC. Set here, before the migrations run, so the
+-- migrations' own revokes are tested against the same starting point as on a real project.
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;

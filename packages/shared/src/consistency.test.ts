@@ -76,7 +76,7 @@ describe('generated database types (P1-T03)', () => {
   it('declare every table the migrations create', () => {
     const created = [...sql.matchAll(/create table (\w+) \(/gi)].map((m) => m[1]!).sort();
     const typed = [...generated.matchAll(/^\s{6}(\w+): \{\n\s+Row:/gm)].map((m) => m[1]!).sort();
-    expect(created.length).toBe(23);
+    expect(created.length).toBe(24);
     expect(typed).toEqual(created);
   });
 

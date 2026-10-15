@@ -7,7 +7,7 @@ export type Database = {
     Tables: {
       approvals: {
         Row: {
-          approved_by: string;
+          approved_by: string | null;
           artifact_id: string;
           at: string;
           gate_type: Database['public']['Enums']['gate_type'];
@@ -16,7 +16,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          approved_by: string;
+          approved_by?: string | null;
           artifact_id: string;
           at?: string;
           gate_type: Database['public']['Enums']['gate_type'];
@@ -24,7 +24,7 @@ export type Database = {
           role: Database['public']['Enums']['approver_role'];
         };
         Update: {
-          approved_by?: string;
+          approved_by?: string | null;
           artifact_id?: string;
           at?: string;
           gate_type?: Database['public']['Enums']['gate_type'];
@@ -187,6 +187,7 @@ export type Database = {
           created_at: string;
           email: string;
           id: string;
+          is_signer: boolean;
           project_id: string;
         };
         ComputedFields: never;
@@ -194,12 +195,14 @@ export type Database = {
           created_at?: string;
           email: string;
           id: string;
+          is_signer?: boolean;
           project_id: string;
         };
         Update: {
           created_at?: string;
           email?: string;
           id?: string;
+          is_signer?: boolean;
           project_id?: string;
         };
         Relationships: [
@@ -246,11 +249,11 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: 'comments_artifact_id_fkey';
-            columns: ['artifact_id'];
+            foreignKeyName: 'comments_artifact_id_project_id_fkey';
+            columns: ['artifact_id', 'project_id'];
             isOneToOne: false;
             referencedRelation: 'artifacts';
-            referencedColumns: ['id'];
+            referencedColumns: ['id', 'project_id'];
           },
           {
             foreignKeyName: 'comments_project_id_fkey';
@@ -525,11 +528,11 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: 'prd_feedback_artifact_id_fkey';
-            columns: ['artifact_id'];
+            foreignKeyName: 'prd_feedback_artifact_id_project_id_fkey';
+            columns: ['artifact_id', 'project_id'];
             isOneToOne: false;
             referencedRelation: 'artifacts';
-            referencedColumns: ['id'];
+            referencedColumns: ['id', 'project_id'];
           },
           {
             foreignKeyName: 'prd_feedback_project_id_fkey';
@@ -540,58 +543,85 @@ export type Database = {
           },
         ];
       };
-      projects: {
+      project_internal: {
         Row: {
-          close_reason: Database['public']['Enums']['close_reason'] | null;
-          created_at: string;
           data_deleted_at: string | null;
           github_repo: string | null;
-          id: string;
-          industry: string | null;
-          intake_template_id: string | null;
-          intake_template_snapshot: Json | null;
-          name: string;
+          project_id: string;
+          retention_days: number;
           retention_until: string | null;
           round_plan: Json | null;
-          stage: Database['public']['Enums']['stage'];
-          status: Database['public']['Enums']['project_status'];
           token_budget: number | null;
           vercel_project_id: string | null;
         };
         ComputedFields: never;
         Insert: {
-          close_reason?: Database['public']['Enums']['close_reason'] | null;
-          created_at?: string;
           data_deleted_at?: string | null;
           github_repo?: string | null;
+          project_id: string;
+          retention_days?: number;
+          retention_until?: string | null;
+          round_plan?: Json | null;
+          token_budget?: number | null;
+          vercel_project_id?: string | null;
+        };
+        Update: {
+          data_deleted_at?: string | null;
+          github_repo?: string | null;
+          project_id?: string;
+          retention_days?: number;
+          retention_until?: string | null;
+          round_plan?: Json | null;
+          token_budget?: number | null;
+          vercel_project_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'project_internal_project_id_fkey';
+            columns: ['project_id'];
+            isOneToOne: true;
+            referencedRelation: 'projects';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      projects: {
+        Row: {
+          changes_frozen_at: string | null;
+          close_reason: Database['public']['Enums']['close_reason'] | null;
+          created_at: string;
+          id: string;
+          industry: string | null;
+          intake_template_id: string | null;
+          intake_template_snapshot: Json | null;
+          name: string;
+          stage: Database['public']['Enums']['stage'];
+          status: Database['public']['Enums']['project_status'];
+        };
+        ComputedFields: never;
+        Insert: {
+          changes_frozen_at?: string | null;
+          close_reason?: Database['public']['Enums']['close_reason'] | null;
+          created_at?: string;
           id?: string;
           industry?: string | null;
           intake_template_id?: string | null;
           intake_template_snapshot?: Json | null;
           name: string;
-          retention_until?: string | null;
-          round_plan?: Json | null;
           stage?: Database['public']['Enums']['stage'];
           status?: Database['public']['Enums']['project_status'];
-          token_budget?: number | null;
-          vercel_project_id?: string | null;
         };
         Update: {
+          changes_frozen_at?: string | null;
           close_reason?: Database['public']['Enums']['close_reason'] | null;
           created_at?: string;
-          data_deleted_at?: string | null;
-          github_repo?: string | null;
           id?: string;
           industry?: string | null;
           intake_template_id?: string | null;
           intake_template_snapshot?: Json | null;
           name?: string;
-          retention_until?: string | null;
-          round_plan?: Json | null;
           stage?: Database['public']['Enums']['stage'];
           status?: Database['public']['Enums']['project_status'];
-          token_budget?: number | null;
-          vercel_project_id?: string | null;
         };
         Relationships: [
           {
@@ -981,6 +1011,11 @@ export type Database = {
         Returns: boolean;
       };
       client_project_not_closed: { Args: Record<PropertyKey, never>; Returns: boolean };
+      close_project: {
+        Args: { p_project: string; p_reason: Database['public']['Enums']['close_reason'] };
+        Returns: undefined;
+      };
+      erase_project_data: { Args: { p_project: string }; Returns: undefined };
       is_owner: { Args: Record<PropertyKey, never>; Returns: boolean };
       is_service_role: { Args: Record<PropertyKey, never>; Returns: boolean };
     };
@@ -1000,7 +1035,8 @@ export type Database = {
       project_status: 'active' | 'paused' | 'closed';
       round_status: 'planned' | 'building' | 'in_review' | 'approved';
       run_approval_status: 'pending' | 'approved' | 'denied';
-      run_status: 'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled';
+      run_status:
+        'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled' | 'stopped';
       skill_mark: 'good' | 'bad';
       skill_scope: 'project' | 'candidate' | 'library' | 'deprecated';
       stage:
@@ -1141,7 +1177,7 @@ export const Constants = {
       project_status: ['active', 'paused', 'closed'],
       round_status: ['planned', 'building', 'in_review', 'approved'],
       run_approval_status: ['pending', 'approved', 'denied'],
-      run_status: ['queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled'],
+      run_status: ['queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled', 'stopped'],
       skill_mark: ['good', 'bad'],
       skill_scope: ['project', 'candidate', 'library', 'deprecated'],
       stage: [
