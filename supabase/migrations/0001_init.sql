@@ -7,8 +7,9 @@
 -- Reviewed again in the migration review of 2026-10-15 (see docs/proposals/2026-10-15-migration-review.md);
 -- nothing is applied to a real project yet, so this file was changed in place.
 -- Not yet implemented: Storage bucket policies for uploads (task P2-T03), client email records (P2-T11),
--- the queue claim function (task P2-T04), accept_gate and the remaining-gates function (P2-T18),
--- the cancel function (P2-T20) and the worker commands table (D-249).
+-- the queue claim function (task P2-T04), accept_gate, the remaining-gates function and the
+-- artifact version-block trigger (P2-T18), the cancel function (P2-T20) and the worker commands
+-- table (D-249).
 
 -- Supabase gives anon (and authenticated) table and function privileges by default and relies on
 -- row-level security alone. anon is never used by this app, so new tables and functions in this
@@ -30,6 +31,13 @@ create type close_reason as enum ('completed', 'cancelled');
 create type gate_type as enum ('soft', 'hard', 'client');
 create type approver_role as enum ('owner', 'client');
 create type artifact_status as enum ('draft', 'approved', 'superseded');
+-- The artifact types the pipeline knows (stages.yaml outputs, plus release_note, D-223). A new type
+-- is one forward migration: alter type artifact_type add value.
+create type artifact_type as enum (
+  'intake_record', 'prd', 'plan', 'skill_set', 'round_scope', 'prototype', 'round_preview',
+  'round_summary', 'backlog', 'qc_results', 'report', 'deployment_checklist', 'handover_guide',
+  'release_note'
+);
 create type asked_by as enum ('template', 'agent');
 create type comment_disposition as enum ('forwarded', 'change_request', 'ignored');
 -- D-174: after go-live an accepted change request runs as a mini-round (accept_mini_round).
@@ -42,8 +50,10 @@ create type template_status as enum ('draft', 'approved', 'archived');
 -- D-041: status lifecycles as enums (values proposed by the drafter, accepted by the owner).
 create type round_status as enum ('planned', 'building', 'in_review', 'approved');
 -- D-130, D-132: a run waits for the owner's answer to a risky-command request and keeps its slot.
--- 'stopped' is for runs the no-progress watchdog stops (D-232).
-create type run_status as enum ('queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled', 'stopped');
+-- 'stopped' is for runs the no-progress watchdog stops (D-232). 'parked' is a run that waited too
+-- long for an answer: it gave up its slot but keeps its working folder and branch and can be resumed
+-- (stage_runs.parked_at); 'waiting' still holds the slot.
+create type run_status as enum ('queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled', 'stopped', 'parked');
 create type run_approval_status as enum ('pending', 'approved', 'denied');
 -- D-134: the owner chooses per ask-client answer whether it waits or triggers an immediate fix.
 create type answer_action as enum ('next_round', 'immediate_fix');
@@ -124,7 +134,10 @@ create table project_internal (
   retention_days int not null default 90 check (retention_days between 1 and 3650),
   retention_until timestamptz,
   -- D-169: set once uploads, intake data and run logs are deleted (erase_project_data()).
-  data_deleted_at timestamptz
+  data_deleted_at timestamptz,
+  -- D-237: why the owner cancelled the project; required by the cancel function (P2-T20).
+  cancel_reason text,
+  constraint cancel_reason_not_blank check (cancel_reason is null or length(btrim(cancel_reason)) > 0)
 );
 
 create function create_project_internal() returns trigger
@@ -209,7 +222,7 @@ create index uploads_project_idx on uploads (project_id);
 create table artifacts (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects (id) on delete cascade,
-  type text not null,
+  type artifact_type not null,
   version int not null default 1,
   content jsonb not null default '{}'::jsonb,
   status artifact_status not null default 'draft',
@@ -299,12 +312,20 @@ create table change_requests (
   -- D-090: clients may submit change requests from go-live until handover is complete.
   submitted_by approver_role not null default 'owner',
   created_by uuid references auth.users (id),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique (id, project_id)
 );
 create index change_requests_project_idx on change_requests (project_id);
 
 -- D-174: a change-request mini-round is a round on a cr-N branch tied to the request it builds.
 alter table rounds add column change_request_id uuid references change_requests (id);
+
+-- D-238: after a stage has advanced, a new version of its artifact is allowed only for an accepted
+-- change request. The artifact names that request here; the version-block trigger comes with
+-- accept_gate (P2-T18). The request must belong to the same project.
+alter table artifacts add column change_request_id uuid;
+alter table artifacts add foreign key (change_request_id, project_id)
+  references change_requests (id, project_id);
 
 create table qc_runs (
   id uuid primary key default gen_random_uuid(),
@@ -339,6 +360,8 @@ create table stage_runs (
   queued_at timestamptz not null default now(),
   claimed_by text,
   heartbeat_at timestamptz,
+  -- Set when the run is parked (status 'parked'); cleared when it is resumed as a new run.
+  parked_at timestamptz,
   attempts int not null default 0,
   tokens_used bigint not null default 0,
   started_at timestamptz,

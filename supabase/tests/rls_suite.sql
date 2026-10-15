@@ -167,7 +167,8 @@ union all select 'PASS      row-level security on every table' where not exists 
 union all select case when (select array_agg(e.enumlabel::text order by e.enumsortorder) from pg_enum e join pg_type ty on ty.oid=e.enumtypid where ty.typname=x.name) = x.labels::text[] then 'PASS      enum ' else 'FAIL      enum ' end || x.name from (values
     ('change_status', array['received','accepted','deferred','declined','deployed']),
     ('change_decision', array['accept_current_round','accept_mini_round','defer','decline']),
-    ('run_status', array['queued','running','waiting','succeeded','failed','cancelled','stopped']),
+    ('run_status', array['queued','running','waiting','succeeded','failed','cancelled','stopped','parked']),
+    ('artifact_type', array['intake_record','prd','plan','skill_set','round_scope','prototype','round_preview','round_summary','backlog','qc_results','report','deployment_checklist','handover_guide','release_note']),
     ('comment_kind', array['prototype','final_screenshots']),
     ('answer_action', array['next_round','immediate_fix']),
     ('run_approval_status', array['pending','approved','denied'])

@@ -2,11 +2,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@wpe/shared';
 
+type ArtifactType = Database['public']['Enums']['artifact_type'];
+
 export type SeedDeps = {
   createProject(name: string): Promise<string>;
   createArtifact(
     projectId: string,
-    type: string,
+    type: ArtifactType,
     content: { [key: string]: Json },
   ): Promise<string>;
 };

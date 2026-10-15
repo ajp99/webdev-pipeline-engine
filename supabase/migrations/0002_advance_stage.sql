@@ -111,7 +111,7 @@ declare
   v         projects%rowtype;
   stages    stage[] := enum_range(null::stage);
   idx       int;
-  atype     text;
+  atype     artifact_type;
   art       artifacts%rowtype;
   gt        gate_type;
   req       gate_type[];

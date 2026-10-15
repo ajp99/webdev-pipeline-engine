@@ -43,37 +43,47 @@ export type Database = {
       };
       artifacts: {
         Row: {
+          change_request_id: string | null;
           client_visible: boolean;
           content: NonNullable<Json>;
           created_at: string;
           id: string;
           project_id: string;
           status: Database['public']['Enums']['artifact_status'];
-          type: string;
+          type: Database['public']['Enums']['artifact_type'];
           version: number;
         };
         ComputedFields: never;
         Insert: {
+          change_request_id?: string | null;
           client_visible?: boolean;
           content?: NonNullable<Json>;
           created_at?: string;
           id?: string;
           project_id: string;
           status?: Database['public']['Enums']['artifact_status'];
-          type: string;
+          type: Database['public']['Enums']['artifact_type'];
           version?: number;
         };
         Update: {
+          change_request_id?: string | null;
           client_visible?: boolean;
           content?: NonNullable<Json>;
           created_at?: string;
           id?: string;
           project_id?: string;
           status?: Database['public']['Enums']['artifact_status'];
-          type?: string;
+          type?: Database['public']['Enums']['artifact_type'];
           version?: number;
         };
         Relationships: [
+          {
+            foreignKeyName: 'artifacts_change_request_id_project_id_fkey';
+            columns: ['change_request_id', 'project_id'];
+            isOneToOne: false;
+            referencedRelation: 'change_requests';
+            referencedColumns: ['id', 'project_id'];
+          },
           {
             foreignKeyName: 'artifacts_project_id_fkey';
             columns: ['project_id'];
@@ -545,6 +555,7 @@ export type Database = {
       };
       project_internal: {
         Row: {
+          cancel_reason: string | null;
           data_deleted_at: string | null;
           github_repo: string | null;
           project_id: string;
@@ -556,6 +567,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          cancel_reason?: string | null;
           data_deleted_at?: string | null;
           github_repo?: string | null;
           project_id: string;
@@ -566,6 +578,7 @@ export type Database = {
           vercel_project_id?: string | null;
         };
         Update: {
+          cancel_reason?: string | null;
           data_deleted_at?: string | null;
           github_repo?: string | null;
           project_id?: string;
@@ -896,6 +909,7 @@ export type Database = {
           finished_at: string | null;
           heartbeat_at: string | null;
           id: string;
+          parked_at: string | null;
           project_id: string;
           queued_at: string;
           stage: Database['public']['Enums']['stage'];
@@ -910,6 +924,7 @@ export type Database = {
           finished_at?: string | null;
           heartbeat_at?: string | null;
           id?: string;
+          parked_at?: string | null;
           project_id: string;
           queued_at?: string;
           stage: Database['public']['Enums']['stage'];
@@ -923,6 +938,7 @@ export type Database = {
           finished_at?: string | null;
           heartbeat_at?: string | null;
           id?: string;
+          parked_at?: string | null;
           project_id?: string;
           queued_at?: string;
           stage?: Database['public']['Enums']['stage'];
@@ -1023,6 +1039,21 @@ export type Database = {
       answer_action: 'next_round' | 'immediate_fix';
       approver_role: 'owner' | 'client';
       artifact_status: 'draft' | 'approved' | 'superseded';
+      artifact_type:
+        | 'intake_record'
+        | 'prd'
+        | 'plan'
+        | 'skill_set'
+        | 'round_scope'
+        | 'prototype'
+        | 'round_preview'
+        | 'round_summary'
+        | 'backlog'
+        | 'qc_results'
+        | 'report'
+        | 'deployment_checklist'
+        | 'handover_guide'
+        | 'release_note';
       asked_by: 'template' | 'agent';
       backlog_status: 'open' | 'answered' | 'assumption_accepted';
       change_decision: 'accept_current_round' | 'accept_mini_round' | 'defer' | 'decline';
@@ -1036,7 +1067,14 @@ export type Database = {
       round_status: 'planned' | 'building' | 'in_review' | 'approved';
       run_approval_status: 'pending' | 'approved' | 'denied';
       run_status:
-        'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled' | 'stopped';
+        | 'queued'
+        | 'running'
+        | 'waiting'
+        | 'succeeded'
+        | 'failed'
+        | 'cancelled'
+        | 'stopped'
+        | 'parked';
       skill_mark: 'good' | 'bad';
       skill_scope: 'project' | 'candidate' | 'library' | 'deprecated';
       stage:
@@ -1165,6 +1203,22 @@ export const Constants = {
       answer_action: ['next_round', 'immediate_fix'],
       approver_role: ['owner', 'client'],
       artifact_status: ['draft', 'approved', 'superseded'],
+      artifact_type: [
+        'intake_record',
+        'prd',
+        'plan',
+        'skill_set',
+        'round_scope',
+        'prototype',
+        'round_preview',
+        'round_summary',
+        'backlog',
+        'qc_results',
+        'report',
+        'deployment_checklist',
+        'handover_guide',
+        'release_note',
+      ],
       asked_by: ['template', 'agent'],
       backlog_status: ['open', 'answered', 'assumption_accepted'],
       change_decision: ['accept_current_round', 'accept_mini_round', 'defer', 'decline'],
@@ -1177,7 +1231,16 @@ export const Constants = {
       project_status: ['active', 'paused', 'closed'],
       round_status: ['planned', 'building', 'in_review', 'approved'],
       run_approval_status: ['pending', 'approved', 'denied'],
-      run_status: ['queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled', 'stopped'],
+      run_status: [
+        'queued',
+        'running',
+        'waiting',
+        'succeeded',
+        'failed',
+        'cancelled',
+        'stopped',
+        'parked',
+      ],
       skill_mark: ['good', 'bad'],
       skill_scope: ['project', 'candidate', 'library', 'deprecated'],
       stage: [
