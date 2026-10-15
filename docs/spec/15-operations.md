@@ -81,7 +81,7 @@ Phase 3: the phase 2 evidence (manual walkthrough, automated end-to-end test wit
 
 ## Retention job (D-169, D-214)
 
-The job runs at every worker start, so a missed date is caught up, on a schedule, and from a "Run retention now" button in the console, which also shows an overdue badge. It deletes uploads, intake data, run logs and the handover guide's contents and PDF when a project's retention date arrives, without a confirmation step, and records `data_deleted_at`. The retention date is set by the function that closes or cancels a project. The job does not remove client accounts. A client's request for earlier deletion is handled by hand outside the pipeline.
+The job runs at every worker start, so a missed date is caught up, on a schedule, and from a "Run retention now" button in the console, which also shows an overdue badge. It deletes uploads, intake data, run logs and the handover guide's contents and PDF when a project's retention date arrives, without a confirmation step, and records `data_deleted_at`. The worker removes the storage files first, then calls `erase_project_data()` for the database rows; approvals, the other artifacts and the project row are kept. The retention date is set by the function that closes or cancels a project. The job does not remove client accounts. A client's request for earlier deletion is handled by hand outside the pipeline.
 
 ## Change requests after go-live (D-174, D-175, D-193)
 
