@@ -65,4 +65,5 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 - Install: `pnpm install` (Node 22 or newer, `.nvmrc`).
 - Dev server: `pnpm dev` (runs `@wpe/web`).
 - Checks: `pnpm lint`, `pnpm typecheck` (all workspaces), `pnpm test` (all workspaces), `pnpm format:check`.
+- Docs lint: `pnpm docs:lint` (placeholders, decision-ID continuity, broken links); `pnpm docs:lint:test` tests the linter.
 - Formatting: `pnpm format` skips `docs/`, `supabase/` and the markdown files on purpose (see `.prettierignore`); spec files are hand-formatted.

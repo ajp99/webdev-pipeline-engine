@@ -2,7 +2,7 @@
 
 **Status:** not started
 
-**Goal:** The Builder with a command allowlist, rounds as pull requests into `staging`, the question backlog and ask-client flow, claim markers, the re-plan after each round, token tracking, and the GitHub webhook.
+**Goal:** The Builder with a command allowlist, rounds as pull requests into `staging`, the question backlog and ask-client flow, claim markers, the re-plan after each round, and token tracking (the GitHub webhook was dropped, D-279).
 
 **Gate (owner accepts this phase when):** A full round runs with its backlog triaged.
 
