@@ -8,8 +8,10 @@ export type Database = {
       approvals: {
         Row: {
           approved_by: string | null;
+          approved_by_email: string | null;
           artifact_id: string;
           at: string;
+          content_sha256: string;
           gate_type: Database['public']['Enums']['gate_type'];
           id: string;
           role: Database['public']['Enums']['approver_role'];
@@ -17,16 +19,20 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           approved_by?: string | null;
+          approved_by_email?: string | null;
           artifact_id: string;
           at?: string;
+          content_sha256?: string;
           gate_type: Database['public']['Enums']['gate_type'];
           id?: string;
           role: Database['public']['Enums']['approver_role'];
         };
         Update: {
           approved_by?: string | null;
+          approved_by_email?: string | null;
           artifact_id?: string;
           at?: string;
+          content_sha256?: string;
           gate_type?: Database['public']['Enums']['gate_type'];
           id?: string;
           role?: Database['public']['Enums']['approver_role'];
@@ -792,6 +798,7 @@ export type Database = {
           level: string;
           message: string;
           run_id: string;
+          trace_id: string;
         };
         ComputedFields: never;
         Insert: {
@@ -800,6 +807,7 @@ export type Database = {
           level?: string;
           message: string;
           run_id: string;
+          trace_id: string;
         };
         Update: {
           created_at?: string;
@@ -807,6 +815,7 @@ export type Database = {
           level?: string;
           message?: string;
           run_id?: string;
+          trace_id?: string;
         };
         Relationships: [
           {
@@ -815,6 +824,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: 'stage_runs';
             referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'run_logs_trace_matches_run';
+            columns: ['run_id', 'trace_id'];
+            isOneToOne: false;
+            referencedRelation: 'stage_runs';
+            referencedColumns: ['id', 'trace_id'];
           },
         ];
       };
@@ -909,13 +925,16 @@ export type Database = {
           finished_at: string | null;
           heartbeat_at: string | null;
           id: string;
+          model: string | null;
           parked_at: string | null;
           project_id: string;
+          prompt_hash: string | null;
           queued_at: string;
           stage: Database['public']['Enums']['stage'];
           started_at: string | null;
           status: Database['public']['Enums']['run_status'];
           tokens_used: number;
+          trace_id: string;
         };
         ComputedFields: never;
         Insert: {
@@ -924,13 +943,16 @@ export type Database = {
           finished_at?: string | null;
           heartbeat_at?: string | null;
           id?: string;
+          model?: string | null;
           parked_at?: string | null;
           project_id: string;
+          prompt_hash?: string | null;
           queued_at?: string;
           stage: Database['public']['Enums']['stage'];
           started_at?: string | null;
           status?: Database['public']['Enums']['run_status'];
           tokens_used?: number;
+          trace_id?: string;
         };
         Update: {
           attempts?: number;
@@ -938,13 +960,16 @@ export type Database = {
           finished_at?: string | null;
           heartbeat_at?: string | null;
           id?: string;
+          model?: string | null;
           parked_at?: string | null;
           project_id?: string;
+          prompt_hash?: string | null;
           queued_at?: string;
           stage?: Database['public']['Enums']['stage'];
           started_at?: string | null;
           status?: Database['public']['Enums']['run_status'];
           tokens_used?: number;
+          trace_id?: string;
         };
         Relationships: [
           {
@@ -1010,30 +1035,7 @@ export type Database = {
         Args: { p_next: Database['public']['Enums']['stage']; p_project: string };
         Returns: undefined;
       };
-      approval_is_valid: {
-        Args: {
-          ap: Omit<
-            Database['public']['Tables']['approvals']['Row'],
-            Database['public']['Tables']['approvals']['ComputedFields']
-          >;
-          p_project: string;
-        };
-        Returns: boolean;
-      };
-      artifact_has_owner_approval: { Args: { p_artifact: string }; Returns: boolean };
-      client_project_id: { Args: Record<PropertyKey, never>; Returns: string };
-      client_project_in: {
-        Args: { p_stages: Database['public']['Enums']['stage'][] };
-        Returns: boolean;
-      };
-      client_project_not_closed: { Args: Record<PropertyKey, never>; Returns: boolean };
-      close_project: {
-        Args: { p_project: string; p_reason: Database['public']['Enums']['close_reason'] };
-        Returns: undefined;
-      };
       erase_project_data: { Args: { p_project: string }; Returns: undefined };
-      is_owner: { Args: Record<PropertyKey, never>; Returns: boolean };
-      is_service_role: { Args: Record<PropertyKey, never>; Returns: boolean };
     };
     Enums: {
       answer_action: 'next_round' | 'immediate_fix';

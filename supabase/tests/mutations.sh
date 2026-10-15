@@ -10,6 +10,9 @@
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 export WPE_TEST_DB="${WPE_TEST_DB:-wpe_mutation}"
+# Two runs on one scratch database would drop it under each other and give false results.
+exec 9>"${TMPDIR:-/tmp}/wpe-mutations-$WPE_TEST_DB.lock"
+flock -n 9 || { echo "another mutation run is using $WPE_TEST_DB; wait for it or set WPE_TEST_DB" >&2; exit 2; }
 unset WPE_SUPABASE_DB_URL
 
 base="$(bash "$here/run.sh" 2>&1)"; rc=$?

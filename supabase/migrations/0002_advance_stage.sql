@@ -14,7 +14,10 @@
 --   * advance_stage() is for the owner only (the worker never advances a project), and the
 --     handover to closed step goes through close_project() from 0001 (retention_until, and the
 --     refusal while an accepted change request is undeployed, D-237);
---   * a handover guide can be made client-visible only after the owner's hard approval (D-251).
+--   * a handover guide can be made client-visible only after the owner's hard approval (D-251);
+--   * (review panel, D-263 to D-296) helpers live in the private schema and every security-definer
+--     function has an empty search_path; advance_stage() requires each gate's approval in the role of
+--     its effective gatekeeper (D-272).
 --
 -- A project moves forward only through this function, only one stage at a time (the order of the
 -- stage enum is the order in docs/spec/stages.yaml), and only while it is active.
@@ -42,16 +45,16 @@
 -- An approval counts only when its giver fits its role: an owner for the owner gates, the named
 -- signer of this project for the client gate. If the owner changes the signer later, the former
 -- signer's approvals stop counting and the new signer approves again.
-create or replace function approval_is_valid(ap approvals, p_project uuid) returns boolean
-language sql stable security definer set search_path = public as $$
+create or replace function private.approval_is_valid(ap public.approvals, p_project uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
   select case ap.role
-    when 'owner'  then exists (select 1 from owners o where o.id = ap.approved_by)
-    when 'client' then exists (select 1 from clients c
+    when 'owner'  then exists (select 1 from public.owners o where o.id = ap.approved_by)
+    when 'client' then exists (select 1 from public.clients c
                                where c.id = ap.approved_by and c.project_id = p_project and c.is_signer)
     else false end
 $$;
 -- Only advance_stage() (which runs as its owner) calls it, so no API role needs execute.
-revoke all on function approval_is_valid(approvals, uuid) from public, anon, authenticated, service_role;
+revoke all on function private.approval_is_valid(public.approvals, uuid) from public, anon, authenticated, service_role;
 
 -- An approval written through the API gets the database time as its time. Rows written by the
 -- SQL editor or a migration (current_user is postgres) keep the time they carry.
@@ -85,12 +88,12 @@ create trigger artifacts_handover_visibility before insert or update of client_v
   for each row execute function guard_handover_guide_visibility();
 
 -- The client signs the prototype only after the owner approved that version.
-create or replace function artifact_has_owner_approval(p_artifact uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (select 1 from approvals ap where ap.artifact_id = p_artifact and ap.role = 'owner')
+create or replace function private.artifact_has_owner_approval(p_artifact uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.approvals ap where ap.artifact_id = p_artifact and ap.role = 'owner')
 $$;
-revoke all on function artifact_has_owner_approval(uuid) from public, anon;
-grant execute on function artifact_has_owner_approval(uuid) to authenticated, service_role;
+revoke all on function private.artifact_has_owner_approval(uuid) from public, anon;
+grant execute on function private.artifact_has_owner_approval(uuid) to authenticated, service_role;
 
 drop policy client_add_approval on approvals;
 create policy client_add_approval on approvals
@@ -98,29 +101,30 @@ create policy client_add_approval on approvals
     role = 'client' and gate_type = 'client' and approved_by = auth.uid()
     and exists (select 1 from clients c where c.id = auth.uid() and c.is_signer)
     and exists (select 1 from artifacts a
-                where a.id = artifact_id and a.project_id = public.client_project_id()
+                where a.id = artifact_id and a.project_id = private.client_project_id()
                   and a.client_visible and a.status <> 'superseded'
-                  and ((a.type = 'prd' and public.client_project_in(array['requirements']::stage[]))
-                    or (a.type = 'prototype' and public.client_project_in(array['prototype']::stage[])
-                        and public.artifact_has_owner_approval(a.id))))
+                  and ((a.type = 'prd' and private.client_project_in(array['requirements']::stage[]))
+                    or (a.type = 'prototype' and private.client_project_in(array['prototype']::stage[])
+                        and private.artifact_has_owner_approval(a.id))))
   );
 
 create or replace function advance_stage(p_project uuid, p_next stage) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = '' as $$
 declare
-  v         projects%rowtype;
-  stages    stage[] := enum_range(null::stage);
+  v         public.projects%rowtype;
+  stages    public.stage[] := enum_range(null::public.stage);
   idx       int;
-  atype     artifact_type;
-  art       artifacts%rowtype;
-  gt        gate_type;
-  req       gate_type[];
+  atype     public.artifact_type;
+  art       public.artifacts%rowtype;
+  gt        public.gate_type;
+  gk        public.approver_role;
+  req       public.gate_type[];
 begin
-  if not public.is_owner() then
+  if not private.is_owner() then
     raise exception 'advance_stage: not allowed';
   end if;
 
-  select * into v from projects where id = p_project for update;
+  select * into v from public.projects where id = p_project for update;
   if not found then
     raise exception 'advance_stage: project not found';
   end if;
@@ -137,20 +141,20 @@ begin
   end if;
 
   if v.stage = 'build_rounds' then
-    if not exists (select 1 from rounds where project_id = p_project and change_request_id is null) then
+    if not exists (select 1 from public.rounds where project_id = p_project and change_request_id is null) then
       raise exception 'advance_stage: no build rounds exist yet';
     end if;
     if exists (
-      select 1 from rounds r
+      select 1 from public.rounds r
       where r.project_id = p_project and r.change_request_id is null
         and (r.status <> 'approved'
           or not exists (
-            select 1 from artifacts a join approvals ap on ap.artifact_id = a.id
+            select 1 from public.artifacts a join public.approvals ap on ap.artifact_id = a.id
             where a.project_id = p_project and a.type = 'round_summary'
               and a.content ->> 'round' = r.number::text
               and a.status <> 'superseded' and ap.gate_type = 'soft'
-              and public.approval_is_valid(ap, p_project)
-              and a.version = (select max(b.version) from artifacts b
+              and private.approval_is_valid(ap, p_project)
+              and a.version = (select max(b.version) from public.artifacts b
                                where b.project_id = p_project and b.type = 'round_summary'
                                  and b.content ->> 'round' = r.number::text)))
     ) then
@@ -167,7 +171,7 @@ begin
       when 'handover'     then 'handover_guide'
     end;
 
-    select * into art from artifacts
+    select * into art from public.artifacts
       where project_id = p_project and type = atype
       order by version desc limit 1;
     if not found or art.status = 'superseded' then
@@ -175,22 +179,27 @@ begin
     end if;
 
     select array_agg(distinct g.gate_type) into req
-      from gate_config g
+      from public.gate_config g
       where g.stage = v.stage and (g.project_id is null or g.project_id = p_project);
 
+    -- Each gate needs a valid approval given in the role of its effective gatekeeper (the project's own
+    -- row first, then the global default, D-272).
     foreach gt in array req loop
-      if not exists (select 1 from approvals ap
-                     where ap.artifact_id = art.id and ap.gate_type = gt
-                       and public.approval_is_valid(ap, p_project)) then
+      select g.gatekeeper into gk from public.gate_config g
+        where g.stage = v.stage and g.gate_type = gt and (g.project_id is null or g.project_id = p_project)
+        order by g.project_id nulls last limit 1;
+      if not exists (select 1 from public.approvals ap
+                     where ap.artifact_id = art.id and ap.gate_type = gt and ap.role = gk
+                       and private.approval_is_valid(ap, p_project)) then
         raise exception 'advance_stage: missing % approval on % v% for stage %', gt, atype, art.version, v.stage;
       end if;
     end loop;
 
     if 'client' = any (req) and array_length(req, 1) > 1 then
       if not exists (
-        select 1 from approvals c join approvals o on o.artifact_id = c.artifact_id
+        select 1 from public.approvals c join public.approvals o on o.artifact_id = c.artifact_id
         where c.artifact_id = art.id and c.gate_type = 'client' and o.gate_type <> 'client' and o.at <= c.at
-          and public.approval_is_valid(c, p_project) and public.approval_is_valid(o, p_project)
+          and private.approval_is_valid(c, p_project) and private.approval_is_valid(o, p_project)
       ) then
         raise exception 'advance_stage: the client approval must come after an owner approval';
       end if;
@@ -199,13 +208,12 @@ begin
 
   perform set_config('app.stage_advance', 'on', true);
   if v.stage = 'handover' then
-    update projects set stage = p_next where id = p_project;
-    perform public.close_project(p_project, 'completed');
+    update public.projects set stage = p_next where id = p_project;
+    perform private.close_project(p_project, 'completed');
   else
-    update projects set stage = p_next where id = p_project;
+    update public.projects set stage = p_next where id = p_project;
   end if;
   perform set_config('app.stage_advance', 'off', true);
 end;
 $$;
-revoke all on function advance_stage(uuid, stage) from public, anon;
 grant execute on function advance_stage(uuid, stage) to authenticated;
