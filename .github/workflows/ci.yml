@@ -59,12 +59,10 @@ jobs:
       - run: bash supabase/tests/run.sh
 
   supabase:
-    # Runs the same suites against the local Supabase stack (Supabase CLI and Docker). This path could not
-    # be run when it was written (no Docker in the agent's sandbox), so it does not block merging until the
-    # owner has seen it pass once and removes `continue-on-error`.
+    # Runs the same suites against the local Supabase stack (Supabase CLI and Docker). It passed on GitHub
+    # on 2026-10-15 (PR #15), so it now blocks like the other jobs.
     name: Database checks (local Supabase)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1

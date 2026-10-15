@@ -45,13 +45,13 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P1-T11 Confirm secret scanning and push protection**  
   Acceptance: The owner confirms in the GitHub repository settings that secret scanning and push protection are enabled; record the confirmation in `PROGRESS.md`. Do this now, before further work, and revoke the old personal access token (D-292).
 
-- [ ] **P1-T12 CI workflow and CODEOWNERS**  
+- [x] **P1-T12 CI workflow and CODEOWNERS**  
   Acceptance (D-287): `.github/workflows/ci.yml` runs on every pull request with no secrets: lint, typecheck, unit tests and format check; the database checks on a Postgres 16 service (`bash supabase/tests/run.sh`); and a job that starts the local Supabase stack and runs the same suites against it. `.github/CODEOWNERS` names the owner for `supabase/migrations/**`. Branch protection stays the owner's call.
 
-- [ ] **P1-T13 Mutation script**  
+- [x] **P1-T13 Mutation script**  
   Acceptance (D-288): `supabase/tests/mutations.sh` applies each listed deliberate break of a database rule to a scratch database, runs the suites and requires at least one check to fail for each break; a break that passes all checks fails the script. A workflow runs it on pull requests that touch `supabase/**` and on demand before each phase gate. `PROGRESS.md` records the number of breaks and the result.
 
-- [ ] **P1-T14 Docs lint**  
+- [x] **P1-T14 Docs lint**  
   Acceptance (D-291): `pnpm docs:lint` fails on placeholder text such as `(D-?)`, a gap or repeat in the decision IDs, and a broken relative link in the markdown files; CI runs it. Generated status and stage tables follow once the source of truth for phase status is chosen.
 
 - [ ] **P1-T15 Backup restore proof**  
