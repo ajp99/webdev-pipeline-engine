@@ -6,6 +6,9 @@
 -- field names; the owner has accepted the choices recorded in DECISIONS.md (see DECISIONS.md).
 -- Reviewed again in the migration review of 2026-10-15 (see docs/proposals/2026-10-15-migration-review.md);
 -- nothing is applied to a real project yet, so this file was changed in place.
+-- Hardened again after the review panel (D-263 to D-296, task P1-T17): a private schema and an empty
+-- search_path for security-definer functions, a content hash and an email snapshot on approvals,
+-- gatekeeper enforcement, run tracing and one active run per project, an intake response guard.
 -- Not yet implemented: Storage bucket policies for uploads (task P2-T03), client email records (P2-T11),
 -- the queue claim function (task P2-T04), accept_gate, the remaining-gates function and the
 -- artifact version-block trigger (P2-T18), the cancel function (P2-T20) and the worker commands
@@ -78,15 +81,23 @@ create table owners (
 -- ---------------------------------------------------------------------------
 -- Role helpers (used by RLS policies)
 -- ---------------------------------------------------------------------------
-create function public.is_owner() returns boolean
-language sql stable security definer set search_path = public as $$
+-- Helpers that policies and gate functions call live in the private schema, which the API does not
+-- expose (D-271). Every security-definer function sets an empty search_path and names its objects.
+create schema private;
+revoke all on schema private from public;
+grant usage on schema private to authenticated, service_role;
+
+create function private.is_owner() returns boolean
+language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.owners where id = auth.uid())
 $$;
 
-create function public.is_service_role() returns boolean
-language sql stable as $$
+create function private.is_service_role() returns boolean
+language sql stable set search_path = '' as $$
   select coalesce(auth.role() = 'service_role', false)
 $$;
+revoke all on function private.is_owner(), private.is_service_role() from public;
+grant execute on function private.is_owner(), private.is_service_role() to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- Tables
@@ -140,15 +151,16 @@ create table project_internal (
   constraint cancel_reason_not_blank check (cancel_reason is null or length(btrim(cancel_reason)) > 0)
 );
 
-create function create_project_internal() returns trigger
-language plpgsql security definer set search_path = public as $$
+create function private.create_project_internal() returns trigger
+language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.project_internal (project_id) values (new.id);
   return new;
 end;
 $$;
+revoke all on function private.create_project_internal() from public;
 create trigger projects_create_internal after insert on projects
-  for each row execute function create_project_internal();
+  for each row execute function private.create_project_internal();
 
 create table clients (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -163,10 +175,12 @@ create index clients_project_idx on clients (project_id);
 create unique index clients_one_signer on clients (project_id) where is_signer;
 
 -- The project a logged-in client belongs to. A project can have several client logins.
-create function public.client_project_id() returns uuid
-language sql stable security definer set search_path = public as $$
+create function private.client_project_id() returns uuid
+language sql stable security definer set search_path = '' as $$
   select project_id from public.clients where id = auth.uid()
 $$;
+revoke all on function private.client_project_id() from public;
+grant execute on function private.client_project_id() to authenticated, service_role;
 
 -- One row per intake round (round 1 is the template; later rounds are follow-ups).
 -- Clients write answers only while a round is 'open' (D-079). The agent's batch review sets
@@ -242,10 +256,17 @@ create table approvals (
   -- Becomes null only when the person's login is deleted (the log outlives the account); see
   -- guard_approval_update(). A null giver never counts as a valid approval.
   approved_by uuid references auth.users (id) on delete set null,
+  -- D-269: a snapshot of the giver's email, written by the database; it stays when the login is deleted.
+  approved_by_email text,
   role approver_role not null,
   gate_type gate_type not null,
   -- Stamped by the database when a row is written through the API (stamp_approval_time, 0002).
   at timestamptz not null default now(),
+  -- D-265: the SHA-256 of the artifact's content when it was approved, written by the database. The
+  -- empty default only keeps the generated insert type optional; the trigger replaces it and the
+  -- check below refuses anything that is not a hash.
+  content_sha256 text not null default '',
+  constraint content_sha256_is_hex check (content_sha256 ~ '^[0-9a-f]{64}$'),
   -- Client approvals use the client gate; owner approvals use soft or hard.
   constraint role_matches_gate check ((role = 'client') = (gate_type = 'client')),
   -- The same person approves the same gate on the same version once.
@@ -366,19 +387,33 @@ create table stage_runs (
   tokens_used bigint not null default 0,
   started_at timestamptz,
   finished_at timestamptz,
+  -- D-281: one id ties a run to its log lines; D-283: what produced the run.
+  trace_id uuid not null default gen_random_uuid(),
+  model text,
+  prompt_hash text,
   -- D-082: one automatic retry, so at most 2 attempts.
-  constraint attempts_limit check (attempts <= 2)
+  constraint attempts_limit check (attempts <= 2),
+  constraint model_not_blank check (model is null or length(btrim(model)) > 0),
+  constraint prompt_hash_is_sha256 check (prompt_hash is null or prompt_hash ~ '^[0-9a-f]{64}$'),
+  unique (id, trace_id)
 );
 create index stage_runs_project_idx on stage_runs (project_id);
+-- D-278: one running or waiting run per project; queued and parked runs do not hold the slot.
+create unique index stage_runs_one_active_per_project on stage_runs (project_id)
+  where status in ('running', 'waiting');
 create index stage_runs_queue_idx on stage_runs (queued_at) where status = 'queued';
 
 -- D-084, D-085: run logs are text rows; deleted with the project's data 90 days after close.
 create table run_logs (
   id bigint generated always as identity primary key,
   run_id uuid not null references stage_runs (id) on delete cascade,
+  -- D-281: copied from the run by a trigger when not given; it must match the run's own trace_id.
+  trace_id uuid not null,
   level text not null default 'info' check (level in ('debug', 'info', 'warn', 'error')),
   message text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint run_logs_trace_matches_run foreign key (run_id, trace_id)
+    references stage_runs (id, trace_id) on delete cascade
 );
 create index run_logs_run_idx on run_logs (run_id, id);
 
@@ -443,7 +478,9 @@ create table gate_config (
   project_id uuid references projects (id) on delete cascade, -- null = global default
   gate_type gate_type not null,
   gatekeeper approver_role not null,
-  escalate_after_hours int not null default 24 check (escalate_after_hours > 0)
+  escalate_after_hours int not null default 24 check (escalate_after_hours > 0),
+  -- D-272: the gatekeeper follows the gate type (soft and hard are the owner's, client is the client's).
+  constraint gatekeeper_matches_gate check ((gate_type = 'client') = (gatekeeper = 'client'))
 );
 create unique index gate_config_unique
   on gate_config (stage, gate_type, coalesce(project_id, '00000000-0000-0000-0000-000000000000'::uuid));
@@ -481,8 +518,8 @@ language plpgsql as $$
 begin
   if tg_op = 'UPDATE' and pg_trigger_depth() > 1
      and old.approved_by is not null and new.approved_by is null
-     and (new.id, new.artifact_id, new.role, new.gate_type, new.at)
-         is not distinct from (old.id, old.artifact_id, old.role, old.gate_type, old.at) then
+     and (new.id, new.artifact_id, new.role, new.gate_type, new.at, new.approved_by_email, new.content_sha256)
+         is not distinct from (old.id, old.artifact_id, old.role, old.gate_type, old.at, old.approved_by_email, old.content_sha256) then
     return new;
   end if;
   raise exception 'approvals is append-only';
@@ -491,6 +528,84 @@ $$;
 create trigger approvals_append_only
   before update or delete on approvals
   for each row execute function guard_approval_change();
+
+-- The database records what was approved and who approved it (D-265, D-269): the SHA-256 of the
+-- artifact's content (a version never changes, D-254) and a snapshot of the giver's email. It always
+-- overwrites what the caller sent. Runs as its owner because auth.users is not readable by API roles.
+create function private.stamp_approval_snapshot() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  select encode(sha256(convert_to(a.content::text, 'UTF8')), 'hex') into new.content_sha256
+    from public.artifacts a where a.id = new.artifact_id;
+  select u.email into new.approved_by_email from auth.users u where u.id = new.approved_by;
+  return new;
+end;
+$$;
+revoke all on function private.stamp_approval_snapshot() from public;
+create trigger approvals_stamp_snapshot before insert on approvals
+  for each row execute function private.stamp_approval_snapshot();
+
+-- A run log line carries its run's trace_id (D-281); when the caller gives none it is copied.
+create function private.default_run_log_trace() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if new.trace_id is null then
+    select s.trace_id into new.trace_id from public.stage_runs s where s.id = new.run_id;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function private.default_run_log_trace() from public;
+create trigger run_logs_default_trace before insert on run_logs
+  for each row execute function private.default_run_log_trace();
+
+-- Global gate defaults (project_id null) are the pipeline's rules (D-272): through the API nobody can
+-- delete or add one, and no gate row can change anything but its deadline. A project row can be added
+-- (a stricter gate for one project) and its deadline changed. Migrations and the SQL editor
+-- (current_user is postgres) are not affected.
+create function guard_gate_config() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if current_user not in ('anon', 'authenticated', 'service_role') then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then
+    if old.project_id is null then
+      raise exception 'a global gate default cannot be deleted';
+    end if;
+    return old;
+  elsif tg_op = 'INSERT' then
+    if new.project_id is null then
+      raise exception 'a global gate default changes only through a migration';
+    end if;
+    return new;
+  end if;
+  if (new.id, new.stage, new.project_id, new.gate_type, new.gatekeeper)
+     is distinct from (old.id, old.stage, old.project_id, old.gate_type, old.gatekeeper) then
+    raise exception 'a gate row changes only its deadline';
+  end if;
+  return new;
+end;
+$$;
+create trigger gate_config_guard before insert or update or delete on gate_config
+  for each row execute function guard_gate_config();
+
+-- A client changes only the answer of an intake response, not its round, question or origin (D-270).
+create function guard_intake_response_update() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if not (private.is_owner() or private.is_service_role())
+     and (new.id, new.project_id, new.round, new.question_id, new.asked_by)
+         is distinct from (old.id, old.project_id, old.round, old.question_id, old.asked_by) then
+    raise exception 'clients may only change the answer';
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+create trigger intake_response_update_guard before update on intake_responses
+  for each row execute function guard_intake_response_update();
 
 -- A version of an artifact never changes: id, project, type, version and content are fixed once the
 -- row is written (status and client_visible still change). Feedback makes a new version. The only
@@ -554,9 +669,9 @@ create trigger projects_stage_guard
 -- (project override first, then global default) has a matching approval record, and that
 -- p_next is the next stage in docs/spec/stages.yaml, before changing the stage.
 create function advance_stage(p_project uuid, p_next stage) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = '' as $$
 begin
-  if not public.is_owner() then
+  if not private.is_owner() then
     raise exception 'advance_stage: not allowed';
   end if;
   raise exception 'advance_stage: approval checks not implemented yet (P1-T07)';
@@ -572,20 +687,20 @@ grant execute on function advance_stage(uuid, stage) to authenticated;
 -- of handover; the cancel function (P2-T20) calls it with 'cancelled'. Sets status, close_reason and
 -- retention_until (closed now plus retention_days). A completed close is refused while an accepted
 -- change request has not been deployed. Not callable from the API.
-create function close_project(p_project uuid, p_reason close_reason) returns void
-language plpgsql security definer set search_path = public as $$
+create function private.close_project(p_project uuid, p_reason public.close_reason) returns void
+language plpgsql security definer set search_path = '' as $$
 begin
   if p_reason = 'completed' and exists (
-    select 1 from change_requests where project_id = p_project and status = 'accepted'
+    select 1 from public.change_requests where project_id = p_project and status = 'accepted'
   ) then
     raise exception 'close_project: an accepted change request is not deployed yet';
   end if;
-  update projects set status = 'closed', close_reason = p_reason where id = p_project;
-  update project_internal set retention_until = now() + make_interval(days => retention_days)
+  update public.projects set status = 'closed', close_reason = p_reason where id = p_project;
+  update public.project_internal set retention_until = now() + make_interval(days => retention_days)
     where project_id = p_project;
 end;
 $$;
-revoke all on function close_project(uuid, close_reason) from public, anon, authenticated, service_role;
+revoke all on function private.close_project(uuid, public.close_reason) from public, anon, authenticated, service_role;
 
 -- The retention job's database step (D-169, spec 15-operations). Allowed for a closed project
 -- whose retention_until has passed: deletes uploads rows, intake rounds and answers, run logs and
@@ -593,31 +708,31 @@ revoke all on function close_project(uuid, close_reason) from public, anon, auth
 -- the project row alone, so the audit trail stays. The caller deletes the storage objects first
 -- (it reads the paths from uploads); this function only removes the rows.
 create function erase_project_data(p_project uuid) returns void
-language plpgsql security definer set search_path = public as $$
-declare i project_internal%rowtype;
+language plpgsql security definer set search_path = '' as $$
+declare i public.project_internal%rowtype;
 begin
-  if not (public.is_owner() or public.is_service_role()) then
+  if not (private.is_owner() or private.is_service_role()) then
     raise exception 'erase_project_data: not allowed';
   end if;
-  select * into i from project_internal where project_id = p_project for update;
+  select * into i from public.project_internal where project_id = p_project for update;
   if not found then
     raise exception 'erase_project_data: project not found';
   end if;
-  if not exists (select 1 from projects where id = p_project and status = 'closed') then
+  if not exists (select 1 from public.projects where id = p_project and status = 'closed') then
     raise exception 'erase_project_data: the project is not closed';
   end if;
   if i.retention_until is null or i.retention_until > now() then
     raise exception 'erase_project_data: the retention period has not ended';
   end if;
-  delete from uploads where project_id = p_project;
-  delete from intake_responses where project_id = p_project;
-  delete from intake_rounds where project_id = p_project;
-  delete from run_logs where run_id in (select id from stage_runs where project_id = p_project);
-  delete from email_log where project_id = p_project;
+  delete from public.uploads where project_id = p_project;
+  delete from public.intake_responses where project_id = p_project;
+  delete from public.intake_rounds where project_id = p_project;
+  delete from public.run_logs where run_id in (select id from public.stage_runs where project_id = p_project);
+  delete from public.email_log where project_id = p_project;
   perform set_config('app.erase_data', 'on', true);
-  update artifacts set content = '{}'::jsonb where project_id = p_project and type = 'handover_guide';
+  update public.artifacts set content = '{}'::jsonb where project_id = p_project and type = 'handover_guide';
   perform set_config('app.erase_data', 'off', true);
-  update project_internal set data_deleted_at = now() where project_id = p_project;
+  update public.project_internal set data_deleted_at = now() where project_id = p_project;
 end;
 $$;
 revoke all on function erase_project_data(uuid) from public, anon;
@@ -627,7 +742,7 @@ grant execute on function erase_project_data(uuid) to authenticated, service_rol
 create function guard_backlog_client_update() returns trigger
 language plpgsql as $$
 begin
-  if public.is_owner() or public.is_service_role() then
+  if private.is_owner() or private.is_service_role() then
     return new;
   end if;
   if (new.id, new.project_id, new.round, new.question, new.context, new.assumption,
@@ -648,7 +763,7 @@ create trigger backlog_client_update_guard
 create function guard_intake_round_client_update() returns trigger
 language plpgsql as $$
 begin
-  if public.is_owner() or public.is_service_role() then
+  if private.is_owner() or private.is_service_role() then
     return new;
   end if;
   if (new.id, new.project_id, new.round, new.reviewed_at)
@@ -705,7 +820,7 @@ begin
     'project_internal'
   ] loop
     execute format(
-      'create policy owner_all on %I for all to authenticated using (public.is_owner()) with check (public.is_owner())',
+      'create policy owner_all on %I for all to authenticated using (private.is_owner()) with check (private.is_owner())',
       t
     );
   end loop;
@@ -715,109 +830,109 @@ end $$;
 -- active project; nothing else. Update and delete policies exist only so that the append-only
 -- trigger answers with a clear error instead of silently touching zero rows.
 create policy owner_read_approvals on approvals
-  for select to authenticated using (public.is_owner());
+  for select to authenticated using (private.is_owner());
 create policy owner_add_approval on approvals
   for insert to authenticated with check (
-    public.is_owner() and role = 'owner' and gate_type <> 'client' and approved_by = auth.uid()
+    private.is_owner() and role = 'owner' and gate_type <> 'client' and approved_by = auth.uid()
     and exists (select 1 from artifacts a join projects p on p.id = a.project_id
                 where a.id = artifact_id and p.status = 'active')
   );
 create policy owner_update_approvals on approvals
-  for update to authenticated using (public.is_owner());
+  for update to authenticated using (private.is_owner());
 create policy owner_delete_approvals on approvals
-  for delete to authenticated using (public.is_owner());
+  for delete to authenticated using (private.is_owner());
 
 -- Clients: only their own project's client-facing rows.
 -- D-216: client writes are accepted only while the project is 'active' (not paused or closed).
 -- D-217: each write is also tied to the stage it belongs to.
 -- D-216: after close, clients read only the handover guide; their projects and clients rows stay
 -- readable so they can still log in.
-create function public.client_project_in(p_stages stage[]) returns boolean
-language sql stable security definer set search_path = public as $$
+create function private.client_project_in(p_stages public.stage[]) returns boolean
+language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.projects p
-    where p.id = public.client_project_id() and p.status = 'active' and p.stage = any (p_stages)
+    where p.id = private.client_project_id() and p.status = 'active' and p.stage = any (p_stages)
   )
 $$;
-create function public.client_project_not_closed() returns boolean
-language sql stable security definer set search_path = public as $$
+create function private.client_project_not_closed() returns boolean
+language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.projects p
-    where p.id = public.client_project_id() and p.status <> 'closed'
+    where p.id = private.client_project_id() and p.status <> 'closed'
   )
 $$;
-revoke all on function public.client_project_in(stage[]) from public;
-revoke all on function public.client_project_not_closed() from public;
-grant execute on function public.client_project_in(stage[]) to authenticated, service_role;
-grant execute on function public.client_project_not_closed() to authenticated, service_role;
+revoke all on function private.client_project_in(public.stage[]) from public;
+revoke all on function private.client_project_not_closed() from public;
+grant execute on function private.client_project_in(public.stage[]) to authenticated, service_role;
+grant execute on function private.client_project_not_closed() to authenticated, service_role;
 
 create policy client_read_own_project on projects
-  for select to authenticated using (id = public.client_project_id());
+  for select to authenticated using (id = private.client_project_id());
 
 create policy client_read_self on clients
   for select to authenticated using (id = auth.uid());
 
 create policy client_read_rounds on intake_rounds
-  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
+  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
 -- Submit or reopen only: the trigger above blocks every other change.
 create policy client_submit_round on intake_rounds
   for update to authenticated
-  using (project_id = public.client_project_id() and status in ('open', 'submitted')
-         and public.client_project_in(array['intake']::stage[]))
-  with check (project_id = public.client_project_id() and status in ('open', 'submitted')
-              and public.client_project_in(array['intake']::stage[]));
+  using (project_id = private.client_project_id() and status in ('open', 'submitted')
+         and private.client_project_in(array['intake']::stage[]))
+  with check (project_id = private.client_project_id() and status in ('open', 'submitted')
+              and private.client_project_in(array['intake']::stage[]));
 
 create policy client_read_responses on intake_responses
-  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
+  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
 create policy client_write_responses on intake_responses
   for insert to authenticated with check (
-    project_id = public.client_project_id()
+    project_id = private.client_project_id()
     and exists (select 1 from intake_rounds r
                 where r.project_id = intake_responses.project_id
                   and r.round = intake_responses.round and r.status = 'open')
-    and public.client_project_in(array['intake']::stage[])
+    and private.client_project_in(array['intake']::stage[])
   );
 -- D-079: while any round is open, earlier answers can be changed too.
 create policy client_update_responses on intake_responses
   for update to authenticated
   using (
-    project_id = public.client_project_id()
+    project_id = private.client_project_id()
     and exists (select 1 from intake_rounds r
                 where r.project_id = intake_responses.project_id and r.status = 'open')
-    and public.client_project_in(array['intake']::stage[])
+    and private.client_project_in(array['intake']::stage[])
   )
-  with check (project_id = public.client_project_id());
+  with check (project_id = private.client_project_id());
 
 create policy client_read_uploads on uploads
-  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
+  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
 -- D-217, D-218: uploads are added and deleted only while an intake round is open.
 create policy client_add_uploads on uploads
   for insert to authenticated with check (
-    project_id = public.client_project_id() and scan_status = 'pending'
+    project_id = private.client_project_id() and scan_status = 'pending'
     and exists (select 1 from intake_rounds r
                 where r.project_id = uploads.project_id and r.status = 'open')
-    and public.client_project_in(array['intake']::stage[])
+    and private.client_project_in(array['intake']::stage[])
   );
 create policy client_delete_uploads on uploads
   for delete to authenticated using (
-    project_id = public.client_project_id()
+    project_id = private.client_project_id()
     and exists (select 1 from intake_rounds r
                 where r.project_id = uploads.project_id and r.status = 'open')
-    and public.client_project_in(array['intake']::stage[])
+    and private.client_project_in(array['intake']::stage[])
   );
 
 -- D-216: after close the only artifact a client can read is the handover guide.
 create policy client_read_visible_artifacts on artifacts
   for select to authenticated using (
-    project_id = public.client_project_id() and client_visible
-    and (public.client_project_not_closed() or type = 'handover_guide')
+    project_id = private.client_project_id() and client_visible
+    and (private.client_project_not_closed() or type = 'handover_guide')
   );
 
 create policy client_read_approvals on approvals
   for select to authenticated using (
     exists (select 1 from artifacts a
-            where a.id = artifact_id and a.project_id = public.client_project_id() and a.client_visible
-              and (public.client_project_not_closed() or a.type = 'handover_guide'))
+            where a.id = artifact_id and a.project_id = private.client_project_id() and a.client_visible
+              and (private.client_project_not_closed() or a.type = 'handover_guide'))
   );
 -- D-217: a client approves the PRD only during requirements and the prototype only during
 -- prototype. Approvals are append-only, so a stray one would be permanent.
@@ -826,59 +941,59 @@ create policy client_add_approval on approvals
     role = 'client' and gate_type = 'client' and approved_by = auth.uid()
     and exists (select 1 from clients c where c.id = auth.uid() and c.is_signer)
     and exists (select 1 from artifacts a
-                where a.id = artifact_id and a.project_id = public.client_project_id()
+                where a.id = artifact_id and a.project_id = private.client_project_id()
                   and a.client_visible and a.status <> 'superseded'
-                  and ((a.type = 'prd' and public.client_project_in(array['requirements']::stage[]))
-                    or (a.type = 'prototype' and public.client_project_in(array['prototype']::stage[]))))
+                  and ((a.type = 'prd' and private.client_project_in(array['requirements']::stage[]))
+                    or (a.type = 'prototype' and private.client_project_in(array['prototype']::stage[]))))
   );
 
 create policy client_read_ask_client_items on backlog_items
   for select to authenticated using (
-    project_id = public.client_project_id() and ask_client and public.client_project_not_closed()
+    project_id = private.client_project_id() and ask_client and private.client_project_not_closed()
   );
 create policy client_answer_ask_client_items on backlog_items
   for update to authenticated
-  using (project_id = public.client_project_id() and ask_client
-         and public.client_project_in(array['build_rounds', 'handover']::stage[]))
-  with check (project_id = public.client_project_id() and ask_client);
+  using (project_id = private.client_project_id() and ask_client
+         and private.client_project_in(array['build_rounds', 'handover']::stage[]))
+  with check (project_id = private.client_project_id() and ask_client);
 
 create policy client_read_comments on comments
-  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
+  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
 -- D-113 and D-118: one note per revision on the prototype (while the stage is prototype), and
 -- notes on the final screenshots (shared after QC, so while the stage is deploy_prep).
 create policy client_add_comment on comments
   for insert to authenticated with check (
-    project_id = public.client_project_id()
+    project_id = private.client_project_id()
     and created_by = auth.uid()
     and owner_disposition is null
     and (
-      (kind = 'prototype' and public.client_project_in(array['prototype']::stage[]))
+      (kind = 'prototype' and private.client_project_in(array['prototype']::stage[]))
       or
-      (kind = 'final_screenshots' and public.client_project_in(array['deploy_prep']::stage[]))
+      (kind = 'final_screenshots' and private.client_project_in(array['deploy_prep']::stage[]))
     )
   );
 
 create policy client_read_prd_feedback on prd_feedback
-  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
+  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
 create policy client_request_prd_changes on prd_feedback
   for insert to authenticated with check (
-    project_id = public.client_project_id()
+    project_id = private.client_project_id()
     and created_by = auth.uid()
     and exists (select 1 from artifacts a
-                where a.id = artifact_id and a.project_id = public.client_project_id()
+                where a.id = artifact_id and a.project_id = private.client_project_id()
                   and a.client_visible and a.type = 'prd')
-    and public.client_project_in(array['requirements']::stage[])
+    and private.client_project_in(array['requirements']::stage[])
   );
 
 create policy client_read_change_requests on change_requests
-  for select to authenticated using (project_id = public.client_project_id() and public.client_project_not_closed());
+  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
 -- Go-live happens at deployment preparation, so the live period is the handover stage (D-219).
 create policy client_submit_change_request on change_requests
   for insert to authenticated with check (
-    project_id = public.client_project_id()
+    project_id = private.client_project_id()
     and submitted_by = 'client' and created_by = auth.uid()
     and impact_note is null and decision is null and status = 'received'
-    and public.client_project_in(array['handover']::stage[])
+    and private.client_project_in(array['handover']::stage[])
     and exists (select 1 from projects p where p.id = change_requests.project_id and p.changes_frozen_at is null)
   );
 
