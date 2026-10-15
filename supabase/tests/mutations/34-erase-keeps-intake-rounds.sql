@@ -1,0 +1,2 @@
+-- mutation: erase_project_data leaves intake rounds
+select m.patch_fn($q$erase_project_data(uuid)$q$, $q$delete from intake_rounds where project_id = p_project;$q$, $q$null;$q$);

@@ -62,6 +62,7 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 ## Commands
 
 - Database checks: `bash supabase/tests/run.sh` (needs a local Postgres; see `supabase/tests/README.md`). Run it after any change to `supabase/migrations/`.
+- Mutation check: `bash supabase/tests/mutations.sh` (about 2 minutes). Run it after any change to `supabase/`; add a file to `supabase/tests/mutations/` for each new or changed rule.
 - Install: `pnpm install` (Node 22 or newer, `.nvmrc`).
 - Dev server: `pnpm dev` (runs `@wpe/web`).
 - Checks: `pnpm lint`, `pnpm typecheck` (all workspaces), `pnpm test` (all workspaces), `pnpm format:check`.
