@@ -9,7 +9,7 @@ The QC agent runs after the last build round; a project passes when every item b
 | Lighthouse (mobile, on the key pages listed in the approved plan, on a local production build served by the worker) | 80+ in Performance, Accessibility, Best Practices, SEO |
 | Basic SEO | Unique title and meta description per page, one H1, sitemap.xml, robots.txt, canonical tags, Open Graph tags, alt text on images |
 | Generic checklist | Responsive at common widths, no console errors, no broken links, favicon present, 404 page works, contact form works against a stubbed mail transport (it validates, submits and returns success), blog posts render, forms validate, privacy policy and cookie notice present and linked, contact form spam protection works as the PRD specifies |
-| Claim markers | Every `<Claim>` marker in the content belongs to a claim the owner cleared by approving a round |
+| Claim markers | Every `<Claim>` marker in the content belongs to a claim the owner cleared by approving a round; a claim scan and an LLM verifier check each hit against the PRD and intake, and unmarked claims are caught only probabilistically (D-284) |
 | E2E smoke (Playwright) | Home loads, navigation works on every page, contact form submits (stubbed transport), blog index and post open |
 
 If a page misses 80 on a category, the report states the score and cause, and the owner decides whether to fix or accept.

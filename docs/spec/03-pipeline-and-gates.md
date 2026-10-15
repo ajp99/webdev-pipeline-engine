@@ -27,10 +27,10 @@ Every stage ends in one of three gate types. None advances automatically: the ow
 | Gate type | Used for | Who acts | Notes |
 | --- | --- | --- | --- |
 | Soft | Reversible actions: intake, plan, prototype (owner review), build rounds, QC and report | Owner | Feedback sends notes back and the agent produces a new version; QC failures become a fix list |
-| Hard | Irreversible actions: deploy prep, handover | Owner | Same Accept action as the other gates; the type is a label in the queue and tables |
+| Hard | Irreversible actions: deploy prep, handover | Owner | Accept requires typing the project name in the console; there is no multi-factor (D-268) |
 | Client | Client-attributed approvals: PRD lock, prototype sign-off | Client | Recorded as a client approval |
 
-**Gate actions:** Accept approves and advances when no other gate of the stage is left; one database call (`accept_gate`) records the approval, marks the artifact approved and advances in a single transaction. After a client approval, or the last round approval, the project shows "Ready to advance" in the owner's queue and the owner is emailed; nothing advances until the owner clicks Advance. Feedback sends notes back and the agent produces a new version. Reject marks the version rejected and starts no run. In build rounds, a merge of the round's pull request into `staging` by the owner's own GitHub account also counts as Accept (see 07-build-rounds.md).
+**Gate actions:** Accept approves and advances when no other gate of the stage is left; one database call (`accept_gate`) records the approval, marks the artifact approved and advances in a single transaction. After a client approval, or the last round approval, the project shows "Ready to advance" in the owner's queue and the owner is emailed; nothing advances until the owner clicks Advance. Feedback sends notes back and the agent produces a new version. Reject marks the version rejected and starts no run. Accept happens only in the console: merging a round's pull request in GitHub does not count as Accept (D-279). `accept_gate` and `advance_stage()` are callable only from an owner session, never by the service role or an agent (D-264).
 
 **Gate classification:**
 
@@ -45,9 +45,9 @@ Every stage ends in one of three gate types. None advances automatically: the ow
 | 7. Deploy prep | Hard | Owner | 24 hours |
 | 8. Handover | Hard | Owner | 24 hours |
 
-Per-stage values live in `gate_config`: global defaults, with per-project overrides.
+Per-stage values live in `gate_config`: global defaults, with per-project overrides. `advance_stage()` honours the effective gatekeeper. Global rows cannot be deleted and only their deadline can change; a project row can add a gate or change a deadline but cannot change the gatekeeper of a global gate (D-272).
 
-**Who approves, and edits after approval:** only an owner (soft and hard gates) or the project's named client signer (client gates) can approve; approval times are set by the database when the approval is written; the client signs the prototype only after the owner approved the same version. A paused project must be resumed before anything is approved. While a stage is open, a new version of its artifact needs a fresh approval; once the project has advanced, new versions of that stage's artifacts are blocked, and the change goes through a change request (an accepted change request creates the new version).
+**Who approves, and edits after approval:** only an owner (soft and hard gates) or the project's named client signer (client gates) can approve; approval times are set by the database when the approval is written, together with the SHA-256 of the artifact's content and a snapshot of the giver's email (D-265, D-269); the client signs the prototype only after the owner approved the same version. A paused project must be resumed before anything is approved. While a stage is open, a new version of its artifact needs a fresh approval; once the project has advanced, new versions of that stage's artifacts are blocked, and the change goes through a change request (an accepted change request creates the new version).
 
 **Loops and limits:**
 

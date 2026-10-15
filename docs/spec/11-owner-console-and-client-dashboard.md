@@ -7,7 +7,8 @@ One Next.js app serves both views, split by role. The owner console centers on a
 **Owner console:**
 
 - Approval queue with badge counts: every pending artifact, round, backlog item, comment, and change request in one place; each pending gate shows its type (soft, hard, client), the actions Accept, Feedback and Reject, and an overdue badge once its escalate_after_hours passes; a project whose gates are all approved shows "Ready to advance" with an Advance button
-- Project list with stage, round, and blockers; pause or resume a project, close it, cancel it (typed confirmation and a reason), disable client accounts, and see token use as a progress bar against the plan's token budget (no warnings)
+- Hard-gate Accept (deploy preparation, handover) asks the owner to type the project name; Accept happens only in the console (D-268, D-279)
+- Project list with stage, round, and blockers; pause or resume a project, close it, cancel it (typed confirmation and a reason), disable client accounts, and see token use as a progress bar against the plan's token budget (no warnings), time to decision per gate and Feedback loops per artifact (D-293)
 - Artifact editor: edit and approve PRD, plan, skill set, round scope, report, handover documents, with version diff
 - Question backlog view: answer, mark as ask-client, or accept the agent's assumption
 - Client notes inbox: raw notes on the prototype and the final screenshots, with actions to forward to agent, convert to change request, or dismiss
