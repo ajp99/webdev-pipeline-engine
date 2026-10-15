@@ -10,7 +10,7 @@ Needs a local Postgres (14 or newer) and a role allowed to create databases. The
 
 - Each check runs one statement as a Supabase role (`authenticated` as the owner or a client, or `service_role`) inside a savepoint that is always rolled back, and compares the result with the expected outcome (`ok:N` rows, or `error`).
 - The suite walks one project through the stages (intake, requirements, plan, prototype, build rounds, QC, deploy prep, handover, closed) and checks, at each, what a client may read and write, including paused and closed projects.
-- Run by hand until CI exists (D-046).
+- CI runs this script on every pull request (`.github/workflows/ci.yml`, D-287); it can also be run by hand.
 
 ## Against a local Supabase (needs Docker)
 
@@ -21,4 +21,4 @@ WPE_SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres bash
 supabase db reset                      # removes the fixture rows
 ```
 
-In this mode the script skips the auth stand-in and the migrations and loads only the fixtures and the suites. This mode has not been run yet: the agent's sandbox has no Docker. Task P1-T08 stays open until it has been run once on the owner's machine with all checks passing.
+In this mode the script skips the auth stand-in and the migrations and loads only the fixtures and the suites. This mode has not been run yet: the agent's sandbox has no Docker. The `supabase` job in CI runs it, but it does not block merging until it has passed once (it is marked `continue-on-error`). Task P1-T08 stays open until it has been run once with all checks passing.

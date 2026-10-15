@@ -1,0 +1,7 @@
+# Review by the owner is required for anything that decides what the pipeline may do.
+/supabase/migrations/ @ajp99
+/supabase/tests/ @ajp99
+/docs/spec/ @ajp99
+/.github/ @ajp99
+/AGENTS.md @ajp99
+/.mcp.json @ajp99
