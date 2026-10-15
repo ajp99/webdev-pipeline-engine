@@ -47,7 +47,7 @@ Every stage ends in one of three gate types. None advances automatically: the ow
 
 Per-stage values live in `gate_config`: global defaults, with per-project overrides.
 
-**Who approves, and edits after approval:** only an owner (soft and hard gates) or the project's named client signer (client gates) can approve; approval times cannot be in the future; the client signs the prototype only after the owner approved the same version. A paused project must be resumed before anything is approved. While a stage is open, a new version of its artifact needs a fresh approval; once the project has advanced, new versions of that stage's artifacts are blocked, and the change goes through a change request (an accepted change request creates the new version).
+**Who approves, and edits after approval:** only an owner (soft and hard gates) or the project's named client signer (client gates) can approve; approval times are set by the database when the approval is written; the client signs the prototype only after the owner approved the same version. A paused project must be resumed before anything is approved. While a stage is open, a new version of its artifact needs a fresh approval; once the project has advanced, new versions of that stage's artifacts are blocked, and the change goes through a change request (an accepted change request creates the new version).
 
 **Loops and limits:**
 

@@ -35,9 +35,9 @@ select t.run('the worker cannot edit an approval', null, 'service_role', 'update
 select t.run('the worker cannot delete an approval', null, 'service_role', 'delete from approvals', 'error');
 
 \echo '### uploads and rounds'
-select t.run('a macro-enabled document is rejected', :'O'::uuid, 'authenticated', 'insert into uploads(project_id,kind,storage_path,mime_type,size_bytes) values (''11111111-1111-1111-1111-111111111111'',''asset'',''p'',''application/vnd.ms-word.document.macroEnabled.12'',1000)', 'error');
-select t.run('a macro-enabled spreadsheet is rejected', :'O'::uuid, 'authenticated', 'insert into uploads(project_id,kind,storage_path,mime_type,size_bytes) values (''11111111-1111-1111-1111-111111111111'',''asset'',''p'',''application/vnd.ms-excel.sheet.macroEnabled.12'',1000)', 'error');
-select t.run('an executable is rejected', :'O'::uuid, 'authenticated', 'insert into uploads(project_id,kind,storage_path,mime_type,size_bytes) values (''11111111-1111-1111-1111-111111111111'',''asset'',''p'',''application/x-msdownload'',1000)', 'error');
+select t.run('a macro-enabled document is rejected', :'O'::uuid, 'authenticated', 'insert into uploads(project_id,kind,storage_path,mime_type,size_bytes) values (''11111111-1111-1111-1111-111111111111'',''asset'',''11111111-1111-1111-1111-111111111111/p'',''application/vnd.ms-word.document.macroEnabled.12'',1000)', 'error');
+select t.run('a macro-enabled spreadsheet is rejected', :'O'::uuid, 'authenticated', 'insert into uploads(project_id,kind,storage_path,mime_type,size_bytes) values (''11111111-1111-1111-1111-111111111111'',''asset'',''11111111-1111-1111-1111-111111111111/p'',''application/vnd.ms-excel.sheet.macroEnabled.12'',1000)', 'error');
+select t.run('an executable is rejected', :'O'::uuid, 'authenticated', 'insert into uploads(project_id,kind,storage_path,mime_type,size_bytes) values (''11111111-1111-1111-1111-111111111111'',''asset'',''11111111-1111-1111-1111-111111111111/p'',''application/x-msdownload'',1000)', 'error');
 select t.run('client A cannot mark an upload clean', :'A'::uuid, 'authenticated', 'update uploads set scan_status=''clean''', 'ok:0');
 select t.run('client A cannot mark an upload infected or pending', :'A'::uuid, 'authenticated', 'update uploads set scan_status=''pending''', 'ok:0');
 select t.run('owner can set the scan result', :'O'::uuid, 'authenticated', 'update uploads set scan_status=''infected''', 'ok:1');

@@ -1,13 +1,20 @@
 -- 0002_advance_stage.sql (task P1-T07)
 -- Replaces the advance_stage() stub from 0001 with the real approval checks. No table or column
--- changes. Owner-approved on 2026-10-08 with the artifact mapping below. Three hardening changes
--- found in the branch review are included and need the owner's review too (nothing is applied yet):
---   * approval_is_valid(): an approval counts only if it was given by an owner (soft, hard) or by a
---     client of this project (client), so a wrongly attributed row cannot advance a project;
---   * a trigger stamps approvals.at no later than now(), so a client cannot post-date an approval
---     to get round the owner-first order of the prototype stage;
---   * the client approval policy for the prototype now also needs the owner's approval first
---     (an approval is permanent, so a too-early one would block the stage for that version).
+-- changes. Owner-approved on 2026-10-08 with the artifact mapping below. Hardening changes found in
+-- the branch review and the migration review of 2026-10-15 (nothing is applied yet, so they are
+-- folded in here):
+--   * approval_is_valid(): an approval counts only if it was given by an owner (soft, hard) or by
+--     the project's named client signer (client), so a wrongly attributed row, or a second client
+--     login, cannot advance a project (D-238);
+--   * a trigger stamps approvals.at with the database time for rows written through the API, so
+--     nobody can post-date an approval to get round the owner-first order of the prototype stage;
+--   * the client approval policy for the prototype also needs the owner's approval first
+--     (an approval is permanent, so a too-early one would block the stage for that version), and
+--     only the signer can insert a client approval;
+--   * advance_stage() is for the owner only (the worker never advances a project), and the
+--     handover to closed step goes through close_project() from 0001 (retention_until, and the
+--     refusal while an accepted change request is undeployed, D-237);
+--   * a handover guide can be made client-visible only after the owner's hard approval (D-251).
 --
 -- A project moves forward only through this function, only one stage at a time (the order of the
 -- stage enum is the order in docs/spec/stages.yaml), and only while it is active.
@@ -30,42 +37,66 @@
 -- round_summary. A round_summary artifact carries {"round": N} in its content; Feedback on a round
 -- makes a new version for the same N, and versions are unique per project, so they rise across rounds.
 --
--- handover -> closed also sets status closed and close_reason completed in the same call (D-220).
--- An approval counts only when its giver fits its role: an owner for the owner gates, a client of
--- this project for the client gate.
+-- handover -> closed also sets status closed and close_reason completed in the same call (D-220),
+-- through close_project(), which also sets retention_until.
+-- An approval counts only when its giver fits its role: an owner for the owner gates, the named
+-- signer of this project for the client gate. If the owner changes the signer later, the former
+-- signer's approvals stop counting and the new signer approves again.
 create or replace function approval_is_valid(ap approvals, p_project uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select case ap.role
     when 'owner'  then exists (select 1 from owners o where o.id = ap.approved_by)
-    when 'client' then exists (select 1 from clients c where c.id = ap.approved_by and c.project_id = p_project)
+    when 'client' then exists (select 1 from clients c
+                               where c.id = ap.approved_by and c.project_id = p_project and c.is_signer)
     else false end
 $$;
-revoke all on function approval_is_valid(approvals, uuid) from public;
-grant execute on function approval_is_valid(approvals, uuid) to authenticated, service_role;
+-- Only advance_stage() (which runs as its owner) calls it, so no API role needs execute.
+revoke all on function approval_is_valid(approvals, uuid) from public, anon, authenticated, service_role;
 
--- An approval is stamped no later than the moment it is written.
-create or replace function clamp_approval_time() returns trigger
+-- An approval written through the API gets the database time as its time. Rows written by the
+-- SQL editor or a migration (current_user is postgres) keep the time they carry.
+create or replace function stamp_approval_time() returns trigger
 language plpgsql as $$
 begin
-  if new.at > now() then new.at := now(); end if;
+  if current_user in ('anon', 'authenticated', 'service_role') then
+    new.at := now();
+  end if;
   return new;
 end;
 $$;
-create trigger approvals_clamp_time before insert on approvals
-  for each row execute function clamp_approval_time();
+create trigger approvals_stamp_time before insert on approvals
+  for each row execute function stamp_approval_time();
+
+-- D-251: a handover guide becomes visible to the client only after the owner's hard approval of
+-- that version.
+create or replace function guard_handover_guide_visibility() returns trigger
+language plpgsql as $$
+begin
+  if current_user in ('anon', 'authenticated', 'service_role')
+     and new.type = 'handover_guide' and new.client_visible
+     and not exists (select 1 from approvals ap join owners o on o.id = ap.approved_by
+                     where ap.artifact_id = new.id and ap.gate_type = 'hard' and ap.role = 'owner') then
+    raise exception 'a handover guide is shown to the client only after the owner''s hard approval';
+  end if;
+  return new;
+end;
+$$;
+create trigger artifacts_handover_visibility before insert or update of client_visible on artifacts
+  for each row execute function guard_handover_guide_visibility();
 
 -- The client signs the prototype only after the owner approved that version.
 create or replace function artifact_has_owner_approval(p_artifact uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from approvals ap where ap.artifact_id = p_artifact and ap.role = 'owner')
 $$;
-revoke all on function artifact_has_owner_approval(uuid) from public;
+revoke all on function artifact_has_owner_approval(uuid) from public, anon;
 grant execute on function artifact_has_owner_approval(uuid) to authenticated, service_role;
 
 drop policy client_add_approval on approvals;
 create policy client_add_approval on approvals
   for insert to authenticated with check (
     role = 'client' and gate_type = 'client' and approved_by = auth.uid()
+    and exists (select 1 from clients c where c.id = auth.uid() and c.is_signer)
     and exists (select 1 from artifacts a
                 where a.id = artifact_id and a.project_id = public.client_project_id()
                   and a.client_visible and a.status <> 'superseded'
@@ -80,12 +111,12 @@ declare
   v         projects%rowtype;
   stages    stage[] := enum_range(null::stage);
   idx       int;
-  atype     text;
+  atype     artifact_type;
   art       artifacts%rowtype;
   gt        gate_type;
   req       gate_type[];
 begin
-  if not (public.is_owner() or public.is_service_role()) then
+  if not public.is_owner() then
     raise exception 'advance_stage: not allowed';
   end if;
 
@@ -168,11 +199,13 @@ begin
 
   perform set_config('app.stage_advance', 'on', true);
   if v.stage = 'handover' then
-    update projects set stage = p_next, status = 'closed', close_reason = 'completed'
-      where id = p_project;
+    update projects set stage = p_next where id = p_project;
+    perform public.close_project(p_project, 'completed');
   else
     update projects set stage = p_next where id = p_project;
   end if;
   perform set_config('app.stage_advance', 'off', true);
 end;
 $$;
+revoke all on function advance_stage(uuid, stage) from public, anon;
+grant execute on function advance_stage(uuid, stage) to authenticated;
