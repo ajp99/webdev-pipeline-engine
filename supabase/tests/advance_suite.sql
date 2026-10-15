@@ -39,7 +39,7 @@ create function t.proj(stg text, st text default 'active') returns text language
 $$ select format('insert into projects(id,name,stage,status) values (%L,%L,%L,%L)',
   'cccccccc-0000-0000-0000-000000000001','C',stg,st)
   || '; insert into auth.users(id,email) values (''00000000-0000-0000-0000-0000000000c1'',''c@x'')'
-  || '; insert into clients(id,email,project_id) values (''00000000-0000-0000-0000-0000000000c1'',''c@x'',''cccccccc-0000-0000-0000-000000000001'')' $$;
+  || '; insert into clients(id,email,project_id,is_signer) values (''00000000-0000-0000-0000-0000000000c1'',''c@x'',''cccccccc-0000-0000-0000-000000000001'',true)' $$;
 create function t.art(typ text, ver int default 1, st text default 'draft', content text default '{}') returns text language sql as
 $$ select format('insert into artifacts(project_id,type,version,status,content) values (%L,%L,%s,%L,%L)',
   'cccccccc-0000-0000-0000-000000000001',typ,ver,st,content) $$;
@@ -70,7 +70,7 @@ $$ select 'select stage::text from projects where id=''cccccccc-0000-0000-0000-0
 -- rules common to every stage
 select t.adv('no artifact at all: intake cannot advance', t.proj('intake'), :'O', 'authenticated', t.go('requirements'), 'error:intake_record');
 select t.adv('intake advances with an owner soft approval', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'ok', '(' || t.cs() || ') = ''requirements''');
-select t.adv('the worker (service role) may advance too', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), null, 'service_role', t.go('requirements'), 'ok');
+select t.adv('the worker (service role) cannot advance a project', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), null, 'service_role', t.go('requirements'), 'error:not allowed');
 select t.adv('a client cannot call advance_stage', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'A', 'authenticated', t.go('requirements'), 'error:not allowed');
 select t.adv('skipping a stage is refused', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('plan'), 'error:is not the stage after');
 select t.adv('going backwards is refused', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'error:is not the stage after');

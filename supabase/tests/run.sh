@@ -22,7 +22,7 @@ fi
 for f in "${loads[@]}"; do
   psql -X -q -v ON_ERROR_STOP=1 -d "$db" -f "$f" >/dev/null || { echo "failed to load $f" >&2; exit 2; }
 done
-out="$(for s in rls_suite advance_suite access_suite; do psql -X -q -tA -d "$db" -f "$here/$s.sql" 2>&1; done)"
+out="$(for s in rls_suite advance_suite access_suite review_suite; do psql -X -q -tA -d "$db" -f "$here/$s.sql" 2>&1; done)"
 grep -E '^(PASS|FAIL)' <<<"$out"
 pass=$(grep -c '^PASS' <<<"$out"); fail=$(grep -c '^FAIL' <<<"$out"); err=$(grep -c -E 'ERROR|psql:' <<<"$out")
 echo "---"; echo "PASS: $pass  FAIL: $fail  ERRORS: $err"
