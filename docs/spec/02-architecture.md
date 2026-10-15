@@ -9,15 +9,14 @@ flowchart TB
   subgraph vercel["Next.js app (Vercel) - apps/web"]
     owner["Owner console: approve, answer, edit"]
     client["Client dashboard: intake, screenshots, feedback"]
-    hook["GitHub webhook: merge = Accept"]
   end
   subgraph supabase["Supabase"]
     pg["Postgres + RLS: state, approvals, stage_runs queue"]
     auth["Auth + Storage: logins, client uploads"]
   end
   subgraph machine["Owner's machine - apps/worker"]
-    runner["Stage runner: polls the queue"]
-    workers["Agent SDK workers: build, QC, docs"]
+    runner["Orchestrator: stage runner, polls the queue, holds the Supabase service key"]
+    workers["Per-run containers: Agent SDK workers, no Supabase credentials"]
   end
   vercel <--> supabase
   runner -->|"polls every 15-30 s"| supabase
@@ -26,11 +25,10 @@ flowchart TB
   workers -->|"GitHub App token, one repo"| repo["Client repo: staging branch, round pull requests"]
   workers --> api["Claude API: model calls"]
   repo -->|"Git integration"| deploy["Vercel: previews and production"]
-  repo -->|"webhook"| hook
   client -.->|"emails over SMTP"| mail["Owner Gmail SMTP: client and owner emails"]
 ```
 
-Approvals are stored in Supabase; an approval enqueues the next run, and the stage runner starts a worker only for a queued, approved stage. Workers reach only the tools shown: the skills library, one client repo through a short-lived GitHub App token, and the Claude API. Vercel deploys from the repo through its Git integration, so workers hold no Vercel token. Screenshots and QC measurements come from a local production build the worker serves itself; Vercel previews stay behind Vercel's login and only the owner views them.
+Approvals are stored in Supabase; an approval enqueues the next run, and the stage runner starts a worker only for a queued, approved stage. Accept happens only in the console; there is no GitHub webhook (D-279). Only the orchestrator holds the Supabase service key and connects to the database; each agent run executes in its own container (no host mounts, non-root, scrubbed environment, egress limited to the npm registry, GitHub and the Anthropic API, a per-run GitHub token) and writes only through narrow routines the orchestrator mediates (D-264, D-266, D-295). Until go-live Supabase is a local stack and nothing is hosted (D-263). Workers reach only the tools shown: the skills library, one client repo through a short-lived GitHub App token, and the Claude API. Vercel deploys from the repo through its Git integration, so workers hold no Vercel token. Screenshots and QC measurements come from a local production build the worker serves itself; Vercel previews stay behind Vercel's login and only the owner views them.
 
 **Stack:** Next.js, TypeScript, Tailwind CSS, Supabase (Postgres, Auth, Storage), GitHub App, Vercel, Gmail SMTP for the pipeline's own email, Claude Agent SDK (TypeScript), Lighthouse CLI, Playwright.
 
