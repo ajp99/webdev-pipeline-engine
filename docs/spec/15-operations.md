@@ -20,7 +20,7 @@ Clients receive emails for four events: intake follow-ups ready, PRD ready, prot
 
 ## Backups (D-049, D-062, D-069)
 
-The database is exported on a schedule and before each project close. Exports are encrypted, saved locally, and copied to the owner's own cloud drive. They never go into this repo. The key is kept in a password manager. Each export is deleted 180 days after it is made (D-222), so deleted client data can remain in backups for up to 180 days; the privacy page says so. The script points at the local database in the dev-only period. One restore of an export into a scratch database is proved in Phase 1 (D-294); there is no regular restore drill.
+Go-live item (G6, D-307): until then nothing is exported, because there is no real data, and the restore proof of D-294 moves with it. At go-live the database is exported on a schedule and before each project close. Exports are encrypted, saved locally, and copied to the owner's own cloud drive. They never go into this repo. The key is kept in a password manager. Each export is deleted 180 days after it is made (D-222), so deleted client data can remain in backups for up to 180 days; the privacy page says so. The script points at the local database in the dev-only period. One restore of an export into a scratch database is proved before the first real client (D-294, G6); there is no regular restore drill.
 
 ## Agent evals (D-065, D-067, D-068)
 

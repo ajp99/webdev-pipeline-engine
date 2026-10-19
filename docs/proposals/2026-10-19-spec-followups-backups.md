@@ -25,3 +25,5 @@ Spec 00 and 15 only. No task, table or code change.
 ## Owner decision
 
 Accepted by the owner in chat on 2026-10-19: Option A, backups are a go-live item and nothing is exported now (D-307). The two spec edits are made in their own spec-only PR.
+
+Applied on 2026-10-19 in the same PR as the plan changes (#21), as a one-time exception to AGENTS.md rule 2 granted by the owner in chat on that date. The spec files changed are `docs/spec/00-overview.md` and `docs/spec/15-operations.md` only.
