@@ -1,6 +1,6 @@
 # Proposal: Phase 1 close-out and Phase 2a re-baseline (no client login, cancel-only runs)
 
-- **Status:** open
+- **Status:** accepted (2026-10-19)
 - **Date:** 2026-10-19
 - **Raised by:** Claude Code, from the owner's answers in the planning rounds of 2026-10-19
 - **Task or spec reference:** P1 gate, P2-T01 to P2-T24; spec 02, 03, 04, 05, 06, 07, 10, 11, 12, 15 and `gates.yaml`
@@ -51,4 +51,4 @@ These are real mismatches between the owner's answers and existing text. None is
 
 ## Owner decision
 
-(Left blank for the owner.)
+Accepted by the owner in chat on 2026-10-19, with these answers: host agents keep Bash unrestricted as in D-300 (conflict 1, to be closed before the first real client); an owner-entered client approval keeps role `client`, its giver is an owner, and a CHECK requires a non-empty `evidence_note` (conflict 2); the secret-scanning sentences in specs 00, 12 and 15 say "to be turned on" until P1-T11 is ticked (conflict 11). The spec edits are made in their own spec-only PR; the Phase 3 to 5 plan pass and the extra go-live item for host-agent isolation follow in a plan PR.

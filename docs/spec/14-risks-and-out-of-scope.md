@@ -1,5 +1,7 @@
 # Assumptions, risks and revisit triggers
 
+> **Dev-only scope (D-300 to D-303):** risks about parked runs, client uploads, client accounts and retention apply from go-live; see the go-live list.
+
 > Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
 The riskiest items are local workers going offline mid-stage, a hung or looping agent run, and agent-written copy missing the client's voice.

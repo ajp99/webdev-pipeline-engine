@@ -1,5 +1,7 @@
 # Build rounds and question backlog
 
+> **Dev-only scope (D-301):** parked runs, Pause and Resume are go-live items (G16); until then a run waiting for the owner keeps its slot.
+
 > Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
 The Planner sets the number of rounds from the page count and features in the locked PRD, using a rule of thumb: 5 pages or fewer and no blog is 2 rounds, otherwise 4. The owner can override it and approves the plan.

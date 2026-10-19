@@ -32,7 +32,7 @@ A walking skeleton is built by the end of Phase 2a: one fictional client through
 
 ## Repo hygiene and CI (D-046, D-240)
 
-GitHub secret scanning and push protection are on. CI starts in Phase 1 (task P1-T12, D-287): GitHub Actions workflows run lint, typecheck, unit tests, the database checks on a Postgres service and on the local Supabase stack, and a docs lint (placeholders, decision-ID continuity, broken links, D-291), with no secrets. A scripted mutation check runs on every PR that touches `supabase/**` and before each phase gate (D-288). Worker tests are fakes and unit tests only. CODEOWNERS covers `supabase/migrations/**`. Secret scanning and push protection are on and the old personal access token is revoked (D-292). Branch protection stays the owner's call; until the workflow is merged and green, an agent's report that tests pass is unverified.
+GitHub secret scanning and push protection are to be turned on (P1-T11). CI starts in Phase 1 (task P1-T12, D-287): GitHub Actions workflows run lint, typecheck, unit tests, the database checks on a Postgres service and on the local Supabase stack, and a docs lint (placeholders, decision-ID continuity, broken links, D-291), with no secrets. A scripted mutation check runs on every PR that touches `supabase/**` and before each phase gate (D-288). Worker tests are fakes and unit tests only. CODEOWNERS covers `supabase/migrations/**`. Secret scanning and push protection are to be turned on and the old personal access token revoked (P1-T11, D-292). Branch protection stays the owner's call; until the workflow is merged and green, an agent's report that tests pass is unverified.
 
 ## MCP server (D-055, D-057, D-177)
 
@@ -44,7 +44,7 @@ A read-only MCP server would let the owner ask Claude about status, the approval
 
 ## Runner behavior (D-081 to D-085)
 
-- At most one ticket per project at a time, and at most 2 projects in parallel (adjustable with `WORKER_MAX_PARALLEL_PROJECTS`).
+- At most one ticket per project at a time, and at most 1 project in parallel by default (`WORKER_MAX_PARALLEL_PROJECTS`, D-302). Until go-live there is one 20-minute no-progress watchdog; the per-kind tiers below return at go-live (G16).
 - A failed run is retried once automatically (at most 2 attempts), then fails to the owner's queue. A stale heartbeat (10 minutes: the worker went away or the laptop slept) re-queues the run within those 2 attempts.
 - **No-progress watchdog (D-232):** a run that shows no sign of life is stopped. Any streamed model output, tool call, file write, commit or command output line counts, and so does each backoff retry after a rate-limit or overload response (D-204). Limits by run kind: 10 minutes for industry template generation, intake batch review, the PRD and the Planner; 20 minutes for the prototype, the QC runner, the reporter and final screenshots, the handover agent and deployment preparation; 45 minutes for build rounds and change-request mini-rounds. A stopped run gets the status `stopped` with a reason and is never retried automatically.
 - A run waiting for the owner (a pause request or an ask-client question) is exempt from the watchdog and keeps its slot for up to 1 hour. It is then parked: the worker saves its state, sets the status `parked` and `parked_at` and frees the slot, and the run resumes when the owner answers.
@@ -52,14 +52,14 @@ A read-only MCP server would let the owner ask Claude about status, the approval
 - **Claim function and unique run (D-278):** every `stage_runs` status change goes through the claim and transition function, and a partial unique index allows one running or waiting run per project.
 - **Idempotent retries (D-277):** the pull request is found or created by branch, external calls carry idempotency keys, a step journal is kept in `run_logs`, and work is committed before each side effect.
 - **Tracing (D-281):** `stage_runs` and `run_logs` carry a `trace_id`; logs are structured lines with project, stage and run IDs and show in the run detail view. Each run records its pinned `model` and `prompt_hash` (D-283).
-- **Containers and trust zones (D-266, D-264, D-295):** each agent run executes in its own container with no host mounts, non-root, a scrubbed environment, egress limited to the npm registry, GitHub and the Anthropic API, and a per-run GitHub token. Only the orchestrator holds the Supabase service key and connects to the database.
+- **Containers and trust zones (D-266, D-264, D-295):** the Builder executes in its own container with no host mounts other than its repo working copy, non-root, a scrubbed environment and a per-run GitHub token; until go-live the other agent runs execute on the host with an open network (D-300). Only the orchestrator holds the Supabase service key and connects to the database.
 - **Run controls (D-233):** Retry creates a new queued run for the same project and stage with fresh attempts and keeps the old run as history. Cancel stops a run but keeps its working folder, branch and open pull request. A failed, stopped or parked run opens a detail view with the reason and timeline, the last log lines and the actions Resume, Rerun from scratch and End run. Resume starts a fresh run on the same branch from the last commit, built from the step journal (D-280), with the earlier log and notes as context; uncommitted work is lost because the working folder is reset at the start of every run (D-203). Rerun from scratch starts the stage again with no earlier context. End run closes the run without a new one.
-- **Console commands (D-249):** Retry, Cancel, Resume and Run retention now reach the worker through a commands table that the console writes and the worker polls together with the queue. Commands wait while the laptop is off and run when the worker starts.
+- **Console commands (D-249, go-live, G16):** until then Cancel sets `cancel_requested` on the run and Retry creates a new queued run (D-301). At go-live Retry, Cancel, Resume and Run retention now reach the worker through a commands table that the console writes and the worker polls together with the queue. Commands wait while the laptop is off and run when the worker starts.
 - Run logs are text rows in the database and are deleted 90 days after project close.
 
 ## Client accounts (D-094)
 
-The owner enters the client's email; the client receives an invite email with a link to set a password. A project can have several client logins, with one named signer per project whose approval counts at client gates (D-238). Public sign-ups are off and client passwords have a minimum length of 12. Invite links last as long as Supabase allows for its own links, and the console can resend them (D-242).
+(Go-live, G15.) The owner enters the client's email; the client receives an invite email with a link to set a password. A project can have several client logins, with one named signer per project whose approval counts at client gates (D-238). Public sign-ups are off and client passwords have a minimum length of 12. Invite links last as long as Supabase allows for its own links, and the console can resend them (D-242).
 
 ## Phase 2 gate evidence (D-093, D-244)
 
@@ -89,7 +89,7 @@ Phase 3: the phase 2 evidence (manual walkthrough, automated end-to-end test wit
 
 ## Retention job (D-169, D-214)
 
-The job runs at every worker start, so a missed date is caught up, on a schedule, and from a "Run retention now" button in the console, which also shows an overdue badge. It deletes uploads, intake data, run logs and the handover guide's contents and PDF when a project's retention date arrives, without a confirmation step, and records `data_deleted_at`. The worker removes the storage files first, then calls `erase_project_data()` for the database rows; approvals, the other artifacts and the project row are kept. The retention date is set by the function that closes or cancels a project. The job does not remove client accounts. A client's request for earlier deletion is handled by hand outside the pipeline.
+(Go-live, G17; there is no retention job in the dev-only baseline, D-303.) The job runs at every worker start, so a missed date is caught up, on a schedule, and from a "Run retention now" button in the console, which also shows an overdue badge. It deletes uploads, intake data, run logs and the handover guide's contents and PDF when a project's retention date arrives, without a confirmation step, and records `data_deleted_at`. The worker removes the storage files first, then calls `erase_project_data()` for the database rows; approvals, the other artifacts and the project row are kept. The retention date is set by the function that closes or cancels a project. The job does not remove client accounts. A client's request for earlier deletion is handled by hand outside the pipeline.
 
 ## Change requests after go-live (D-174, D-175, D-193)
 
