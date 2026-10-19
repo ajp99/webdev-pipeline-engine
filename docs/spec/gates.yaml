@@ -6,7 +6,7 @@ default_escalate_after_hours: 24
 gate_types:
   soft:   { description: "Reversible actions. Owner reviews.", actor: owner }
   hard:   { description: "Irreversible actions. Owner approves; same Accept action as other gates.", actor: owner }
-  client: { description: "Client-attributed approvals.", actor: client }
+  client: { description: "Client-attributed approvals. Until go-live (D-298) the owner enters them on the client's behalf with a required evidence note; the approval keeps role client.", actor: client }
 actions: [accept, feedback, reject]
 # accept   = approve and advance
 # feedback = send notes back; agent produces a new version

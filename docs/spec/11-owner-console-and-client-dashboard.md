@@ -1,5 +1,7 @@
 # Owner console and client dashboard
 
+> **Dev-only scope (D-297 to D-304; proposal 2026-10-19-phase-2a-rebaseline):** until go-live there is no client login. The owner enters intake and records client-gate approvals with a required evidence note. The client dashboard, invites and privacy page are go-live items. The client-facing design below is the go-live design (G15).
+
 > Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
 One Next.js app serves both views, split by role. The owner console centers on an approval queue; the owner is also emailed when a gate is ready, a project is ready to advance, a run waits on a pause request, or a run fails, and once for each client change request, PRD change-request note or final-screenshot comment (the event and a console link only).
@@ -13,7 +15,7 @@ One Next.js app serves both views, split by role. The owner console centers on a
 - Question backlog view: answer, mark as ask-client, or accept the agent's assumption
 - Client notes inbox: raw notes on the prototype and the final screenshots, with actions to forward to agent, convert to change request, or dismiss
 - Template and skills library manager: review agent-generated templates; skills show a 'Skills ready for generalization review' badge with a diff of the project-local and generalized versions, which the owner approves, edits, or rejects
-- Stage run monitor: worker status and logs. A failed, stopped or parked run opens a detail view with the reason and timeline, the last log lines and the actions Resume, Rerun from scratch and End run; Retry creates a new run with fresh attempts and Cancel stops a run but keeps its folder, branch and pull request
+- Stage run monitor: worker status and logs. A failed or stopped run (a parked run at go-live) opens a detail view with the reason and timeline, the last log lines and the actions Resume, Rerun from scratch and End run; Retry creates a new run with fresh attempts and Cancel stops a run but keeps its folder, branch and pull request
 - Retention: an overdue badge and a "Run retention now" button
 - QC and report viewer
 - Intake review: edit client answers (an edit overwrites, with no history), send a round back to the agent for another review, add or remove questions, and accept intake
