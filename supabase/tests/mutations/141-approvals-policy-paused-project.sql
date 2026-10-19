@@ -1,0 +1,2 @@
+-- mutation: the owner may approve in a paused project
+alter policy owner_add_approval on approvals with check (private.is_owner() and approved_by = auth.uid() and exists (select 1 from artifacts a join projects p on p.id = a.project_id where a.id = artifact_id and (role = 'owner' or (a.status <> 'superseded' and ((a.type = 'prd' and p.stage = 'requirements') or (a.type = 'prototype' and p.stage = 'prototype' and private.artifact_has_owner_approval(a.id)))))));

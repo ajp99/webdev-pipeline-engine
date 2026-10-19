@@ -69,7 +69,7 @@ export type Queue = {
 
 /**
  * Which artifact type's approvals gate each stage. Must match the CASE in advance_stage()
- * (migration 0002); a test compares the two.
+ * (migration 0001); a test compares the two.
  */
 export const STAGE_ARTIFACT: Partial<Record<Stage, string>> = {
   intake: 'intake_record',
