@@ -17,8 +17,8 @@ function under(pathname: string, prefix: string): boolean {
 
 /**
  * Decides what a request may see.
- * `signedIn` means a validated Supabase user; `role` comes from the owners and clients tables
- * (owner wins if both exist, which the database should never allow in practice).
+ * `signedIn` means a validated Supabase user; `role` comes from the owners table (until go-live
+ * the owner is the only login, D-298; a client role returns with the client dashboard, G15).
  */
 export function decideAccess(signedIn: boolean, role: Role, pathname: string): Access {
   const isLogin = under(pathname, LOGIN);

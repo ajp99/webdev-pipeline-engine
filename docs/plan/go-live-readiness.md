@@ -32,4 +32,4 @@ Development is dev-only until go-live (D-263): a local Supabase, no hosted proje
 - The email path for the dev-only period (G2, G11).
 - Whether the source of truth for status tables is `PROGRESS.md` or a new file (task P1-T14 ships the lint first).
 - The exact point of the pilot, decided when the walking skeleton is reviewed (task P2-T23).
-- Small drift found by the review of #22, to fix with the next change of each file: spec 10 says the claim function skips projects "with a running or waiting run" (add `cancel_requested`, spec edit needs a proposal); the comment in `apps/web/src/lib/routing.ts` still mentions the clients table; the comment on `owners` says rows are added with the service role only, but the owner policy can write them (migration comment, next migration PR).
+- Small drift still open: the comment on `owners` says rows are added with the service role only, but the owner policy can write them (a migration comment, fix in the next migration PR).
