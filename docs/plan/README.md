@@ -21,6 +21,6 @@ Task IDs look like `P2-T04` (phase 2, task 4). A task marked `[-]` is moved to g
 ## Open items for the owner
 
 - **CI** starts in Phase 1 (task P1-T12, D-287). Branch protection stays the owner's call. Until the workflow is merged and green, an agent's report that tests pass is unverified.
-- **Pipeline email account:** the email path for the dev-only period is undecided; the Gmail app password for client and owner emails and Supabase's custom SMTP (tasks P2-T11 and P2-T12) is go-live item G2.
+- **Pipeline email account:** none during the dev-only period; the owner sees ready gates and failed runs in the console (D-314). The Gmail app password for client and owner emails and Supabase's custom SMTP (tasks P2-T11 and P2-T12) is go-live item G2.
 - **Hosting and go-live:** development is dev-only on a local Supabase (D-263). Hosting, plans, client email and the other deferred items are in [go-live-readiness.md](go-live-readiness.md), a Phase 5 gate item (D-296).
 - Proposals `2026-10-08-phase-1-spec-alignment.md`, `2026-10-09-pr6-review-changes.md` and `2026-10-13-questionnaire-answers.md` are accepted and applied to the spec (PR #8) and `DECISIONS.md` (D-229 to D-248). Proposal `2026-10-15-review-panel-decisions.md` is accepted; its decisions are D-263 to D-296 and its spec edits are applied in the spec-only PR that follows. The agent asks at the start and end of each phase whether to apply any open proposals.
