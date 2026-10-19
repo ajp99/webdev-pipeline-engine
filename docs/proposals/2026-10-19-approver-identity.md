@@ -1,6 +1,6 @@
 # Proposal: Approver identity as an email snapshot without a foreign key (S7)
 
-- **Status:** open
+- **Status:** accepted (2026-10-19)
 - **Date:** 2026-10-19
 - **Raised by:** Claude Code, from the owner's answer in the breakage review
 - **Task or spec reference:** spec 10 (`approvals`), D-309
@@ -24,4 +24,4 @@ Spec 10 only, one sentence. The squash migration and its mutation (a deleted giv
 
 ## Owner decision
 
-The owner chose "email snapshot only" in chat on 2026-10-19; the exact wording above awaits confirmation.
+The owner chose "email snapshot only" in chat on 2026-10-19 and, after the plain-language explanation, kept the proposed sentence, including that a row whose giver is deleted stops counting. Applied in the same PR as the plan changes (#21), as the one-time exception granted by the owner on 2026-10-19; the spec file changed is `docs/spec/10-data-model.md` only.
