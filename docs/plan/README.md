@@ -4,14 +4,14 @@ Five phases, built in order. Each phase is closed by one gate that only the owne
 
 | Phase | Name | Gate | Status |
 | --- | --- | --- | --- |
-| 1 | [Foundation](phase-1-foundation.md) | An approved dummy artifact moves a project stage | in progress |
-| 2a | [Intake and runner](phase-2-intake-and-prd.md) | A test client's intake runs through the real stage runner and intake agent to an accepted intake | not started |
-| 2b | [PRD and client review](phase-2-intake-and-prd.md) | A test client signs off a PRD | not started |
+| 1 | [Foundation](phase-1-foundation.md) | Migrations applied to a real local Supabase, checks pass, an approved dummy artifact moves a project stage | in progress |
+| 2a | [Intake and runner](phase-2-intake-and-prd.md) | A fictional client's intake, entered by the owner, runs through the real stage runner and intake agent to an accepted intake | not started |
+| 2b | [PRD and client review](phase-2-intake-and-prd.md) | The owner records a fictional client's sign-off of a PRD | not started |
 | 3 | [Plan and prototype](phase-3-plan-and-prototype.md) | Prototype approved from screenshots | not started |
 | 4 | [Build rounds](phase-4-build-rounds.md) | A full round runs with its backlog triaged | not started |
 | 5 | [QC, report, handover](phase-5-qc-report-handover.md) | A pilot site is handed over | not started |
 
-Task IDs look like `P2-T04` (phase 2, task 4). Tasks and acceptance criteria were drafted from the spec and the decisions in `DECISIONS.md`, and are open to the owner's edits.
+Task IDs look like `P2-T04` (phase 2, task 4). A task marked `[-]` is moved to go-live and listed in [go-live-readiness.md](go-live-readiness.md); it is not pending in its phase. Tasks and acceptance criteria were drafted from the spec and the decisions in `DECISIONS.md`, and are open to the owner's edits.
 
 ## After the pilot (not scheduled)
 

@@ -4,7 +4,7 @@
 
 **Goal:** Database, authentication, tooling, and an owner console shell, with the approval and stage-advance rules enforced in the database.
 
-**Gate (owner accepts this phase when):** An approved dummy artifact moves a project stage.
+**Gate (owner accepts this phase when) (D-297):** The migrations are applied to a real local Supabase, the database checks pass there (P1-T02, P1-T08) and an approved dummy artifact moves a project stage (P1-T09). P1-T05 and P1-T06 become the first tasks of Phase 2a; P1-T10 and P1-T15 move to go-live (G6). P1-T11 and P1-T16 are owner actions that do not block the gate. P1-T17 closes with the independent review of the squashed baseline.
 
 **Spec to read:** [10-data-model.md](../spec/10-data-model.md), [12-security.md](../spec/12-security.md), [03-pipeline-and-gates.md](../spec/03-pipeline-and-gates.md), [11-owner-console-and-client-dashboard.md](../spec/11-owner-console-and-client-dashboard.md)
 
@@ -24,10 +24,10 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P1-T04 Stage and gate consistency test**  
   Acceptance: A test parses `stages.yaml` and `gates.yaml` and fails if the SQL `stage` enum or the `gate_config` seed rows disagree with them. TypeScript types come from the generated database types (P1-T03); the console and `advance_stage()` read gate behavior from `gate_config`. No code generator.
 
-- [ ] **P1-T05 Authentication and roles**  
-  Acceptance: Owner login (email + password); the owner's row in `owners` is inserted by a service-role bootstrap script; client login. Unauthenticated users are redirected; a client cannot reach owner routes.
+- [ ] **P1-T05 Authentication and roles (moves to 2a, owner login only, D-298)**  
+  Acceptance: Owner login (email + password); the owner's row in `owners` is inserted by a service-role bootstrap script. Unauthenticated users are redirected. There is no client login until go-live (G15).
 
-- [ ] **P1-T06 Owner console shell**  
+- [ ] **P1-T06 Owner console shell (moves to 2a, D-297)**  
   Acceptance: Project list and approval queue pages. Each pending gate shows its type (soft, hard, client), the Accept, Feedback and Reject actions, and an overdue badge computed from `escalate_after_hours`.
 
 - [x] **P1-T07 Implement advance_stage()**  
@@ -39,7 +39,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P1-T09 Gate demonstration**  
   Acceptance: Seed script creates a dummy project and artifact. The owner clicks Accept in the console, an approval record is written, `advance_stage()` runs, and the stage changes in the UI. Record the run in `PROGRESS.md`.
 
-- [ ] **P1-T10 Encrypted backup script**  
+- [-] **P1-T10 Encrypted backup script (moved to go-live, G6)**  
   Acceptance: A script exports the database, encrypts it (the key stays in the owner's password manager, never in the repo), saves it locally and copies it to the owner's cloud drive. It runs on a schedule and on demand (for the final export before a project close), and deletes exports older than 180 days (D-222). `.gitignore` excludes exports. It points at the local database; one restore of an export into a scratch database is proved in P1-T15 (D-294). A regular restore drill is not scheduled (D-069).
 
 - [ ] **P1-T11 Confirm secret scanning and push protection**  
@@ -54,7 +54,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P1-T14 Docs lint**  
   Acceptance (D-291): `pnpm docs:lint` fails on placeholder text such as `(D-?)`, a gap or repeat in the decision IDs, and a broken relative link in the markdown files; CI runs it. Generated status and stage tables follow once the source of truth for phase status is chosen.
 
-- [ ] **P1-T15 Backup restore proof**  
+- [-] **P1-T15 Backup restore proof (moved to go-live, G6)**  
   Acceptance (D-294): `scripts/backup.sh` runs against the local database, and one encrypted export is restored into a scratch database and checked (row counts match). The result is recorded in `PROGRESS.md`.
 
 - [ ] **P1-T16 Local read-only MCP configuration**  
