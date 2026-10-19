@@ -1,6 +1,6 @@
 # Proposal: Spec follow-ups after the Phase 2a re-baseline (backups, leftover client text)
 
-- **Status:** open
+- **Status:** accepted (2026-10-19)
 - **Date:** 2026-10-19
 - **Raised by:** Claude Code, from the review after PR #20
 - **Task or spec reference:** spec 00, 15; D-297
@@ -24,4 +24,4 @@ Spec 00 and 15 only. No task, table or code change.
 
 ## Owner decision
 
-(Left blank for the owner.)
+Accepted by the owner in chat on 2026-10-19: Option A, backups are a go-live item and nothing is exported now (D-307). The two spec edits are made in their own spec-only PR.
