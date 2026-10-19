@@ -16,7 +16,7 @@ flowchart TB
   end
   subgraph machine["Owner's machine - apps/worker"]
     runner["Orchestrator: stage runner, polls the queue, holds the Supabase service key"]
-    workers["Per-run containers: Agent SDK workers, no Supabase credentials"]
+    workers["Agent SDK workers on the host (per-run containers at go-live, D-310), no Supabase credentials"]
   end
   vercel <--> supabase
   runner -->|"polls every 15-30 s"| supabase
