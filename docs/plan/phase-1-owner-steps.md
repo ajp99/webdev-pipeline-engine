@@ -9,8 +9,8 @@ Development is dev-only (D-263): everything runs on your laptop in WSL2 against 
 4. **Fill in the secrets.** `apps/web/.env.local`: the local URL and the anon key. `apps/worker/.env`: the URL, the service role key, `OWNER_EMAIL`, `OWNER_PASSWORD` (12 characters or more). Both files are gitignored.
 5. **Regenerate the database types.** `SUPABASE_DB_URL=<local connection string> scripts/gen-types.sh`. The result should be identical to the committed file.
 6. **Create your owner login.** `pnpm --filter @wpe/worker bootstrap-owner`, then delete `OWNER_PASSWORD` from `.env`.
-7. **Check sign-in (P1-T05).** `pnpm dev`, open the app, sign in as the owner. Then create a client login by hand in the local Studio (Authentication) plus a row in `clients`, sign in as that user and confirm `/owner` sends you to `/client`.
+7. **Check sign-in (P1-T05, now the first task of Phase 2a).** Do this once P1-T05 is built: `pnpm dev`, open the app and sign in as the owner. There is no client login until go-live (D-298).
 8. **Run the gate demonstration (P1-T09).** `pnpm --filter @wpe/worker seed-demo`, open Approval queue, press Accept on the demo project. The project should move from intake to requirements. Paste what you saw into `docs/plan/PROGRESS.md`.
 9. **Run the database checks on the local Supabase (P1-T08).** `supabase start`, `supabase db reset`, then the command in `supabase/tests/README.md`. Expect every check to pass, then `supabase db reset` again to clear the fixture rows.
-10. **Set up backups and prove a restore (P1-T10, P1-T15).** Follow `scripts/README.md`: age key pair (private key into the password manager), `scripts/.env.backup`, the crontab line; then restore one export into a scratch database.
+10. **Backups are moved to go-live (P1-T10, P1-T15, G6, D-297); skip this step for now.** When they return, follow `scripts/README.md`: age key pair (private key into the password manager), `scripts/.env.backup`, the crontab line; then restore one export into a scratch database.
 11. **Accept the phase.** When the gate demonstration worked, set **Status** in `phase-1-foundation.md` to `done` and update `docs/plan/README.md`.

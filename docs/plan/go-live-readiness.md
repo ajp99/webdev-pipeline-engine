@@ -22,6 +22,7 @@ Development is dev-only until go-live (D-263): a local Supabase, no hosted proje
 | [ ] | G16 | Run controls | Cancel only, by a `cancel_requested` flag. One watchdog of 20 minutes, parallel cap 1, no parked runs, no Pause or Resume, no commands table. | Add the commands table (D-249), Pause and Resume, parked runs, per-stage watchdog tiers and a higher parallel cap if real runs need them. | D-249, D-250, D-260, D-301, D-302 |
 | [ ] | G17 | Retention and erase | No `retention_until`, no retention timer, no erase function. Cancel closes the project and keeps its data. | Re-add retention, the 90-day and 180-day rules, `erase_project_data`, and decide how the handover guide's hash is checked after an erase. | D-237, D-303 |
 | [ ] | G18 | Industry templates | One generic intake template. | Add agent-drafted industry templates with owner editing and versions (old P2-T02). | D-298 |
+| [ ] | G19 | Agent isolation | Only the Builder runs in a container, with an open network. The other agents (PRD, Planner, QC, reporter) run on the host with Bash, reading client text. Accepted while every client is fictional. | Run every agent in a container with limited network (npm registry, GitHub, Anthropic API), or remove Bash from the host agents; re-run the prompt-injection fixtures (P3-T10). | D-266, D-267, D-300 |
 
 ## Open questions
 

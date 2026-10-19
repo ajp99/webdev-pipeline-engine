@@ -38,7 +38,7 @@ CreatePipeline Engine is a single-owner internal system that takes marketing-sit
 
 | Path | Contents |
 | --- | --- |
-| `apps/web` | Next.js app: owner console and client dashboard (deployed to Vercel) |
+| `apps/web` | Next.js app: owner console (the client dashboard is a go-live item, G15) |
 | `apps/worker` | Stage runner and Agent SDK workers (runs on the owner's machine) |
 | `packages/shared` | Shared stage and gate types, generated database types |
 | `supabase/migrations` | Database schema and row-level security |

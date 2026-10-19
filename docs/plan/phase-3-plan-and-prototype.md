@@ -2,7 +2,7 @@
 
 **Status:** not started
 
-**Goal:** The skills library, the master starter, the Planner, the provisioning script, the eval harness, and one prototype design shown to the client as screenshots, with owner and client approval.
+**Goal:** The skills library, the master starter, the Planner, the provisioning script, the eval harness, and one prototype design shown to the client as screenshots, with owner approval and the client's approval recorded by the owner (D-298).
 
 **Gate (owner accepts this phase when):** Prototype approved from screenshots.
 
@@ -24,8 +24,8 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P3-T04 Prototype agent**  
   Acceptance: Builds one design of the main page from the plan, the intake design section, the brand inputs and the starter, with real copy drafted from the intake (every factual claim in a `<Claim>` marker). Pushes it to the `staging` branch with a short-lived GitHub App token. The worker builds the site and serves it locally, then takes full-page desktop and mobile screenshots with Playwright (the owner installs the browser on their machine). No agent self-check; no live preview goes to the client.
 
-- [ ] **P3-T05 Two-step prototype approval**  
-  Acceptance: The owner approves first (soft gate), after reviewing the screenshots and the live preview in Vercel while logged in. The client then sees the screenshots only and can Approve, or Request changes with a required note (client gate). Two approval records.
+- [ ] **P3-T05 Two-step prototype approval (client step owner-recorded, D-298)**  
+  Acceptance: The owner approves first (soft gate), after reviewing the screenshots and the live preview in Vercel while logged in. The owner then sends the screenshots to the client outside the pipeline and records the client's reply: Approve, or Request changes with a required note (client gate: role `client`, the owner as giver, a required `evidence_note`). Two approval records, the client's not earlier than the owner's.
 
 - [ ] **P3-T06 Prototype feedback**  
   Acceptance: One free-text feedback box per revision, stored as a prototype note. Notes reach the owner as raw text with the actions forward to the agent, convert to a change request, or dismiss.
@@ -43,7 +43,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Acceptance: The fixtures and their expected-output checks are written before P3-T03 starts; the harness and judge follow the Planner. Fictional client fixtures live in `evals/fixtures/`: a dental clinic, a law firm and a restaurant. A harness runs the Planner (skill selection and round plan) against them and scores the results with an Opus 5.5 judge. It runs when prompts or models change, and its scores are calibrated against the owner's spot checks. Fixtures contain no real client data. They include prompt-injection cases for the reader step (D-267). No automated check runs when a prompt or model changes before this harness exists (D-283).
 
 - [ ] **P3-T11 Phase 3 gate evidence**  
-  Acceptance: Record in `PROGRESS.md`: a manual walkthrough from a signed PRD to an approved prototype with the owner as the test client from a second email; an automated end-to-end test of the same flow with model responses stubbed; a cost report in tokens from `stage_runs`; and the Planner eval results on the 3 fixtures.
+  Acceptance: Record in `PROGRESS.md`: a manual walkthrough from a signed PRD to an approved prototype with a fictional client, the owner recording the client's approval; an automated end-to-end test of the same flow with model responses stubbed; a cost report in tokens from `stage_runs`; and the Planner eval results on the 3 fixtures.
 
 - [ ] **P3-T12 Reference-site screenshot tool**  
   Acceptance: A controlled tool opens only the URLs the client listed as reference sites (up to 3) and takes screenshots for the agent and the owner. It accepts public web addresses only (no localhost, private network ranges or cloud metadata addresses), has a short timeout, returns screenshots rather than page text, and stores them privately so they are deleted with the project's other data. Tests cover refused addresses and the timeout. This is the narrow exception to the command allowlist (D-188).
