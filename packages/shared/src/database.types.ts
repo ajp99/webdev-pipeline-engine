@@ -12,6 +12,7 @@ export type Database = {
           artifact_id: string;
           at: string;
           content_sha256: string;
+          evidence_note: string | null;
           gate_type: Database['public']['Enums']['gate_type'];
           id: string;
           role: Database['public']['Enums']['approver_role'];
@@ -23,6 +24,7 @@ export type Database = {
           artifact_id: string;
           at?: string;
           content_sha256?: string;
+          evidence_note?: string | null;
           gate_type: Database['public']['Enums']['gate_type'];
           id?: string;
           role: Database['public']['Enums']['approver_role'];
@@ -33,6 +35,7 @@ export type Database = {
           artifact_id?: string;
           at?: string;
           content_sha256?: string;
+          evidence_note?: string | null;
           gate_type?: Database['public']['Enums']['gate_type'];
           id?: string;
           role?: Database['public']['Enums']['approver_role'];
@@ -50,7 +53,6 @@ export type Database = {
       artifacts: {
         Row: {
           change_request_id: string | null;
-          client_visible: boolean;
           content: NonNullable<Json>;
           created_at: string;
           id: string;
@@ -62,7 +64,6 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           change_request_id?: string | null;
-          client_visible?: boolean;
           content?: NonNullable<Json>;
           created_at?: string;
           id?: string;
@@ -73,7 +74,6 @@ export type Database = {
         };
         Update: {
           change_request_id?: string | null;
-          client_visible?: boolean;
           content?: NonNullable<Json>;
           created_at?: string;
           id?: string;
@@ -191,39 +191,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: 'change_requests_project_id_fkey';
-            columns: ['project_id'];
-            isOneToOne: false;
-            referencedRelation: 'projects';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
-      clients: {
-        Row: {
-          created_at: string;
-          email: string;
-          id: string;
-          is_signer: boolean;
-          project_id: string;
-        };
-        ComputedFields: never;
-        Insert: {
-          created_at?: string;
-          email: string;
-          id: string;
-          is_signer?: boolean;
-          project_id: string;
-        };
-        Update: {
-          created_at?: string;
-          email?: string;
-          id?: string;
-          is_signer?: boolean;
-          project_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'clients_project_id_fkey';
             columns: ['project_id'];
             isOneToOne: false;
             referencedRelation: 'projects';
@@ -562,11 +529,8 @@ export type Database = {
       project_internal: {
         Row: {
           cancel_reason: string | null;
-          data_deleted_at: string | null;
           github_repo: string | null;
           project_id: string;
-          retention_days: number;
-          retention_until: string | null;
           round_plan: Json | null;
           token_budget: number | null;
           vercel_project_id: string | null;
@@ -574,22 +538,16 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           cancel_reason?: string | null;
-          data_deleted_at?: string | null;
           github_repo?: string | null;
           project_id: string;
-          retention_days?: number;
-          retention_until?: string | null;
           round_plan?: Json | null;
           token_budget?: number | null;
           vercel_project_id?: string | null;
         };
         Update: {
           cancel_reason?: string | null;
-          data_deleted_at?: string | null;
           github_repo?: string | null;
           project_id?: string;
-          retention_days?: number;
-          retention_until?: string | null;
           round_plan?: Json | null;
           token_budget?: number | null;
           vercel_project_id?: string | null;
@@ -926,7 +884,6 @@ export type Database = {
           heartbeat_at: string | null;
           id: string;
           model: string | null;
-          parked_at: string | null;
           project_id: string;
           prompt_hash: string | null;
           queued_at: string;
@@ -944,7 +901,6 @@ export type Database = {
           heartbeat_at?: string | null;
           id?: string;
           model?: string | null;
-          parked_at?: string | null;
           project_id: string;
           prompt_hash?: string | null;
           queued_at?: string;
@@ -961,7 +917,6 @@ export type Database = {
           heartbeat_at?: string | null;
           id?: string;
           model?: string | null;
-          parked_at?: string | null;
           project_id?: string;
           prompt_hash?: string | null;
           queued_at?: string;
@@ -1035,7 +990,6 @@ export type Database = {
         Args: { p_next: Database['public']['Enums']['stage']; p_project: string };
         Returns: undefined;
       };
-      erase_project_data: { Args: { p_project: string }; Returns: undefined };
     };
     Enums: {
       answer_action: 'next_round' | 'immediate_fix';
@@ -1072,11 +1026,11 @@ export type Database = {
         | 'queued'
         | 'running'
         | 'waiting'
+        | 'cancel_requested'
         | 'succeeded'
         | 'failed'
         | 'cancelled'
-        | 'stopped'
-        | 'parked';
+        | 'stopped';
       skill_mark: 'good' | 'bad';
       skill_scope: 'project' | 'candidate' | 'library' | 'deprecated';
       stage:
@@ -1237,11 +1191,11 @@ export const Constants = {
         'queued',
         'running',
         'waiting',
+        'cancel_requested',
         'succeeded',
         'failed',
         'cancelled',
         'stopped',
-        'parked',
       ],
       skill_mark: ['good', 'bad'],
       skill_scope: ['project', 'candidate', 'library', 'deprecated'],

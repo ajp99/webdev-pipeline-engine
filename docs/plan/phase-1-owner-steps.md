@@ -4,7 +4,7 @@ Development is dev-only (D-263): everything runs on your laptop in WSL2 against 
 
 0. **GitHub settings first (P1-T11).** Repository Settings, Code security: turn on secret scanning and push protection, and revoke the personal access token that was pasted into chat earlier.
 1. **Start the local Supabase (P1-T02).** Needs Docker in WSL2: `supabase init` once (it creates `supabase/config.toml`, which is committed), then `supabase start`. Note the local API URL, anon key and service role key it prints.
-2. **Review the schema once more.** Read `supabase/migrations/0001_init.sql` and `0002_advance_stage.sql`. Say so in the PR if anything should change; until real client data exists, migrations may be edited in place (D-289).
+2. **Review the schema once more.** Read `supabase/migrations/0001_init.sql` (the squashed baseline, D-308). Say so in the PR if anything should change; until real client data exists, migrations may be edited in place (D-289).
 3. **Apply the migrations.** `supabase db reset`. Check that the tables listed in `docs/spec/10-data-model.md` exist and set `enable_signup = false` under `[auth]` in `supabase/config.toml`, so public sign-ups are off.
 4. **Fill in the secrets.** `apps/web/.env.local`: the local URL and the anon key. `apps/worker/.env`: the URL, the service role key, `OWNER_EMAIL`, `OWNER_PASSWORD` (12 characters or more). Both files are gitignored.
 5. **Regenerate the database types.** `SUPABASE_DB_URL=<local connection string> scripts/gen-types.sh`. The result should be identical to the committed file.

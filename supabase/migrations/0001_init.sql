@@ -1,18 +1,17 @@
--- 0001_init.sql
--- Draft data model for CreatePipeline Engine. Derived from docs/spec/10-data-model.md,
--- docs/spec/12-security.md and docs/spec/gates.yaml.
+-- 0001_init.sql: the squashed baseline of the Phase 1 gate (D-297, D-308), which replaces the earlier
+-- 0001 and 0002. Derived from docs/spec/10-data-model.md, docs/spec/12-security.md and docs/spec/gates.yaml.
 --
--- DRAFT: column types and constraints are the drafter's choices where the spec lists only
--- field names; the owner has accepted the choices recorded in DECISIONS.md (see DECISIONS.md).
--- Reviewed again in the migration review of 2026-10-15 (see docs/proposals/2026-10-15-migration-review.md);
--- nothing is applied to a real project yet, so this file was changed in place.
--- Hardened again after the review panel (D-263 to D-296, task P1-T17): a private schema and an empty
--- search_path for security-definer functions, a content hash and an email snapshot on approvals,
--- gatekeeper enforcement, run tracing and one active run per project, an intake response guard.
--- Not yet implemented: Storage bucket policies for uploads (task P2-T03), client email records (P2-T11),
--- the queue claim function (task P2-T04), accept_gate, the remaining-gates function and the
--- artifact version-block trigger (P2-T18), the cancel function (P2-T20) and the worker commands
--- table (D-249).
+-- Dev-only scope (D-298, D-301, D-303, D-309): no client login, so there is no clients table, signer rule,
+-- client_visible flag or client row-level security; the owner records a client-gate approval with a
+-- required evidence_note. There are no parked runs, no worker_commands table and no retention or erase
+-- (go-live items G15 to G17). A run can be cancel_requested (D-301). approvals keeps the giver's id
+-- without a foreign key beside an email snapshot (D-309).
+-- Kept from the hardening of P1-T17: a private schema and an empty search_path for security-definer
+-- functions, a content hash and an email snapshot on approvals, gatekeeper enforcement in advance_stage(),
+-- run tracing and one active run per project.
+-- Not yet implemented: Storage bucket policies for uploads (task P2-T03), the queue claim function
+-- (task P2-T04), accept_gate, the remaining-gates function and the artifact version-block trigger
+-- (P2-T18), and the cancel function (P2-T20).
 
 -- Supabase gives anon (and authenticated) table and function privileges by default and relies on
 -- row-level security alone. anon is never used by this app, so new tables and functions in this
@@ -53,10 +52,9 @@ create type template_status as enum ('draft', 'approved', 'archived');
 -- D-041: status lifecycles as enums (values proposed by the drafter, accepted by the owner).
 create type round_status as enum ('planned', 'building', 'in_review', 'approved');
 -- D-130, D-132: a run waits for the owner's answer to a risky-command request and keeps its slot.
--- 'stopped' is for runs the no-progress watchdog stops (D-232). 'parked' is a run that waited too
--- long for an answer: it gave up its slot but keeps its working folder and branch and can be resumed
--- (stage_runs.parked_at); 'waiting' still holds the slot.
-create type run_status as enum ('queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled', 'stopped', 'parked');
+-- 'stopped' is for runs the no-progress watchdog stops (D-232). 'cancel_requested' is a running run the
+-- owner cancelled: the worker aborts it and marks it cancelled (D-301); it still holds the slot.
+create type run_status as enum ('queued', 'running', 'waiting', 'cancel_requested', 'succeeded', 'failed', 'cancelled', 'stopped');
 create type run_approval_status as enum ('pending', 'approved', 'denied');
 -- D-134: the owner chooses per ask-client answer whether it waits or triggers an immediate fix.
 create type answer_action as enum ('next_round', 'immediate_fix');
@@ -92,12 +90,8 @@ language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.owners where id = auth.uid())
 $$;
 
-create function private.is_service_role() returns boolean
-language sql stable set search_path = '' as $$
-  select coalesce(auth.role() = 'service_role', false)
-$$;
-revoke all on function private.is_owner(), private.is_service_role() from public;
-grant execute on function private.is_owner(), private.is_service_role() to authenticated, service_role;
+revoke all on function private.is_owner() from public;
+grant execute on function private.is_owner() to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- Tables
@@ -141,11 +135,6 @@ create table project_internal (
   -- progress bar with no warnings.
   token_budget bigint,
   round_plan jsonb,
-  -- D-237: set by the function that closes or cancels a project: closed_at plus retention_days.
-  retention_days int not null default 90 check (retention_days between 1 and 3650),
-  retention_until timestamptz,
-  -- D-169: set once uploads, intake data and run logs are deleted (erase_project_data()).
-  data_deleted_at timestamptz,
   -- D-237: why the owner cancelled the project; required by the cancel function (P2-T20).
   cancel_reason text,
   constraint cancel_reason_not_blank check (cancel_reason is null or length(btrim(cancel_reason)) > 0)
@@ -161,26 +150,6 @@ $$;
 revoke all on function private.create_project_internal() from public;
 create trigger projects_create_internal after insert on projects
   for each row execute function private.create_project_internal();
-
-create table clients (
-  id uuid primary key references auth.users (id) on delete cascade,
-  email text not null,
-  project_id uuid not null references projects (id) on delete cascade,
-  -- D-238: one named signer per project. Only the signer's approval counts at a client gate.
-  -- The owner chooses the signer; a client cannot change it (see the clients write guard below).
-  is_signer boolean not null default false,
-  created_at timestamptz not null default now()
-);
-create index clients_project_idx on clients (project_id);
-create unique index clients_one_signer on clients (project_id) where is_signer;
-
--- The project a logged-in client belongs to. A project can have several client logins.
-create function private.client_project_id() returns uuid
-language sql stable security definer set search_path = '' as $$
-  select project_id from public.clients where id = auth.uid()
-$$;
-revoke all on function private.client_project_id() from public;
-grant execute on function private.client_project_id() to authenticated, service_role;
 
 -- One row per intake round (round 1 is the template; later rounds are follow-ups).
 -- Clients write answers only while a round is 'open' (D-079). The agent's batch review sets
@@ -240,9 +209,6 @@ create table artifacts (
   version int not null default 1,
   content jsonb not null default '{}'::jsonb,
   status artifact_status not null default 'draft',
-  -- D-063: not in the spec field list. Needed so clients see only the PRD and prototype,
-  -- never internal plans.
-  client_visible boolean not null default false,
   created_at timestamptz not null default now(),
   unique (project_id, type, version),
   -- Lets comments and PRD feedback tie an artifact to the same project (composite foreign keys).
@@ -253,22 +219,26 @@ create index artifacts_project_idx on artifacts (project_id);
 create table approvals (
   id uuid primary key default gen_random_uuid(),
   artifact_id uuid not null references artifacts (id),
-  -- Becomes null only when the person's login is deleted (the log outlives the account); see
-  -- guard_approval_update(). A null giver never counts as a valid approval.
-  approved_by uuid references auth.users (id) on delete set null,
-  -- D-269: a snapshot of the giver's email, written by the database; it stays when the login is deleted.
+  -- D-309: the giver's user id, kept as plain data with no foreign key so the log outlives the login.
+  -- An approval whose giver is no longer in owners never counts (approval_is_valid).
+  approved_by uuid,
+  -- D-269: a snapshot of the giver's email, written by the database.
   approved_by_email text,
   role approver_role not null,
   gate_type gate_type not null,
-  -- Stamped by the database when a row is written through the API (stamp_approval_time, 0002).
+  -- Stamped by the database when a row is written through the API (stamp_approval_time).
   at timestamptz not null default now(),
   -- D-265: the SHA-256 of the artifact's content when it was approved, written by the database. The
   -- empty default only keeps the generated insert type optional; the trigger replaces it and the
   -- check below refuses anything that is not a hash.
   content_sha256 text not null default '',
+  -- D-298: until go-live the owner records a client-gate approval on the client's behalf and names the
+  -- channel here (for example "email, 18 Oct"). The owner is the giver of every approval row.
+  evidence_note text,
   constraint content_sha256_is_hex check (content_sha256 ~ '^[0-9a-f]{64}$'),
   -- Client approvals use the client gate; owner approvals use soft or hard.
   constraint role_matches_gate check ((role = 'client') = (gate_type = 'client')),
+  constraint client_approval_needs_evidence check (role <> 'client' or length(btrim(coalesce(evidence_note, ''))) > 0),
   -- The same person approves the same gate on the same version once.
   constraint approvals_once unique (artifact_id, gate_type, approved_by)
 );
@@ -381,8 +351,6 @@ create table stage_runs (
   queued_at timestamptz not null default now(),
   claimed_by text,
   heartbeat_at timestamptz,
-  -- Set when the run is parked (status 'parked'); cleared when it is resumed as a new run.
-  parked_at timestamptz,
   attempts int not null default 0,
   tokens_used bigint not null default 0,
   started_at timestamptz,
@@ -398,9 +366,9 @@ create table stage_runs (
   unique (id, trace_id)
 );
 create index stage_runs_project_idx on stage_runs (project_id);
--- D-278: one running or waiting run per project; queued and parked runs do not hold the slot.
+-- D-278: one running, waiting or cancel_requested run per project; a queued run does not hold the slot.
 create unique index stage_runs_one_active_per_project on stage_runs (project_id)
-  where status in ('running', 'waiting');
+  where status in ('running', 'waiting', 'cancel_requested');
 create index stage_runs_queue_idx on stage_runs (queued_at) where status = 'queued';
 
 -- D-084, D-085: run logs are text rows; deleted with the project's data 90 days after close.
@@ -510,18 +478,10 @@ insert into gate_config (stage, gate_type, gatekeeper) values
 -- ---------------------------------------------------------------------------
 -- Guards
 -- ---------------------------------------------------------------------------
--- The approval log is append-only. The one exception: when a login is deleted, the foreign key
--- action clears approved_by (an update fired from inside that action, so trigger depth is 2 or
--- more). A direct update that does the same is refused.
+-- The approval log is append-only: no update and no delete, for any role.
 create function guard_approval_change() returns trigger
 language plpgsql as $$
 begin
-  if tg_op = 'UPDATE' and pg_trigger_depth() > 1
-     and old.approved_by is not null and new.approved_by is null
-     and (new.id, new.artifact_id, new.role, new.gate_type, new.at, new.approved_by_email, new.content_sha256)
-         is not distinct from (old.id, old.artifact_id, old.role, old.gate_type, old.at, old.approved_by_email, old.content_sha256) then
-    return new;
-  end if;
   raise exception 'approvals is append-only';
 end;
 $$;
@@ -591,31 +551,11 @@ $$;
 create trigger gate_config_guard before insert or update or delete on gate_config
   for each row execute function guard_gate_config();
 
--- A client changes only the answer of an intake response, not its round, question or origin (D-270).
-create function guard_intake_response_update() returns trigger
-language plpgsql set search_path = '' as $$
-begin
-  if not (private.is_owner() or private.is_service_role())
-     and (new.id, new.project_id, new.round, new.question_id, new.asked_by)
-         is distinct from (old.id, old.project_id, old.round, old.question_id, old.asked_by) then
-    raise exception 'clients may only change the answer';
-  end if;
-  new.updated_at := now();
-  return new;
-end;
-$$;
-create trigger intake_response_update_guard before update on intake_responses
-  for each row execute function guard_intake_response_update();
-
 -- A version of an artifact never changes: id, project, type, version and content are fixed once the
--- row is written (status and client_visible still change). Feedback makes a new version. The only
--- exception is erase_project_data(), which blanks a handover guide after the retention period.
+-- row is written (status still changes). Feedback makes a new version.
 create function guard_artifact_immutable() returns trigger
 language plpgsql as $$
 begin
-  if coalesce(current_setting('app.erase_data', true), '') = 'on' then
-    return new;
-  end if;
   if (new.id, new.project_id, new.type, new.version, new.content, new.created_at)
      is distinct from (old.id, old.project_id, old.type, old.version, old.content, old.created_at) then
     raise exception 'an artifact version is immutable; write a new version instead';
@@ -665,28 +605,176 @@ create trigger projects_stage_guard
   before update of stage on projects
   for each row execute function guard_stage_change();
 
--- STUB (task P1-T07): must verify that every gate for the current stage in gate_config
--- (project override first, then global default) has a matching approval record, and that
--- p_next is the next stage in docs/spec/stages.yaml, before changing the stage.
+-- A project moves forward only through this function, only one stage at a time (the order of the
+-- stage enum is the order in docs/spec/stages.yaml), and only while it is active.
+--
+-- Which artifact's approvals gate each stage (artifacts.type):
+--   intake=intake_record  requirements=prd  plan=plan  prototype=prototype
+--   qc_report=report  deploy_prep=deployment_checklist  handover=handover_guide
+--   build_rounds: one round_summary artifact per round (version = round number), see below.
+-- Approvals on any other artifact type (for example release_note, D-223) never count.
+--
+-- Required approvals for a stage = the gate types in gate_config for that stage: the global
+-- defaults plus any gate types the project adds with its own rows. A project row never removes a
+-- global gate; it can only add one or change its gatekeeper and deadline.
+-- The approvals must sit on the newest version of the artifact (not superseded). When a stage has
+-- an owner gate and a client gate (prototype), the client approval must come at or after an owner
+-- approval on the same version.
+--
+-- build_rounds: leaves only when the project has at least one build round and every build round
+-- (change-request mini-rounds are ignored) has status approved and a soft approval on its newest
+-- round_summary. A round_summary artifact carries {"round": N} in its content; Feedback on a round
+-- makes a new version for the same N, and versions are unique per project, so they rise across rounds.
+--
+-- handover -> closed also sets status closed and close_reason completed in the same call (D-220),
+-- through close_project().
+-- An approval counts only when its giver is an owner; the owner records the client's approval on the
+-- client's behalf, with an evidence note (D-298).
+create function private.approval_is_valid(ap public.approvals, p_project uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  -- D-298: every approval is given by an owner; a client-role row is the owner's record of the client's
+  -- approval (its evidence_note is required by a check). A giver who is no longer in owners never counts.
+  select exists (select 1 from public.owners o where o.id = ap.approved_by)
+$$;
+-- Only advance_stage() (which runs as its owner) calls it, so no API role needs execute.
+revoke all on function private.approval_is_valid(public.approvals, uuid) from public, anon, authenticated, service_role;
+
+-- An approval written through the API gets the database time as its time. Rows written by the
+-- SQL editor or a migration (current_user is postgres) keep the time they carry.
+create or replace function stamp_approval_time() returns trigger
+language plpgsql as $$
+begin
+  if current_user in ('anon', 'authenticated', 'service_role') then
+    new.at := now();
+  end if;
+  return new;
+end;
+$$;
+create trigger approvals_stamp_time before insert on approvals
+  for each row execute function stamp_approval_time();
+
+-- The client's prototype approval is recorded only after the owner approved that version.
+create or replace function private.artifact_has_owner_approval(p_artifact uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.approvals ap where ap.artifact_id = p_artifact and ap.role = 'owner')
+$$;
+revoke all on function private.artifact_has_owner_approval(uuid) from public, anon;
+grant execute on function private.artifact_has_owner_approval(uuid) to authenticated, service_role;
+
 create function advance_stage(p_project uuid, p_next stage) returns void
 language plpgsql security definer set search_path = '' as $$
+declare
+  v         public.projects%rowtype;
+  stages    public.stage[] := enum_range(null::public.stage);
+  idx       int;
+  atype     public.artifact_type;
+  art       public.artifacts%rowtype;
+  gt        public.gate_type;
+  gk        public.approver_role;
+  req       public.gate_type[];
 begin
   if not private.is_owner() then
     raise exception 'advance_stage: not allowed';
   end if;
-  raise exception 'advance_stage: approval checks not implemented yet (P1-T07)';
-  -- Once implemented, the update runs like this:
-  --   perform set_config('app.stage_advance', 'on', true);
-  --   update projects set stage = p_next where id = p_project;
+
+  select * into v from public.projects where id = p_project for update;
+  if not found then
+    raise exception 'advance_stage: project not found';
+  end if;
+  if v.status <> 'active' then
+    raise exception 'advance_stage: project is %, only an active project can advance', v.status;
+  end if;
+  if v.stage = 'closed' then
+    raise exception 'advance_stage: project is already closed';
+  end if;
+
+  idx := array_position(stages, v.stage);
+  if p_next is distinct from stages[idx + 1] then
+    raise exception 'advance_stage: % is not the stage after %', p_next, v.stage;
+  end if;
+
+  if v.stage = 'build_rounds' then
+    if not exists (select 1 from public.rounds where project_id = p_project and change_request_id is null) then
+      raise exception 'advance_stage: no build rounds exist yet';
+    end if;
+    if exists (
+      select 1 from public.rounds r
+      where r.project_id = p_project and r.change_request_id is null
+        and (r.status <> 'approved'
+          or not exists (
+            select 1 from public.artifacts a join public.approvals ap on ap.artifact_id = a.id
+            where a.project_id = p_project and a.type = 'round_summary'
+              and a.content ->> 'round' = r.number::text
+              and a.status <> 'superseded' and ap.gate_type = 'soft'
+              and private.approval_is_valid(ap, p_project)
+              and a.version = (select max(b.version) from public.artifacts b
+                               where b.project_id = p_project and b.type = 'round_summary'
+                                 and b.content ->> 'round' = r.number::text)))
+    ) then
+      raise exception 'advance_stage: every build round must be approved with a soft approval on its newest round_summary';
+    end if;
+  else
+    atype := case v.stage
+      when 'intake'       then 'intake_record'
+      when 'requirements' then 'prd'
+      when 'plan'         then 'plan'
+      when 'prototype'    then 'prototype'
+      when 'qc_report'    then 'report'
+      when 'deploy_prep'  then 'deployment_checklist'
+      when 'handover'     then 'handover_guide'
+    end;
+
+    select * into art from public.artifacts
+      where project_id = p_project and type = atype
+      order by version desc limit 1;
+    if not found or art.status = 'superseded' then
+      raise exception 'advance_stage: no current % artifact to approve for stage %', atype, v.stage;
+    end if;
+
+    select array_agg(distinct g.gate_type) into req
+      from public.gate_config g
+      where g.stage = v.stage and (g.project_id is null or g.project_id = p_project);
+
+    -- Each gate needs a valid approval given in the role of its effective gatekeeper (the project's own
+    -- row first, then the global default, D-272).
+    foreach gt in array req loop
+      select g.gatekeeper into gk from public.gate_config g
+        where g.stage = v.stage and g.gate_type = gt and (g.project_id is null or g.project_id = p_project)
+        order by g.project_id nulls last limit 1;
+      if not exists (select 1 from public.approvals ap
+                     where ap.artifact_id = art.id and ap.gate_type = gt and ap.role = gk
+                       and private.approval_is_valid(ap, p_project)) then
+        raise exception 'advance_stage: missing % approval on % v% for stage %', gt, atype, art.version, v.stage;
+      end if;
+    end loop;
+
+    if 'client' = any (req) and array_length(req, 1) > 1 then
+      if not exists (
+        select 1 from public.approvals c join public.approvals o on o.artifact_id = c.artifact_id
+        where c.artifact_id = art.id and c.gate_type = 'client' and o.gate_type <> 'client' and o.at <= c.at
+          and private.approval_is_valid(c, p_project) and private.approval_is_valid(o, p_project)
+      ) then
+        raise exception 'advance_stage: the client approval must come after an owner approval';
+      end if;
+    end if;
+  end if;
+
+  perform set_config('app.stage_advance', 'on', true);
+  if v.stage = 'handover' then
+    update public.projects set stage = p_next where id = p_project;
+    perform private.close_project(p_project, 'completed');
+  else
+    update public.projects set stage = p_next where id = p_project;
+  end if;
+  perform set_config('app.stage_advance', 'off', true);
 end;
 $$;
-revoke all on function advance_stage(uuid, stage) from public, anon;
 grant execute on function advance_stage(uuid, stage) to authenticated;
 
 -- The one place a project is closed (D-237). Completed closes come from advance_stage() at the end
--- of handover; the cancel function (P2-T20) calls it with 'cancelled'. Sets status, close_reason and
--- retention_until (closed now plus retention_days). A completed close is refused while an accepted
--- change request has not been deployed. Not callable from the API.
+-- of handover; the cancel function (P2-T20) calls it with 'cancelled'. Sets status and close_reason.
+-- A completed close is refused while an accepted change request has not been deployed. Not callable
+-- from the API. There is no retention date until go-live (D-303, G17).
 create function private.close_project(p_project uuid, p_reason public.close_reason) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
@@ -696,96 +784,15 @@ begin
     raise exception 'close_project: an accepted change request is not deployed yet';
   end if;
   update public.projects set status = 'closed', close_reason = p_reason where id = p_project;
-  update public.project_internal set retention_until = now() + make_interval(days => retention_days)
-    where project_id = p_project;
 end;
 $$;
 revoke all on function private.close_project(uuid, public.close_reason) from public, anon, authenticated, service_role;
-
--- The retention job's database step (D-169, spec 15-operations). Allowed for a closed project
--- whose retention_until has passed: deletes uploads rows, intake rounds and answers, run logs and
--- the project's email_log rows, blanks the handover guide, and stamps data_deleted_at. It leaves approvals, other artifacts and
--- the project row alone, so the audit trail stays. The caller deletes the storage objects first
--- (it reads the paths from uploads); this function only removes the rows.
-create function erase_project_data(p_project uuid) returns void
-language plpgsql security definer set search_path = '' as $$
-declare i public.project_internal%rowtype;
-begin
-  if not (private.is_owner() or private.is_service_role()) then
-    raise exception 'erase_project_data: not allowed';
-  end if;
-  select * into i from public.project_internal where project_id = p_project for update;
-  if not found then
-    raise exception 'erase_project_data: project not found';
-  end if;
-  if not exists (select 1 from public.projects where id = p_project and status = 'closed') then
-    raise exception 'erase_project_data: the project is not closed';
-  end if;
-  if i.retention_until is null or i.retention_until > now() then
-    raise exception 'erase_project_data: the retention period has not ended';
-  end if;
-  delete from public.uploads where project_id = p_project;
-  delete from public.intake_responses where project_id = p_project;
-  delete from public.intake_rounds where project_id = p_project;
-  delete from public.run_logs where run_id in (select id from public.stage_runs where project_id = p_project);
-  delete from public.email_log where project_id = p_project;
-  perform set_config('app.erase_data', 'on', true);
-  update public.artifacts set content = '{}'::jsonb where project_id = p_project and type = 'handover_guide';
-  perform set_config('app.erase_data', 'off', true);
-  update public.project_internal set data_deleted_at = now() where project_id = p_project;
-end;
-$$;
-revoke all on function erase_project_data(uuid) from public, anon;
-grant execute on function erase_project_data(uuid) to authenticated, service_role;
-
--- A client may only change client_answer on a backlog item.
-create function guard_backlog_client_update() returns trigger
-language plpgsql as $$
-begin
-  if private.is_owner() or private.is_service_role() then
-    return new;
-  end if;
-  if (new.id, new.project_id, new.round, new.question, new.context, new.assumption,
-      new.owner_answer, new.ask_client, new.answer_action, new.status, new.created_at)
-     is distinct from
-     (old.id, old.project_id, old.round, old.question, old.context, old.assumption,
-      old.owner_answer, old.ask_client, old.answer_action, old.status, old.created_at) then
-    raise exception 'clients may only change client_answer';
-  end if;
-  return new;
-end;
-$$;
-create trigger backlog_client_update_guard
-  before update on backlog_items
-  for each row execute function guard_backlog_client_update();
-
--- A client may only submit or reopen a round (open <-> submitted); the review is not theirs.
-create function guard_intake_round_client_update() returns trigger
-language plpgsql as $$
-begin
-  if private.is_owner() or private.is_service_role() then
-    return new;
-  end if;
-  if (new.id, new.project_id, new.round, new.reviewed_at)
-     is distinct from (old.id, old.project_id, old.round, old.reviewed_at) then
-    raise exception 'clients may only submit or reopen a round';
-  end if;
-  if new.status = 'submitted' and old.status = 'open' then
-    new.submitted_at := now();
-  end if;
-  return new;
-end;
-$$;
-create trigger intake_round_client_update_guard
-  before update on intake_rounds
-  for each row execute function guard_intake_round_client_update();
 
 -- ---------------------------------------------------------------------------
 -- Row-level security
 -- ---------------------------------------------------------------------------
 alter table owners            enable row level security;
 alter table projects          enable row level security;
-alter table clients           enable row level security;
 alter table intake_templates  enable row level security;
 alter table intake_rounds     enable row level security;
 alter table intake_responses  enable row level security;
@@ -813,7 +820,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'owners', 'projects', 'clients', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
+    'owners', 'projects', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
     'rounds', 'backlog_items', 'comments', 'change_requests', 'qc_runs',
     'skills_registry', 'stage_runs', 'gate_config', 'skill_uses',
     'intake_rounds', 'run_logs', 'owner_notes', 'prd_feedback', 'run_approvals', 'email_log',
@@ -826,181 +833,31 @@ begin
   end loop;
 end $$;
 
--- Approvals: the owner reads them and adds their own owner-role approvals on an artifact of an
--- active project; nothing else. Update and delete policies exist only so that the append-only
--- trigger answers with a clear error instead of silently touching zero rows.
+-- Approvals: the owner reads them and adds their own approvals on an artifact of an active project;
+-- nothing else. A client-gate approval is the owner's record of the client's approval (D-298): its
+-- evidence_note is required by a check, the PRD only while the stage is requirements, the prototype only
+-- while the stage is prototype and after the owner approved that version. Update and delete policies
+-- exist only so that the append-only trigger answers with a clear error instead of silently touching
+-- zero rows.
 create policy owner_read_approvals on approvals
   for select to authenticated using (private.is_owner());
 create policy owner_add_approval on approvals
   for insert to authenticated with check (
-    private.is_owner() and role = 'owner' and gate_type <> 'client' and approved_by = auth.uid()
+    private.is_owner() and approved_by = auth.uid()
     and exists (select 1 from artifacts a join projects p on p.id = a.project_id
-                where a.id = artifact_id and p.status = 'active')
+                where a.id = artifact_id and p.status = 'active'
+                  and (role = 'owner'
+                    or (a.status <> 'superseded'
+                        and ((a.type = 'prd' and p.stage = 'requirements')
+                          or (a.type = 'prototype' and p.stage = 'prototype'
+                              and private.artifact_has_owner_approval(a.id))))))
   );
 create policy owner_update_approvals on approvals
   for update to authenticated using (private.is_owner());
 create policy owner_delete_approvals on approvals
   for delete to authenticated using (private.is_owner());
 
--- Clients: only their own project's client-facing rows.
--- D-216: client writes are accepted only while the project is 'active' (not paused or closed).
--- D-217: each write is also tied to the stage it belongs to.
--- D-216: after close, clients read only the handover guide; their projects and clients rows stay
--- readable so they can still log in.
-create function private.client_project_in(p_stages public.stage[]) returns boolean
-language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1 from public.projects p
-    where p.id = private.client_project_id() and p.status = 'active' and p.stage = any (p_stages)
-  )
-$$;
-create function private.client_project_not_closed() returns boolean
-language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1 from public.projects p
-    where p.id = private.client_project_id() and p.status <> 'closed'
-  )
-$$;
-revoke all on function private.client_project_in(public.stage[]) from public;
-revoke all on function private.client_project_not_closed() from public;
-grant execute on function private.client_project_in(public.stage[]) to authenticated, service_role;
-grant execute on function private.client_project_not_closed() to authenticated, service_role;
-
-create policy client_read_own_project on projects
-  for select to authenticated using (id = private.client_project_id());
-
-create policy client_read_self on clients
-  for select to authenticated using (id = auth.uid());
-
-create policy client_read_rounds on intake_rounds
-  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
--- Submit or reopen only: the trigger above blocks every other change.
-create policy client_submit_round on intake_rounds
-  for update to authenticated
-  using (project_id = private.client_project_id() and status in ('open', 'submitted')
-         and private.client_project_in(array['intake']::stage[]))
-  with check (project_id = private.client_project_id() and status in ('open', 'submitted')
-              and private.client_project_in(array['intake']::stage[]));
-
-create policy client_read_responses on intake_responses
-  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
-create policy client_write_responses on intake_responses
-  for insert to authenticated with check (
-    project_id = private.client_project_id()
-    and exists (select 1 from intake_rounds r
-                where r.project_id = intake_responses.project_id
-                  and r.round = intake_responses.round and r.status = 'open')
-    and private.client_project_in(array['intake']::stage[])
-  );
--- D-079: while any round is open, earlier answers can be changed too.
-create policy client_update_responses on intake_responses
-  for update to authenticated
-  using (
-    project_id = private.client_project_id()
-    and exists (select 1 from intake_rounds r
-                where r.project_id = intake_responses.project_id and r.status = 'open')
-    and private.client_project_in(array['intake']::stage[])
-  )
-  with check (project_id = private.client_project_id());
-
-create policy client_read_uploads on uploads
-  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
--- D-217, D-218: uploads are added and deleted only while an intake round is open.
-create policy client_add_uploads on uploads
-  for insert to authenticated with check (
-    project_id = private.client_project_id() and scan_status = 'pending'
-    and exists (select 1 from intake_rounds r
-                where r.project_id = uploads.project_id and r.status = 'open')
-    and private.client_project_in(array['intake']::stage[])
-  );
-create policy client_delete_uploads on uploads
-  for delete to authenticated using (
-    project_id = private.client_project_id()
-    and exists (select 1 from intake_rounds r
-                where r.project_id = uploads.project_id and r.status = 'open')
-    and private.client_project_in(array['intake']::stage[])
-  );
-
--- D-216: after close the only artifact a client can read is the handover guide.
-create policy client_read_visible_artifacts on artifacts
-  for select to authenticated using (
-    project_id = private.client_project_id() and client_visible
-    and (private.client_project_not_closed() or type = 'handover_guide')
-  );
-
-create policy client_read_approvals on approvals
-  for select to authenticated using (
-    exists (select 1 from artifacts a
-            where a.id = artifact_id and a.project_id = private.client_project_id() and a.client_visible
-              and (private.client_project_not_closed() or a.type = 'handover_guide'))
-  );
--- D-217: a client approves the PRD only during requirements and the prototype only during
--- prototype. Approvals are append-only, so a stray one would be permanent.
-create policy client_add_approval on approvals
-  for insert to authenticated with check (
-    role = 'client' and gate_type = 'client' and approved_by = auth.uid()
-    and exists (select 1 from clients c where c.id = auth.uid() and c.is_signer)
-    and exists (select 1 from artifacts a
-                where a.id = artifact_id and a.project_id = private.client_project_id()
-                  and a.client_visible and a.status <> 'superseded'
-                  and ((a.type = 'prd' and private.client_project_in(array['requirements']::stage[]))
-                    or (a.type = 'prototype' and private.client_project_in(array['prototype']::stage[]))))
-  );
-
-create policy client_read_ask_client_items on backlog_items
-  for select to authenticated using (
-    project_id = private.client_project_id() and ask_client and private.client_project_not_closed()
-  );
-create policy client_answer_ask_client_items on backlog_items
-  for update to authenticated
-  using (project_id = private.client_project_id() and ask_client
-         and private.client_project_in(array['build_rounds', 'handover']::stage[]))
-  with check (project_id = private.client_project_id() and ask_client);
-
-create policy client_read_comments on comments
-  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
--- D-113 and D-118: one note per revision on the prototype (while the stage is prototype), and
--- notes on the final screenshots (shared after QC, so while the stage is deploy_prep).
-create policy client_add_comment on comments
-  for insert to authenticated with check (
-    project_id = private.client_project_id()
-    and created_by = auth.uid()
-    and owner_disposition is null
-    and (
-      (kind = 'prototype' and private.client_project_in(array['prototype']::stage[]))
-      or
-      (kind = 'final_screenshots' and private.client_project_in(array['deploy_prep']::stage[]))
-    )
-  );
-
-create policy client_read_prd_feedback on prd_feedback
-  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
-create policy client_request_prd_changes on prd_feedback
-  for insert to authenticated with check (
-    project_id = private.client_project_id()
-    and created_by = auth.uid()
-    and exists (select 1 from artifacts a
-                where a.id = artifact_id and a.project_id = private.client_project_id()
-                  and a.client_visible and a.type = 'prd')
-    and private.client_project_in(array['requirements']::stage[])
-  );
-
-create policy client_read_change_requests on change_requests
-  for select to authenticated using (project_id = private.client_project_id() and private.client_project_not_closed());
--- Go-live happens at deployment preparation, so the live period is the handover stage (D-219).
-create policy client_submit_change_request on change_requests
-  for insert to authenticated with check (
-    project_id = private.client_project_id()
-    and submitted_by = 'client' and created_by = auth.uid()
-    and impact_note is null and decision is null and status = 'received'
-    and private.client_project_in(array['handover']::stage[])
-    and exists (select 1 from projects p where p.id = change_requests.project_id and p.changes_frozen_at is null)
-  );
-
--- owners, project_internal, intake_templates (clients read the snapshot on their own project row), rounds,
--- qc_runs, skills_registry, stage_runs, run_logs, run_approvals, email_log, owner_notes,
--- gate_config and skill_uses have no
--- client policy: owner only. Clients get no update or delete on change_requests or prd_feedback.
+-- Every other table has the owner_all policy only; there is no client policy until go-live (G15).
 
 -- anon is never used: remove what Supabase's default privileges granted it before the defaults
 -- above took effect.

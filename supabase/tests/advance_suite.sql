@@ -1,4 +1,4 @@
--- advance_stage() checks (P1-T07, migration 0002). Loaded after the migrations and fixtures.
+-- advance_stage() checks (P1-T07). Loaded after the migration and fixtures.
 -- t.adv(name, setup, uid, role, call, expect, check)
 --   setup   SQL run as the superuser inside a savepoint that is always rolled back
 --   call    SQL run as the given Supabase role
@@ -37,22 +37,22 @@ end $$;
 -- Setup builders. One scratch project, id C, in the stage and status given.
 create function t.proj(stg text, st text default 'active') returns text language sql as
 $$ select format('insert into projects(id,name,stage,status) values (%L,%L,%L,%L)',
-  'cccccccc-0000-0000-0000-000000000001','C',stg,st)
-  || '; insert into auth.users(id,email) values (''00000000-0000-0000-0000-0000000000c1'',''c@x'')'
-  || '; insert into clients(id,email,project_id,is_signer) values (''00000000-0000-0000-0000-0000000000c1'',''c@x'',''cccccccc-0000-0000-0000-000000000001'',true)' $$;
+  'cccccccc-0000-0000-0000-000000000001','C',stg,st) $$;
 create function t.art(typ text, ver int default 1, st text default 'draft', content text default '{}') returns text language sql as
 $$ select format('insert into artifacts(project_id,type,version,status,content) values (%L,%L,%s,%L,%L)',
   'cccccccc-0000-0000-0000-000000000001',typ,ver,st,content) $$;
 -- A round summary for round n (D-133: Feedback makes a new version of the same round's summary).
 create function t.rs(n int, ver int default 1, st text default 'draft') returns text language sql as
 $$ select t.art('round_summary', ver, st, format('{"round": %s}', n)) $$;
--- An approval by the owner (role owner) or the client (role client) at a fixed time offset (minutes).
-create function t.appr(typ text, ver int, gate text, mins int default 0, by text default null, rl text default null) returns text language sql as
-$$ select format('insert into approvals(artifact_id,approved_by,role,gate_type,at)
-  select id,%L,%L,%L,timestamptz ''2026-01-01 10:00'' + interval ''%s minutes''
+-- An approval at a fixed time offset (minutes). The giver is the owner unless `by` says otherwise. A client-gate
+-- approval is the owner's record of the client's approval (D-298): role client, with an evidence note.
+create function t.appr(typ text, ver int, gate text, mins int default 0, by text default null, note text default null) returns text language sql as
+$$ select format('insert into approvals(artifact_id,approved_by,role,gate_type,at,evidence_note)
+  select id,%L,%L,%L,timestamptz ''2026-01-01 10:00'' + interval ''%s minutes'',%L
   from artifacts where project_id=%L and type=%L and version=%s',
-  coalesce(by, case when gate='client' then '00000000-0000-0000-0000-0000000000c1' else '00000000-0000-0000-0000-0000000000a0' end),
-  coalesce(rl, case when gate='client' then 'client' else 'owner' end), gate, mins,
+  coalesce(by, '00000000-0000-0000-0000-0000000000a0'),
+  case when gate='client' then 'client' else 'owner' end, gate, mins,
+  coalesce(note, case when gate='client' then 'email, test' end),
   'cccccccc-0000-0000-0000-000000000001', typ, ver) $$;
 create function t.rnd(n int, st text, cr boolean default false) returns text language sql as
 $$ select format('insert into rounds(project_id,number,status,change_request_id) values (%L,%s,%L,%s)',
@@ -71,7 +71,7 @@ $$ select 'select stage::text from projects where id=''cccccccc-0000-0000-0000-0
 select t.adv('no artifact at all: intake cannot advance', t.proj('intake'), :'O', 'authenticated', t.go('requirements'), 'error:intake_record');
 select t.adv('intake advances with an owner soft approval', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'ok', '(' || t.cs() || ') = ''requirements''');
 select t.adv('the worker (service role) cannot advance a project', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), null, 'service_role', t.go('requirements'), 'error:not allowed');
-select t.adv('a client cannot call advance_stage', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'A', 'authenticated', t.go('requirements'), 'error:not allowed');
+select t.adv('a user who is not an owner cannot call advance_stage', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'A', 'authenticated', t.go('requirements'), 'error:not allowed');
 select t.adv('skipping a stage is refused', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('plan'), 'error:is not the stage after');
 select t.adv('going backwards is refused', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'error:is not the stage after');
 select t.adv('a paused project cannot advance', t.proj('intake','paused')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'error:paused');
@@ -83,10 +83,16 @@ select t.adv('an approval on a superseded version does not count', t.proj('plan'
 select t.adv('a superseded newest artifact does not count', t.proj('plan')||';'||t.art('plan',1,'superseded')||';'||t.appr('plan',1,'soft'), :'O', 'authenticated', t.go('prototype'), 'error');
 select t.adv('the stage trigger still blocks a direct update after an advance', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('requirements')||'; update projects set stage=''plan'' where id=''cccccccc-0000-0000-0000-000000000001''', 'error:can only change through');
 
--- who gave the approval
-select t.adv('identity: a client-role approval by the owner does not stand in for the client', t.proj('requirements')||';'||t.art('prd')||';'||t.appr('prd',1,'client',0,'00000000-0000-0000-0000-0000000000a0'), :'O', 'authenticated', t.go('plan'), 'error:client approval');
-select t.adv('identity: a client of another project cannot sign off this PRD', t.proj('requirements')||';'||t.art('prd')||';'||t.appr('prd',1,'client',0,'00000000-0000-0000-0000-0000000000a1'), :'O', 'authenticated', t.go('plan'), 'error:client approval');
-select t.adv('identity: an owner-role approval by someone who is not an owner is refused', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft',0,'00000000-0000-0000-0000-0000000000c1'), :'O', 'authenticated', t.go('prototype'), 'error:soft approval');
+-- who gave the approval (D-298, D-309: every giver is an owner; a giver who left owners stops counting)
+select t.adv('identity: an approval by someone who is not an owner does not count', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft',0,'00000000-0000-0000-0000-0000000000a1'), :'O', 'authenticated', t.go('prototype'), 'error:soft approval');
+select t.adv('identity: a client-gate record by someone who is not an owner does not count', t.proj('requirements')||';'||t.art('prd')||';'||t.appr('prd',1,'client',0,'00000000-0000-0000-0000-0000000000a1'), :'O', 'authenticated', t.go('plan'), 'error:client approval');
+select t.adv('identity: an approval whose giver was removed from owners stops counting', t.proj('plan')||';'||t.art('plan')||';insert into auth.users(id,email) values (''00000000-0000-0000-0000-0000000000d1'',''d@x'');insert into owners(id) values (''00000000-0000-0000-0000-0000000000d1'')'||';'||t.appr('plan',1,'soft',0,'00000000-0000-0000-0000-0000000000d1')||';delete from owners where id=''00000000-0000-0000-0000-0000000000d1''', :'O', 'authenticated', t.go('prototype'), 'error:soft approval');
+select t.adv('identity: a deleted login keeps its approval row but it no longer counts', t.proj('plan')||';'||t.art('plan')||';insert into auth.users(id,email) values (''00000000-0000-0000-0000-0000000000d1'',''d@x'');insert into owners(id) values (''00000000-0000-0000-0000-0000000000d1'')'||';'||t.appr('plan',1,'soft',0,'00000000-0000-0000-0000-0000000000d1')||';delete from owners where id=''00000000-0000-0000-0000-0000000000d1'';delete from auth.users where id=''00000000-0000-0000-0000-0000000000d1''', :'O', 'authenticated', t.go('prototype'), 'error:soft approval', null);
+select t.adv('identity: the giver is kept as an email snapshot after the login is deleted', t.proj('plan')||';'||t.art('plan')||';insert into auth.users(id,email) values (''00000000-0000-0000-0000-0000000000d1'',''d@x'');insert into owners(id) values (''00000000-0000-0000-0000-0000000000d1'')'||';'||t.appr('plan',1,'soft',0,'00000000-0000-0000-0000-0000000000d1')||';delete from owners where id=''00000000-0000-0000-0000-0000000000d1'';delete from auth.users where id=''00000000-0000-0000-0000-0000000000d1''', :'O', 'authenticated', 'select 1', 'ok', '(select approved_by_email from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id=''cccccccc-0000-0000-0000-000000000001'') = ''d@x''');
+-- the client gate is the owner's record with a note (D-298)
+select t.adv('evidence: a client-gate record without a note is refused by the table', t.proj('requirements')||';'||t.art('prd'), null, current_user, 'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''client'',''client'' from artifacts where type=''prd'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'error:client_approval_needs_evidence');
+select t.adv('evidence: a blank note is refused', t.proj('requirements')||';'||t.art('prd'), null, current_user, 'insert into approvals(artifact_id,approved_by,role,gate_type,evidence_note) select id,'''||:'O'||''',''client'',''client'',''   '' from artifacts where type=''prd'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'error:client_approval_needs_evidence');
+select t.adv('evidence: an owner approval needs no note', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', 'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''owner'',''soft'' from artifacts where type=''plan'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'ok');
 select t.adv('an approval dated in the future is stored as now', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
   'insert into approvals(artifact_id,approved_by,role,gate_type,at) select id,''00000000-0000-0000-0000-0000000000a0'',''owner'',''soft'',timestamptz ''2099-01-01'' from artifacts where type=''plan'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'ok',
   '(select max(at) from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id=''cccccccc-0000-0000-0000-000000000001'') <= now()');

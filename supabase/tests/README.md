@@ -6,17 +6,17 @@ Row-level security, schema and `advance_stage()` checks for the migrations in `s
 bash supabase/tests/run.sh
 ```
 
-Needs a local Postgres (14 or newer) and a role allowed to create databases. The script drops and recreates a scratch database (`wpe_test`, or `$WPE_TEST_DB`), loads a stand-in for Supabase's auth schema and default privileges (`stub_auth.sql`), the fixture rows (`fixtures.sql`), then runs `rls_suite.sql` (row-level security and schema facts), `advance_suite.sql` (`advance_stage()`, migration 0002), `access_suite.sql` (anon, owners, append-only approvals, uploads, queue claim) and `review_suite.sql` (owner-only project fields, project and close guards, approvals, the named signer, the change-request freeze, immutable artifacts, `erase_project_data()`) `coverage_suite.sql` (checks added after a deliberate break got past the others) and `hardening_suite.sql` (the review-panel rules: approval hash and email snapshot, gate configuration and gatekeeper, one active run per project, run tracing, intake answers, private schema and empty `search_path`). Each check prints `PASS` or `FAIL`, and the script exits non-zero if any check fails.
+Needs a local Postgres (14 or newer) and a role allowed to create databases. The script drops and recreates a scratch database (`wpe_test`, or `$WPE_TEST_DB`), loads a stand-in for Supabase's auth schema and default privileges (`stub_auth.sql`), the migration (`0001_init.sql`, the squashed baseline, D-308), the fixture rows (`fixtures.sql`), then runs `rls_suite.sql` (row-level security for the owner and for a user who is not an owner, schema facts), `advance_suite.sql` (`advance_stage()`, the owner-given approvals and the client-gate evidence note), `access_suite.sql` (anon, owners, append-only approvals, uploads, queue claim, the owner recording the client gate), `review_suite.sql` (owner-only project fields, project and close guards, the one-active-run slot including `cancel_requested`, immutable artifacts), `coverage_suite.sql` (checks added after a deliberate break got past the others) and `hardening_suite.sql` (approval hash and email snapshot, gate configuration and gatekeeper, run tracing, private schema and empty `search_path`). Each check prints `PASS` or `FAIL`, and the script exits non-zero if any check fails.
 
-- Each check runs one statement as a Supabase role (`authenticated` as the owner or a client, or `service_role`) inside a savepoint that is always rolled back, and compares the result with the expected outcome (`ok:N` rows, or `error`).
-- The suite walks one project through the stages (intake, requirements, plan, prototype, build rounds, QC, deploy prep, handover, closed) and checks, at each, what a client may read and write, including paused and closed projects.
+- Each check runs one statement as a Supabase role (`authenticated` as the owner or as a user who is not an owner, `anon`, or `service_role`) inside a savepoint that is always rolled back, and compares the result with the expected outcome (`ok:N` rows, or `error`).
+- Until go-live the owner is the only login (D-298): the checks cover what the owner can do and that anyone else sees and changes nothing. Client-side rules return with the client dashboard (go-live G15).
 - CI runs this script on every pull request (`.github/workflows/ci.yml`, D-287); it can also be run by hand.
 
 ## Against a local Supabase (needs Docker)
 
 ```
 supabase start
-supabase db reset                      # applies every migration
+supabase db reset                      # applies the migration
 WPE_SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres bash supabase/tests/run.sh
 supabase db reset                      # removes the fixture rows
 ```
