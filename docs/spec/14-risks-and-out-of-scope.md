@@ -21,7 +21,7 @@ The riskiest items are local workers going offline mid-stage, a hung or looping 
 | Owner login without multi-factor | Risk (accepted) | None planned, now or at go-live; a hard-gate Accept needs the project name typed (D-268) |
 | No regular restore drill for backups | Risk (accepted) | One restore into a scratch database is proved in Phase 1 (D-294); later exports are unproven until restored |
 | Branch protection deferred; CI starts in Phase 1 | Revisit | Until the workflow is merged and green, an agent's "tests pass" is its own report (D-287) |
-| Install scripts for all packages are contained only by the run's container | Risk (accepted) | Each run is a container with limited egress and no Supabase credentials; the lockfile diff and a curated allowlist expose new packages (D-266, D-286) |
+| Install scripts for all packages are contained only by the run's container | Risk (accepted) | Until go-live the Builder runs on the host with an open network and fictional clients only (D-310); at go-live each run is a container with limited egress and no Supabase credentials (D-266, G19); the lockfile diff and a curated allowlist expose new packages (D-286) |
 | A looping agent that keeps producing output | Risk (accepted) | The no-progress watchdog stops a silent hang, but a loop that keeps writing output is stopped only by the owner's Cancel; there is no cost warning, and the token progress bar is the only signal |
 | A waiting run keeps its slot | Risk (accepted) | An unanswered pause request occupies one of the 2 project slots for up to 1 hour, then the run is parked |
 | The client never uses the live site before go-live | Risk (accepted) | The client sees screenshots only; hover, menus, forms and animation are reviewed by the owner alone |
