@@ -16,8 +16,19 @@ select case when (select array(select unnest(allowed_mime_types) order by 1) fro
   then 'PASS      the bucket allows exactly the allowed upload types' else 'FAIL      the bucket allows exactly the allowed upload types' end;
 
 insert into storage.buckets(id, name) values ('other', 'other');
+-- ...and the same as the uploads table's own list, read from its constraint, so the two cannot drift apart.
+select case when (select array(select unnest(allowed_mime_types) order by 1) from storage.buckets where id = 'intake-uploads')
+  = (select array(select m[1] from regexp_matches(pg_get_constraintdef(c.oid), '''([^'']+)''', 'g') as m order by 1)
+       from pg_constraint c where c.conname = 'upload_allowed_types' and c.conrelid = 'public.uploads'::regclass)
+  then 'PASS      the bucket types equal the uploads table types' else 'FAIL      the bucket types equal the uploads table types' end;
+
 select t.run('owner stores a file in a project folder', :'O'::uuid, 'authenticated', 'insert into storage.objects(bucket_id,name) values (''intake-uploads'', ''' || :'P1' || '/logo/a.png'')', 'ok:1');
 select t.run('owner cannot store a file outside a project folder', :'O'::uuid, 'authenticated', 'insert into storage.objects(bucket_id,name) values (''intake-uploads'', ''99999999-9999-9999-9999-999999999999/logo/a.png'')', 'error');
+select t.run('owner cannot store a root file named like the project id', :'O'::uuid, 'authenticated', 'insert into storage.objects(bucket_id,name) values (''intake-uploads'', ''' || :'P1' || '.png'')', 'error');
+select t.run('owner cannot store in a folder that only starts with the project id', :'O'::uuid, 'authenticated', 'insert into storage.objects(bucket_id,name) values (''intake-uploads'', ''' || :'P1' || 'x/a.png'')', 'error');
+select t.run('owner cannot store in a folder with a leading space', :'O'::uuid, 'authenticated', 'insert into storage.objects(bucket_id,name) values (''intake-uploads'', '' ' || :'P1' || '/a.png'')', 'error');
+-- The policy checks the first path segment only: Storage keys are flat strings, so a later "..", or an
+-- empty segment, stays inside the project's own folder.
 select t.run('owner cannot store a file at the bucket root', :'O'::uuid, 'authenticated', 'insert into storage.objects(bucket_id,name) values (''intake-uploads'', ''a.png'')', 'error');
 select t.run('owner cannot write to another bucket', :'O'::uuid, 'authenticated', 'insert into storage.objects(bucket_id,name) values (''other'', ''' || :'P1' || '/a.png'')', 'error');
 select t.run('a non-owner cannot store a file', :'A'::uuid, 'authenticated', 'insert into storage.objects(bucket_id,name) values (''intake-uploads'', ''' || :'P1' || '/logo/b.png'')', 'error');
@@ -25,6 +36,11 @@ select t.run('anon cannot store a file', null, 'anon', 'insert into storage.obje
 
 -- A stored object that the owner reads, and others cannot.
 insert into storage.objects(bucket_id, name) values ('intake-uploads', :'P1' || '/logo/seed.png');
+insert into storage.objects(bucket_id, name) values ('other', :'P1' || '/logo/hidden.png');
+select t.run('owner reads no file from another bucket', :'O'::uuid, 'authenticated', 'select * from storage.objects where bucket_id = ''other''', 'ok:0');
+select t.run('owner cannot move a stored file out of its project folder', :'O'::uuid, 'authenticated', 'update storage.objects set name = ''moved.png'' where bucket_id = ''intake-uploads''', 'error');
+select t.run('owner cannot move a stored file to another bucket', :'O'::uuid, 'authenticated', 'update storage.objects set bucket_id = ''other'' where bucket_id = ''intake-uploads''', 'error');
+select t.run('owner renames a stored file inside its project folder', :'O'::uuid, 'authenticated', 'update storage.objects set name = name || ''x'' where bucket_id = ''intake-uploads''', 'ok:1');
 select t.run('owner reads the stored files', :'O'::uuid, 'authenticated', 'select * from storage.objects where bucket_id = ''intake-uploads''', 'ok:1');
 select t.run('a non-owner reads no stored file', :'A'::uuid, 'authenticated', 'select * from storage.objects', 'ok:0');
 select t.run('anon reads no stored file', null, 'anon', 'select * from storage.objects', 'ok:0');

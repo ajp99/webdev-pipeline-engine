@@ -1091,6 +1091,10 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
+-- Only the first path segment is checked. Storage keys are flat strings, so a later ".." or an empty
+-- segment cannot leave the project's folder. The 5 MB image cap and the file type are not enforced when the
+-- object is written (the bucket allows 25 MB): the console checks them first, and the uploads table refuses
+-- a row that breaks them, so an object whose row was refused is removed again by the console.
 create policy owner_intake_objects on storage.objects
   for all to authenticated
   using (
