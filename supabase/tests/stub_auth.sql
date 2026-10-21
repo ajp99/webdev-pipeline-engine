@@ -24,3 +24,31 @@ grant execute on function auth.uid(), auth.role() to anon, authenticated, servic
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+
+-- Minimal stand-in for Supabase Storage (P2-T03): the bucket and object tables, row-level security on
+-- the objects as Supabase has it, and the folder helper the policies use.
+create schema storage;
+create table storage.buckets (
+  id text primary key,
+  name text not null,
+  public boolean not null default false,
+  file_size_limit bigint,
+  allowed_mime_types text[]
+);
+create table storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text references storage.buckets (id),
+  name text,
+  owner uuid,
+  created_at timestamptz not null default now()
+);
+alter table storage.objects enable row level security;
+create function storage.foldername(name text) returns text[] language plpgsql as $$
+declare parts text[];
+begin
+  parts := string_to_array(name, '/');
+  return parts[1:array_length(parts, 1) - 1];
+end $$;
+grant usage on schema storage to anon, authenticated, service_role;
+grant all on all tables in schema storage to anon, authenticated, service_role;
+grant execute on function storage.foldername(text) to anon, authenticated, service_role;

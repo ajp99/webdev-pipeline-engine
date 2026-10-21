@@ -9,7 +9,7 @@
 -- Kept from the hardening of P1-T17: a private schema and an empty search_path for security-definer
 -- functions, a content hash and an email snapshot on approvals, gatekeeper enforcement in advance_stage(),
 -- run tracing and one active run per project.
--- Not yet implemented: Storage bucket policies for uploads (task P2-T03), accept_gate, the remaining-gates function and the artifact version-block trigger
+-- Not yet implemented: accept_gate, the remaining-gates function and the artifact version-block trigger
 -- (P2-T18), and the cancel function (P2-T20).
 
 -- Supabase gives anon (and authenticated) table and function privileges by default and relies on
@@ -1065,6 +1065,45 @@ create policy owner_delete_approvals on approvals
   for delete to authenticated using (private.is_owner());
 
 -- Every other table has the owner_all policy only; there is no client policy until go-live (G15).
+
+-- ---------------------------------------------------------------------------
+-- Storage: the private bucket for intake uploads (P2-T03, D-075, D-100, D-211)
+-- ---------------------------------------------------------------------------
+-- The owner attaches the client's files in the console (D-298). The bucket is private; only the owner
+-- reads or writes objects, and only inside a folder named after an existing project, which matches the
+-- upload_path_in_project check on the uploads table. The bucket's own limits repeat the table's: 25 MB
+-- and the allowed types (D-211's 5 MB cap for images is checked by the uploads table and the console).
+-- The owner test in the check is repeated on purpose: the project lookup already hides every project from a
+-- non-owner, so the check would refuse them anyway, and a later change to projects must not open the bucket.
+-- (In the policy the object name is written objects.name: a bare name would mean projects.name inside the subquery.)
+-- Files stay scan_status 'pending' until the malware scan exists (G-item); no agent opens them before.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'intake-uploads', 'intake-uploads', false, 26214400,
+  array[
+    'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain', 'text/markdown', 'application/json', 'video/mp4'
+  ]
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+-- Only the first path segment is checked. Storage keys are flat strings, so a later ".." or an empty
+-- segment cannot leave the project's folder. The 5 MB image cap and the file type are not enforced when the
+-- object is written (the bucket allows 25 MB): the console checks them first, and the uploads table refuses
+-- a row that breaks them, so an object whose row was refused is removed again by the console.
+create policy owner_intake_objects on storage.objects
+  for all to authenticated
+  using (
+    bucket_id = 'intake-uploads' and private.is_owner()
+  )
+  with check (
+    bucket_id = 'intake-uploads' and private.is_owner()
+    and exists (select 1 from public.projects p where p.id::text = (storage.foldername(objects.name))[1])
+  );
 
 -- anon is never used: remove what Supabase's default privileges granted it before the defaults
 -- above took effect.
