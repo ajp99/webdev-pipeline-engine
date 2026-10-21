@@ -8,7 +8,12 @@ export async function signIn(formData: FormData) {
   const password = String(formData.get('password') ?? '');
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) redirect('/login?error=invalid');
+  if (error) {
+    if (error.code === 'invalid_credentials') redirect('/login?error=invalid');
+    // Anything else (provider off, server down) is not a wrong password: say so and log the cause.
+    console.error('sign-in failed:', error.code ?? error.name, error.message);
+    redirect('/login?error=unavailable');
+  }
   redirect('/');
 }
 
