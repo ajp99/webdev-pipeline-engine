@@ -15,7 +15,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P1-T01 Set up tooling and workspaces**  
   Acceptance: Node 22 or newer (`.nvmrc`). Approved dependencies: next, react, react-dom, typescript, tailwindcss, eslint, prettier, vitest, yaml, @supabase/supabase-js, @supabase/ssr; standard dev tooling may be added without asking. `pnpm install` produces a lockfile; `pnpm --filter @wpe/web dev` serves a page; `pnpm -r typecheck`, `pnpm lint` and `pnpm test` run and pass; the Commands section of `AGENTS.md` lists them. The worker is developed and run inside WSL2 on Windows; a local Supabase runs through the Supabase CLI and Docker for development and tests; worker secrets live in a gitignored `.env` file (only `.env.example` is committed).
 
-- [ ] **P1-T02 Start the local Supabase and apply the migrations**  
+- [x] **P1-T02 Start the local Supabase and apply the migrations**  
   Acceptance: Development is dev-only (D-263): there is no hosted project. `supabase init` and `supabase start` (Supabase CLI and Docker, in WSL2) run a local stack; the local URL and keys go in gitignored env files and never into chat or the repo. The migrations apply to a fresh local database with the tables in `docs/spec/10-data-model.md`, the gate defaults, the status enums, the `owners` table and the queue columns on `stage_runs`. The owner's row in `owners` is inserted with the service role (task P1-T05 provides the script). The owner reads the schema once more before the phase gate. Hosting is on `docs/plan/go-live-readiness.md` (G1).
 
 - [x] **P1-T03 Generate database types into packages/shared**  
@@ -33,16 +33,16 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P1-T07 Implement advance_stage()**  
   Acceptance: Add migration `0002` (squashed into `0001_init.sql`, D-308) that replaces the stub function (the owner approves this schema change first; never edit an applied migration). Checks that every gate for the current stage has its approval record (project override first, then global default), that the next stage follows `stages.yaml`, that paused projects cannot advance, and that nothing advances without an approval. Only approvals on the stage's own output artifacts count, so a release-note approval after go-live (D-223) can never advance a stage. The final step from handover also sets `projects.status` to `closed` and `close_reason` to `completed` in the same call (D-220). SQL tests cover each rule, including the two-step prototype gate and the client-only PRD gate.
 
-- [ ] **P1-T08 Automated RLS tests**  
+- [x] **P1-T08 Automated RLS tests**  
   Acceptance: Tests in `supabase/tests/` cover: a client sees only their own project's visible rows and their own project's template snapshot; a client cannot read `intake_templates`, `owners`, rounds, gate config or other projects; cannot forge owner approvals; cannot become an owner; cannot change `stage`; can answer only `client_answer` on ask-client items; can comment only during the prototype stage and cannot set `owner_disposition`; approvals are append-only; anon reads nothing; the queue claim with `FOR UPDATE SKIP LOCKED` works for the service role; clients write intake answers only while a round is open and can submit or reopen but never review a round; uploads reject zip, macro-enabled documents and files over 25 MB, and clients cannot mark an upload clean; clients cannot read `owner_notes` or `run_logs`; clients can add PRD feedback only on a client-visible PRD during the requirements stage; clients can submit change requests only in the handover stage and cannot set the impact note or decision; `attempts` above 2 is rejected; clients can leave final-screenshot notes only during the deploy_prep stage and prototype notes only during the prototype stage; clients cannot read `run_approvals` or the rounds' claims and cannot change `answer_action`; `feedback_count` above 3 is rejected; a run can move to `waiting`. The committed suite (`bash supabase/tests/run.sh`, D-225) is the starting point: move it onto a local Supabase (Supabase CLI and Docker) and extend it. It already covers the paused, closed and wrong-stage cases of D-216 to D-218 and the email log. The checks also cover the rules of D-265, D-269, D-270, D-271, D-272 and D-278, each proved by the mutation script of P1-T13.
 
-- [ ] **P1-T09 Gate demonstration**  
+- [x] **P1-T09 Gate demonstration**  
   Acceptance: Seed script creates a dummy project and artifact. The owner clicks Accept in the console, an approval record is written, `advance_stage()` runs, and the stage changes in the UI. Record the run in `PROGRESS.md`.
 
 - [-] **P1-T10 Encrypted backup script (moved to go-live, G6)**  
   Acceptance: A script exports the database, encrypts it (the key stays in the owner's password manager, never in the repo), saves it locally and copies it to the owner's cloud drive. It runs on a schedule and on demand (for the final export before a project close), and deletes exports older than 180 days (D-222). `.gitignore` excludes exports. It points at the local database; one restore of an export into a scratch database is proved in P1-T15 (D-294). A regular restore drill is not scheduled (D-069).
 
-- [ ] **P1-T11 Confirm secret scanning and push protection**  
+- [x] **P1-T11 Confirm secret scanning and push protection**  
   Acceptance: The owner confirms in the GitHub repository settings that secret scanning and push protection are enabled; record the confirmation in `PROGRESS.md`. Do this now, before further work, and revoke the old personal access token (D-292).
 
 - [x] **P1-T12 CI workflow and CODEOWNERS**  
@@ -57,7 +57,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [-] **P1-T15 Backup restore proof (moved to go-live, G6)**  
   Acceptance (D-294): `scripts/backup.sh` runs against the local database, and one encrypted export is restored into a scratch database and checked (row counts match). The result is recorded in `PROGRESS.md`.
 
-- [ ] **P1-T16 Local read-only MCP configuration**  
+- [x] **P1-T16 Local read-only MCP configuration**  
   Acceptance (D-274): `.mcp.json` points at the local Supabase stack with read-only access, not at a hosted project; `AGENTS.md` and `docs/spec/15-operations.md` describe it. The flag that makes the server read-only is checked against the tool's documentation and recorded.
 
 - [x] **P1-T17 Migration hardening (own PR, independent review)**  
