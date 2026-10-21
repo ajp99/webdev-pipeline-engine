@@ -68,6 +68,7 @@ export async function executeRun(
   const heartbeat = setInterval(() => {
     deps.heartbeat(run.id, cfg.worker).then(
       (status) => {
+        cfg.log(`run ${run.id}: heartbeat ${status ?? 'lost'}`);
         if (status === null) abort('lost');
         else if (status === 'cancel_requested') abort('cancel');
       },
