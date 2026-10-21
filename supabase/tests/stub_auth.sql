@@ -52,3 +52,16 @@ end $$;
 grant usage on schema storage to anon, authenticated, service_role;
 grant all on all tables in schema storage to anon, authenticated, service_role;
 grant execute on function storage.foldername(text) to anon, authenticated, service_role;
+
+-- Supabase Storage refuses a direct SQL delete on its tables unless this session setting is 'true' (its
+-- protect_delete trigger). The stand-in has the same guard, so a check that deletes behaves the same here
+-- and on the real stack.
+create function storage.protect_delete() returns trigger language plpgsql as $$
+begin
+  if coalesce(current_setting('storage.allow_delete_query', true), 'false') <> 'true' then
+    raise exception 'Direct deletion from storage tables is not allowed. Use the Storage API instead.';
+  end if;
+  return old;
+end $$;
+create trigger protect_objects_delete before delete on storage.objects
+  for each statement execute function storage.protect_delete();

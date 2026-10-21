@@ -4,6 +4,10 @@
 \set A '00000000-0000-0000-0000-0000000000a1'
 \set P1 '11111111-1111-1111-1111-111111111111'
 
+-- Storage blocks a direct SQL delete unless this setting is on (its protect_delete trigger); the checks
+-- below delete on purpose, to test the policy and not the guard.
+select set_config('storage.allow_delete_query', 'true', false) \gset
+
 \echo '### intake uploads bucket'
 select case when (select public from storage.buckets where id = 'intake-uploads') = false
   then 'PASS      the intake bucket is private' else 'FAIL      the intake bucket is private' end;
