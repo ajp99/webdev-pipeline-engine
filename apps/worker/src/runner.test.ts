@@ -142,6 +142,34 @@ describe('executeRun', () => {
     expect(finished).toEqual([{ status: 'cancelled', tokens: 0 }]);
   });
 
+  it('catches a cancel at the first heartbeat after the request, long before a slow handler ends', async () => {
+    // Heartbeats every 1000 ms; the cancel becomes visible after 2.4 s; the handler would take 12 s.
+    let now = 0;
+    const { deps, finished } = fakeDeps({
+      heartbeat: async () => (now >= 2400 ? 'cancel_requested' : 'running') as RunStatus,
+    });
+    const p = executeRun(
+      deps,
+      run(),
+      () =>
+        async ({ signal }) => {
+          await new Promise<void>((resolve) => {
+            const t = setTimeout(resolve, 12_000);
+            signal.addEventListener('abort', () => (clearTimeout(t), resolve()), { once: true });
+          });
+          if (signal.aborted) throw new Error('stopped');
+        },
+      cfg(),
+    );
+    for (let i = 0; i < 4; i++) {
+      await vi.advanceTimersByTimeAsync(1000);
+      now += 1000;
+    }
+    expect(await p).toBe('cancelled');
+    expect(finished).toEqual([{ status: 'cancelled', tokens: 0 }]);
+    expect(now).toBeLessThanOrEqual(4000);
+  });
+
   it('stops and reports nothing when another worker holds the run', async () => {
     const { deps, finished } = fakeDeps({ heartbeat: async () => null });
     const p = executeRun(deps, run(), () => neverEnds, cfg());
