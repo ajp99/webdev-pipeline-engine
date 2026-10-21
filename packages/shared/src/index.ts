@@ -1,17 +1,7 @@
 // Stage and gate types derived from docs/spec arrive in P1-T03/P1-T04.
-export const STAGES = [
-  'intake',
-  'requirements',
-  'plan',
-  'prototype',
-  'build_rounds',
-  'qc_report',
-  'deploy_prep',
-  'handover',
-  'closed',
-] as const;
-
-export type Stage = (typeof STAGES)[number];
+export { STAGES } from './stages';
+export type { Stage } from './stages';
+import type { Stage } from './stages';
 
 // Compile-time check: the hand-written Stage union equals the generated enum (P1-T04).
 import type { Database } from './database.types';

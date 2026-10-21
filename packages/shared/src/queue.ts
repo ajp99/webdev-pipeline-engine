@@ -1,6 +1,6 @@
 // What is waiting for the owner (P1-T06). Pure functions over rows read from the database.
-import type { Stage } from './index';
-import { STAGES } from './index';
+import type { Stage } from './stages';
+import { STAGES } from './stages';
 
 const STAGE_ORDER: readonly Stage[] = STAGES;
 
