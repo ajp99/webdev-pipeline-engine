@@ -9,8 +9,7 @@
 -- Kept from the hardening of P1-T17: a private schema and an empty search_path for security-definer
 -- functions, a content hash and an email snapshot on approvals, gatekeeper enforcement in advance_stage(),
 -- run tracing and one active run per project.
--- Not yet implemented: Storage bucket policies for uploads (task P2-T03), the queue claim function
--- (task P2-T04), accept_gate, the remaining-gates function and the artifact version-block trigger
+-- Not yet implemented: Storage bucket policies for uploads (task P2-T03), accept_gate, the remaining-gates function and the artifact version-block trigger
 -- (P2-T18), and the cancel function (P2-T20).
 
 -- Supabase gives anon (and authenticated) table and function privileges by default and relies on
@@ -342,7 +341,7 @@ create table skills_registry (
 
 -- D-050: stage_runs is the durable queue the local runner polls (every 15 to 30 seconds).
 -- The runner claims a row atomically (FOR UPDATE SKIP LOCKED), refreshes heartbeat_at while
--- working, and a stale heartbeat lets the row be re-queued. The claim function comes in P2-T04.
+-- working, and a stale heartbeat lets the row be re-queued. The queue functions are below (P2-T04).
 create table stage_runs (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects (id) on delete cascade,
@@ -787,6 +786,214 @@ begin
 end;
 $$;
 revoke all on function private.close_project(uuid, public.close_reason) from public, anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- Stage runner: queue functions (P2-T04, D-278, D-301, D-302, D-305)
+-- ---------------------------------------------------------------------------
+-- The runner (the worker, holding the service key) and the console go through these five functions.
+-- enqueue_run and request_run_cancel can be called by the owner; claim_run, heartbeat_run and finish_run
+-- only by the worker (service_role): the grants allow nobody else and each body checks the role again.
+-- A stale heartbeat is 10 minutes. A run is tried at most twice (attempts_limit). Waiting runs are not
+-- re-queued: they wait on the owner and keep the project's slot (D-278).
+-- Direct updates of stage_runs by the owner stay possible through the owner policy (go-live item G25).
+
+-- Adds a queued run for the project's current stage. One queued run per project at a time.
+create function enqueue_run(p_project uuid, p_stage stage) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  v   public.projects%rowtype;
+  rid uuid;
+begin
+  if not (private.is_owner() or auth.role() = 'service_role') then
+    raise exception 'enqueue_run: not allowed';
+  end if;
+  select * into v from public.projects where id = p_project for update;
+  if not found then
+    raise exception 'enqueue_run: project not found';
+  end if;
+  if v.status <> 'active' then
+    raise exception 'enqueue_run: project is %, only an active project can run', v.status;
+  end if;
+  if v.stage is distinct from p_stage then
+    raise exception 'enqueue_run: project is in stage %, not %', v.stage, p_stage;
+  end if;
+  if exists (select 1 from public.stage_runs where project_id = p_project and status = 'queued') then
+    raise exception 'enqueue_run: the project already has a queued run';
+  end if;
+  insert into public.stage_runs (project_id, stage) values (p_project, p_stage) returning id into rid;
+  return rid;
+end;
+$$;
+revoke all on function enqueue_run(uuid, stage) from public, anon, authenticated, service_role;
+grant execute on function enqueue_run(uuid, stage) to authenticated, service_role;
+
+-- Claims the oldest queued run whose project is active, still in the run's stage and has no active run,
+-- in one statement, and returns it
+-- (no row when there is nothing to do). First tidies runs whose worker went away (D-305): a running run
+-- with no heartbeat for 10 minutes goes back to the queue, or fails when it has used both attempts; a
+-- cancel_requested run with no heartbeat for 10 minutes is cancelled.
+create function claim_run(p_worker text) returns setof public.stage_runs
+language plpgsql security definer set search_path = '' as $$
+declare
+  r public.stage_runs%rowtype;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'claim_run: not allowed';
+  end if;
+  if p_worker is null or btrim(p_worker) = '' then
+    raise exception 'claim_run: the worker needs a name';
+  end if;
+
+  update public.stage_runs
+     set status = 'cancelled', finished_at = now()
+   where status = 'cancel_requested'
+     and coalesce(heartbeat_at, started_at, queued_at) < now() - interval '10 minutes';
+
+  update public.stage_runs
+     set status       = case when attempts < 2 then 'queued'::public.run_status else 'failed'::public.run_status end,
+         claimed_by   = case when attempts < 2 then null else claimed_by end,
+         heartbeat_at = case when attempts < 2 then null else heartbeat_at end,
+         queued_at    = case when attempts < 2 then now() else queued_at end,
+         finished_at  = case when attempts < 2 then null else now() end
+   where status = 'running'
+     and coalesce(heartbeat_at, started_at, queued_at) < now() - interval '10 minutes';
+
+  -- A queued run that already used both attempts can never be claimed (attempts_limit); fail it so it
+  -- cannot block the queue.
+  update public.stage_runs set status = 'failed', finished_at = now()
+   where status = 'queued' and attempts >= 2;
+
+  select s.* into r
+    from public.stage_runs s
+   where s.status = 'queued'
+     and exists (select 1 from public.projects p where p.id = s.project_id and p.status = 'active' and p.stage = s.stage)
+     and not exists (
+       select 1 from public.stage_runs a
+        where a.project_id = s.project_id and a.status in ('running', 'waiting', 'cancel_requested')
+     )
+   order by s.queued_at, s.id
+   limit 1
+   for update of s skip locked;
+  if not found then
+    return;
+  end if;
+
+  begin
+    update public.stage_runs
+       set status = 'running', claimed_by = p_worker, heartbeat_at = now(),
+           started_at = coalesce(started_at, now()), attempts = attempts + 1, finished_at = null
+     where id = r.id
+     returning * into r;
+  exception when unique_violation then
+    return; -- another claim took the project's slot first (D-278 backstop)
+  end;
+  return next r;
+end;
+$$;
+revoke all on function claim_run(text) from public, anon, authenticated, service_role;
+grant execute on function claim_run(text) to service_role;
+
+-- Refreshes the heartbeat of a run this worker holds and returns its status, so the worker sees
+-- cancel_requested (D-301). Returns null when the worker no longer holds the run: it must stop.
+create function heartbeat_run(p_run uuid, p_worker text) returns public.run_status
+language plpgsql security definer set search_path = '' as $$
+declare
+  st public.run_status;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'heartbeat_run: not allowed';
+  end if;
+  update public.stage_runs
+     set heartbeat_at = now()
+   where id = p_run and claimed_by = p_worker and status in ('running', 'waiting', 'cancel_requested')
+   returning status into st;
+  return st;
+end;
+$$;
+revoke all on function heartbeat_run(uuid, text) from public, anon, authenticated, service_role;
+grant execute on function heartbeat_run(uuid, text) to service_role;
+
+-- Records the result of a run this worker holds and returns the status it ended in. A failed run with an
+-- attempt left goes back to the queue (D-082: one automatic retry), unless the owner asked to cancel it:
+-- then it ends cancelled. Tokens are added to the run's total.
+create function finish_run(p_run uuid, p_worker text, p_status public.run_status, p_tokens bigint default 0)
+returns public.run_status
+language plpgsql security definer set search_path = '' as $$
+declare
+  r     public.stage_runs%rowtype;
+  final public.run_status;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'finish_run: not allowed';
+  end if;
+  if p_status not in ('succeeded', 'failed', 'cancelled', 'stopped') then
+    raise exception 'finish_run: % is not a final status', p_status;
+  end if;
+  if p_tokens < 0 then
+    raise exception 'finish_run: tokens cannot be negative';
+  end if;
+  select * into r from public.stage_runs
+   where id = p_run and claimed_by = p_worker and status in ('running', 'waiting', 'cancel_requested')
+   for update;
+  if not found then
+    raise exception 'finish_run: this worker does not hold run %', p_run;
+  end if;
+
+  if p_status = 'failed' and r.status = 'cancel_requested' then
+    final := 'cancelled';
+  elsif p_status = 'failed' and r.attempts < 2 then
+    final := 'queued';
+  else
+    final := p_status;
+  end if;
+
+  if final = 'queued' then
+    update public.stage_runs
+       set status = 'queued', claimed_by = null, heartbeat_at = null, queued_at = now(),
+           tokens_used = tokens_used + p_tokens
+     where id = r.id;
+  else
+    update public.stage_runs
+       set status = final, finished_at = now(), tokens_used = tokens_used + p_tokens
+     where id = r.id;
+  end if;
+  return final;
+end;
+$$;
+revoke all on function finish_run(uuid, text, public.run_status, bigint) from public, anon, authenticated, service_role;
+grant execute on function finish_run(uuid, text, public.run_status, bigint) to service_role;
+
+-- The console's Cancel button (D-301): a queued run is cancelled at once; a running or waiting run becomes
+-- cancel_requested and the worker stops it at its next heartbeat. Owner only.
+create function request_run_cancel(p_run uuid) returns public.run_status
+language plpgsql security definer set search_path = '' as $$
+declare
+  r     public.stage_runs%rowtype;
+  final public.run_status;
+begin
+  if not private.is_owner() then
+    raise exception 'request_run_cancel: not allowed';
+  end if;
+  select * into r from public.stage_runs where id = p_run for update;
+  if not found then
+    raise exception 'request_run_cancel: run not found';
+  end if;
+  if r.status = 'queued' then
+    final := 'cancelled';
+    update public.stage_runs set status = final, finished_at = now() where id = r.id;
+  elsif r.status in ('running', 'waiting') then
+    final := 'cancel_requested';
+    update public.stage_runs set status = final where id = r.id;
+  elsif r.status = 'cancel_requested' then
+    final := r.status;
+  else
+    raise exception 'request_run_cancel: the run is already %', r.status;
+  end if;
+  return final;
+end;
+$$;
+revoke all on function request_run_cancel(uuid) from public, anon, authenticated, service_role;
+grant execute on function request_run_cancel(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Row-level security

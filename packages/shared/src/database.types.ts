@@ -990,6 +990,52 @@ export type Database = {
         Args: { p_next: Database['public']['Enums']['stage']; p_project: string };
         Returns: undefined;
       };
+      claim_run: {
+        Args: { p_worker: string };
+        Returns: {
+          attempts: number;
+          claimed_by: string | null;
+          finished_at: string | null;
+          heartbeat_at: string | null;
+          id: string;
+          model: string | null;
+          project_id: string;
+          prompt_hash: string | null;
+          queued_at: string;
+          stage: Database['public']['Enums']['stage'];
+          started_at: string | null;
+          status: Database['public']['Enums']['run_status'];
+          tokens_used: number;
+          trace_id: string;
+        }[];
+        SetofOptions: {
+          from: '*';
+          to: 'stage_runs';
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      enqueue_run: {
+        Args: { p_project: string; p_stage: Database['public']['Enums']['stage'] };
+        Returns: string;
+      };
+      finish_run: {
+        Args: {
+          p_run: string;
+          p_status: Database['public']['Enums']['run_status'];
+          p_tokens?: number;
+          p_worker: string;
+        };
+        Returns: Database['public']['Enums']['run_status'];
+      };
+      heartbeat_run: {
+        Args: { p_run: string; p_worker: string };
+        Returns: Database['public']['Enums']['run_status'];
+      };
+      request_run_cancel: {
+        Args: { p_run: string };
+        Returns: Database['public']['Enums']['run_status'];
+      };
     };
     Enums: {
       answer_action: 'next_round' | 'immediate_fix';

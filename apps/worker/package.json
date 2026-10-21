@@ -8,7 +8,9 @@
     "test": "vitest run --passWithNoTests",
     "bootstrap-owner": "tsx --env-file=.env src/bootstrap-owner-cli.ts",
     "seed-demo": "tsx --env-file=.env src/seed-demo-cli.ts",
-    "load-template": "tsx --env-file=.env src/load-template-cli.ts"
+    "load-template": "tsx --env-file=.env src/load-template-cli.ts",
+    "start": "tsx --env-file=.env src/run-cli.ts",
+    "enqueue-stub": "tsx --env-file=.env src/enqueue-stub-cli.ts"
   },
   "type": "module",
   "dependencies": {

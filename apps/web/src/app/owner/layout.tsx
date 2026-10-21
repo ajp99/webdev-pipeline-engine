@@ -29,6 +29,7 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
               </span>
             ) : null}
           </Link>
+          <Link href="/owner/runs">Runs</Link>
         </nav>
         <form action={signOut} className="ml-auto flex items-center gap-3 text-sm">
           <span className="text-neutral-600">{session.email}</span>
