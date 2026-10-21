@@ -56,7 +56,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [-] **P2-T13 Upload scanning and file handling (moved to go-live, G15)**  
   Acceptance: Uploads are scanned for malware in the worker before any agent sees them (the owner installs the scanner on their machine); infected files are quarantined and flagged to the owner. SVG is sanitized, zip is rejected, macro-enabled documents are never opened, and MP4 is treated as an asset only. Allowed types and the 25 MB limit are enforced in the database and in the form.
 
-- [ ] **P2-T14 Phase 2b gate evidenceNone**  
+- [ ] **P2-T14 Phase 2b gate evidence**  
   Acceptance: Record in `PROGRESS.md`: (1) a manual walkthrough with a fictional client (Acme), the owner entering the intake and recording the client's PRD sign-off with an evidence note, from template to signed PRD; (2) an automated end-to-end test (Playwright) of the same flow with model responses stubbed; (3) a cost report from `stage_runs` compared with the estimates in `docs/spec/13-cost.md`.
 
 - [ ] **P2-T15 Design section and style cards**  
@@ -65,7 +65,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [-] **P2-T16 Dashboard basics: privacy page and mobile-first layout (moved to go-live, G15)**  
   Acceptance: The client dashboard is mobile-first and usable on a phone for every client action in this phase. It links to a privacy page that an agent drafts and the owner reviews, naming what is stored, who processes it, the 90-day retention, and that deleted data can remain in backups for up to 180 days; there is no first-login acceptance step.
 
-- [ ] **P2-T17 `pnpm doctor` and setup scripts (first task of 2a)**  
+- [x] **P2-T17 `pnpm doctor` and setup scripts (first task of 2a)**  
   Acceptance: CI already exists from P1-T12 (D-287). `pnpm doctor` checks that the env files are present, migrations are applied and public sign-ups are off. Where the tools allow, each owner step in `docs/plan/phase-1-owner-steps.md` has a script. A consistency test checks that every stage's gating artifact type appears in its `outputs` in `docs/spec/stages.yaml` (D-235, D-241). The free-plan keep-alive request is dropped from this phase and tracked as go-live item G1 (D-243). The docs lint also checks that every ticked task has a `PROGRESS.md` entry (D-315).
 
 - [ ] **P2-T18 Gate functions (migration, own PR)**  

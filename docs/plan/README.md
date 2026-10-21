@@ -11,7 +11,7 @@ Five phases, built in order. Each phase is closed by one gate that only the owne
 | 4 | [Build rounds](phase-4-build-rounds.md) | A full round runs with its backlog triaged | not started |
 | 5 | [QC, report, handover](phase-5-qc-report-handover.md) | A pilot site is handed over | not started |
 
-Task IDs look like `P2-T04` (phase 2, task 4). A task marked `[-]` is moved to go-live and listed in [go-live-readiness.md](go-live-readiness.md); it is not pending in its phase. Tasks and acceptance criteria were drafted from the spec and the decisions in `DECISIONS.md`, and are open to the owner's edits.
+Task IDs look like `P2-T04` (phase 2, task 4). A task marked `[-]` is moved to go-live and listed in [go-live-readiness.md](go-live-readiness.md), or dropped by a decision; it is not pending in its phase. Tasks and acceptance criteria were drafted from the spec and the decisions in `DECISIONS.md`, and are open to the owner's edits.
 
 ## After the pilot (not scheduled)
 

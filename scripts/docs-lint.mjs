@@ -5,6 +5,7 @@
 //   2. DECISIONS.md: IDs run D-001, D-002, ... with no gap, repeat or reordering, and every row has five cells
 //   3. every D-NNN mentioned in a markdown file exists in DECISIONS.md
 //   4. every relative markdown link points at a file or folder that exists
+//   5. every ticked task in docs/plan/phase-*.md has a heading in docs/plan/PROGRESS.md naming it (D-315)
 // Usage: node scripts/docs-lint.mjs [root]    Exits 1 and prints one line per problem.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,6 +37,17 @@ function stripCode(text) {
   return text
     .replace(/^(```|~~~)[\s\S]*?^\1[^\n]*$/gm, (m) => m.replace(/[^\n]/g, ' '))
     .replace(/`[^`\n]*`/g, (m) => ' '.repeat(m.length));
+}
+
+// Task IDs named in a PROGRESS.md heading. "P1-T02, T08 and T09" counts as P1-T02, P1-T08, P1-T09.
+export function taskIdsInHeading(heading) {
+  const ids = [];
+  let prefix = null;
+  for (const m of heading.matchAll(/\b(?:(P\d[ab]?)-)?T(\d{2})\b/g)) {
+    if (m[1]) prefix = m[1];
+    if (prefix) ids.push(`${prefix}-T${m[2]}`);
+  }
+  return ids;
 }
 
 export function lint(root) {
@@ -88,6 +100,29 @@ export function lint(root) {
         if (!fs.existsSync(abs)) problems.push(`${rel(f)}:${i + 1}: broken link ${target}`);
       }
     });
+  }
+
+  // 5. ticked tasks need a progress entry (D-315)
+  const progressFile = path.join(root, 'docs/plan/PROGRESS.md');
+  const planDir = path.join(root, 'docs/plan');
+  if (fs.existsSync(progressFile) && fs.existsSync(planDir)) {
+    const logged = new Set(
+      fs
+        .readFileSync(progressFile, 'utf8')
+        .split('\n')
+        .filter((l) => l.startsWith('## '))
+        .flatMap(taskIdsInHeading),
+    );
+    for (const name of fs.readdirSync(planDir).filter((n) => /^phase-.*\.md$/.test(n))) {
+      const lines = fs.readFileSync(path.join(planDir, name), 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        const m = line.match(/^- \[x\] \*\*(P\d[ab]?-T\d{2})\b/);
+        if (m && !logged.has(m[1]))
+          problems.push(
+            `docs/plan/${name}:${i + 1}: ${m[1]} is ticked but has no PROGRESS.md entry`,
+          );
+      });
+    }
   }
   return problems;
 }

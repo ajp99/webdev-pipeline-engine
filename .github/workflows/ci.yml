@@ -30,6 +30,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm docs:lint:test
+      - run: pnpm doctor:test
       - run: pnpm docs:lint
 
   database:
