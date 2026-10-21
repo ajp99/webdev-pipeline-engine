@@ -15,8 +15,16 @@ function need(name: string): string {
 const admin = createClient<Database>(need('SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'), {
   auth: { autoRefreshToken: false, persistSession: false },
 });
+function positive(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0)
+    throw new Error(`${name} must be a positive number, got "${raw}"`);
+  return n;
+}
 const fixedPoll = process.env.WORKER_POLL_SECONDS
-  ? Number(process.env.WORKER_POLL_SECONDS) * 1000
+  ? positive('WORKER_POLL_SECONDS', 15) * 1000
   : null;
 const worker = `${hostname()}-${process.pid}`;
 const runner = startRunner(supabaseRunnerDeps(admin), defaultSelector(process.env), {
@@ -26,13 +34,19 @@ const runner = startRunner(supabaseRunnerDeps(admin), defaultSelector(process.en
   graceMs: DEFAULTS.graceMs,
   pollMinMs: fixedPoll ?? DEFAULTS.pollMinMs,
   pollMaxMs: fixedPoll ?? DEFAULTS.pollMaxMs,
-  maxParallel: Number(process.env.WORKER_MAX_PARALLEL_PROJECTS ?? DEFAULTS.maxParallel),
+  maxParallel: Math.floor(positive('WORKER_MAX_PARALLEL_PROJECTS', DEFAULTS.maxParallel)),
   log: (m) => console.log(`${new Date().toISOString()} ${m}`),
 });
 console.log(`Runner ${worker} started. Looking for work every 15 to 30 seconds. Ctrl+C to stop.`);
+let stopRequested = false;
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
-    console.log('Stopping after the current run...');
+    if (stopRequested) {
+      console.log('Stopping now. The run in progress will be picked up again after 10 minutes.');
+      process.exit(1);
+    }
+    stopRequested = true;
+    console.log('Stopping after the current run... press Ctrl+C again to stop now.');
     void runner.stop().then(() => process.exit(0));
   });
 }

@@ -59,6 +59,10 @@ select t.adv('claim_run refuses the owner session even if the grant were widened
 select t.adv('heartbeat_run refuses the owner session even if the grant were widened', t.proj('plan')||';'||t.sr(1,'running',1,'5 minutes','1 hour','w1')||';grant execute on function heartbeat_run(uuid,text) to authenticated', :'O', 'authenticated', 'select heartbeat_run('||t.rid(1)||',''w1'')', 'error:not allowed');
 select t.adv('finish_run refuses the owner session even if the grant were widened', t.proj('plan')||';'||t.sr(1,'running',1,'5 minutes','1 hour','w1')||';grant execute on function finish_run(uuid,text,public.run_status,bigint) to authenticated', :'O', 'authenticated', 'select finish_run('||t.rid(1)||',''w1'',''succeeded'')', 'error:not allowed');
 
+select t.adv('a queued run for a stage the project has left is not claimed', t.proj('plan')||';'||t.sr(1,'queued')||';update stage_runs set stage=''intake'' where id='||t.rid(1), null, 'service_role', 'select * from claim_run(''w1'')', 'ok', t.is(1,'status','queued'));
+select t.adv('a queued run that already used both attempts is failed, not left to block the queue', t.proj('plan')||';'||t.sr(1,'queued',2,null,'10 minutes')||';'||t.sr(2,'queued'), null, 'service_role', 'select * from claim_run(''w1'')', 'ok',
+  t.is(1,'status','failed')||' and not '||t.isnull(1,'finished_at')||' and '||t.is(2,'status','running'));
+
 \echo '### runner: stale runs (D-305)'
 select t.adv('a stale running run goes back to the queue and is claimed again by the next worker', t.proj('plan')||';'||t.sr(1,'running',1,'11 minutes','1 hour','w0'), null, 'service_role', 'select * from claim_run(''w2'')', 'ok',
   t.is(1,'status','running')||' and '||t.is(1,'claimed_by','w2')||' and '||t.is(1,'attempts','2'));
@@ -66,6 +70,8 @@ select t.adv('a stale run is re-queued even when it has no heartbeat yet', t.pro
   t.is(1,'claimed_by','w2')||' and '||t.is(1,'attempts','2'));
 select t.adv('a run with a fresh heartbeat is left alone', t.proj('plan')||';'||t.sr(1,'running',1,'5 minutes','1 hour','w0'), null, 'service_role', 'select * from claim_run(''w2'')', 'ok',
   t.is(1,'status','running')||' and '||t.is(1,'claimed_by','w0')||' and '||t.is(1,'attempts','1'));
+select t.adv('a stale run goes back to the queue with its claim, heartbeat and finish time cleared and a new queue time', t.proj('plan','paused')||';'||t.sr(1,'running',1,'11 minutes','2 hours','w0'), null, 'service_role', 'select * from claim_run(''w2'')', 'ok',
+  t.is(1,'status','queued')||' and '||t.isnull(1,'claimed_by')||' and '||t.isnull(1,'heartbeat_at')||' and '||t.isnull(1,'finished_at')||' and (select queued_at > now() - interval ''1 minute'' from stage_runs where id='||t.rid(1)||')');
 select t.adv('a stale run that used both attempts fails', t.proj('plan')||';'||t.sr(1,'running',2,'11 minutes','1 hour','w0'), null, 'service_role', 'select * from claim_run(''w2'')', 'ok',
   t.is(1,'status','failed')||' and not '||t.isnull(1,'finished_at'));
 select t.adv('a stale cancel_requested run is cancelled', t.proj('plan')||';'||t.sr(1,'cancel_requested',1,'11 minutes','1 hour','w0'), null, 'service_role', 'select * from claim_run(''w2'')', 'ok',

@@ -827,7 +827,8 @@ $$;
 revoke all on function enqueue_run(uuid, stage) from public, anon, authenticated, service_role;
 grant execute on function enqueue_run(uuid, stage) to authenticated, service_role;
 
--- Claims the oldest queued run whose project has no active run, in one statement, and returns it
+-- Claims the oldest queued run whose project is active, still in the run's stage and has no active run,
+-- in one statement, and returns it
 -- (no row when there is nothing to do). First tidies runs whose worker went away (D-305): a running run
 -- with no heartbeat for 10 minutes goes back to the queue, or fails when it has used both attempts; a
 -- cancel_requested run with no heartbeat for 10 minutes is cancelled.
@@ -857,10 +858,15 @@ begin
    where status = 'running'
      and coalesce(heartbeat_at, started_at, queued_at) < now() - interval '10 minutes';
 
+  -- A queued run that already used both attempts can never be claimed (attempts_limit); fail it so it
+  -- cannot block the queue.
+  update public.stage_runs set status = 'failed', finished_at = now()
+   where status = 'queued' and attempts >= 2;
+
   select s.* into r
     from public.stage_runs s
    where s.status = 'queued'
-     and exists (select 1 from public.projects p where p.id = s.project_id and p.status = 'active')
+     and exists (select 1 from public.projects p where p.id = s.project_id and p.status = 'active' and p.stage = s.stage)
      and not exists (
        select 1 from public.stage_runs a
         where a.project_id = s.project_id and a.status in ('running', 'waiting', 'cancel_requested')

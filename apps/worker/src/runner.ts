@@ -82,10 +82,13 @@ export async function executeRun(
     Math.min(cfg.watchdogMs, 10_000),
   );
 
-  const handler = select(run);
-  const work: Promise<{ tokens?: number } | void> = handler
-    ? handler({ run, signal: ac.signal, progress: () => (lastProgress = Date.now()) })
-    : Promise.reject(new Error(`no handler for stage ${run.stage}`));
+  // An async wrapper, so a handler (or the selector) that throws at once is a failed run like any
+  // other and the timers below are still cleared.
+  const work: Promise<{ tokens?: number } | void> = (async () => {
+    const handler = select(run);
+    if (!handler) throw new Error(`no handler for stage ${run.stage}`);
+    return handler({ run, signal: ac.signal, progress: () => (lastProgress = Date.now()) });
+  })();
   const settled = work.then(
     (r) => ({ ok: true as const, tokens: (r && r.tokens) || 0 }),
     (error: unknown) => ({ ok: false as const, error }),
@@ -135,6 +138,7 @@ export type LoopConfig = RunnerConfig & {
 export function startRunner(deps: RunnerDeps, select: HandlerSelector, cfg: LoopConfig) {
   let stopping = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let inflight: Promise<void> = Promise.resolve();
   const active = new Set<Promise<unknown>>();
 
   const tick = async () => {
@@ -153,15 +157,19 @@ export function startRunner(deps: RunnerDeps, select: HandlerSelector, cfg: Loop
     }
     if (!stopping) {
       const wait = cfg.pollMinMs + Math.random() * (cfg.pollMaxMs - cfg.pollMinMs);
-      timer = setTimeout(() => void tick(), wait);
+      timer = setTimeout(() => {
+        inflight = tick();
+      }, wait);
     }
   };
-  void tick();
+  inflight = tick();
 
   return {
     async stop() {
       stopping = true;
       clearTimeout(timer);
+      // A claim may be in flight: wait for it so a run it returns is part of what we wait for.
+      await inflight;
       await Promise.allSettled([...active]);
     },
   };

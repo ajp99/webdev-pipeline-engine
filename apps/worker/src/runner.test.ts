@@ -78,6 +78,42 @@ describe('executeRun', () => {
     expect(finished).toEqual([{ status: 'failed', tokens: 0 }]);
   });
 
+  it('reports failure and stops its timers when the handler throws at once', async () => {
+    const beats: string[] = [];
+    const { deps, finished } = fakeDeps({
+      heartbeat: async (id) => {
+        beats.push(id);
+        return 'running';
+      },
+    });
+    const out = await executeRun(
+      deps,
+      run(),
+      () => () => {
+        throw new Error('sync boom');
+      },
+      cfg(),
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(out).toBe('failed');
+    expect(finished).toEqual([{ status: 'failed', tokens: 0 }]);
+    expect(beats).toEqual([]);
+  });
+
+  it('reports failure when the selector itself throws', async () => {
+    const { deps, finished } = fakeDeps();
+    const out = await executeRun(
+      deps,
+      run(),
+      () => {
+        throw new Error('bad selector');
+      },
+      cfg(),
+    );
+    expect(out).toBe('failed');
+    expect(finished).toHaveLength(1);
+  });
+
   it('reports failure when no handler exists for the run', async () => {
     const { deps, finished } = fakeDeps();
     await executeRun(deps, run(), () => undefined, cfg());
@@ -241,6 +277,22 @@ describe('startRunner', () => {
     await vi.advanceTimersByTimeAsync(3500);
     expect(calls).toBeGreaterThanOrEqual(3);
     await r.stop();
+  });
+
+  it('a run claimed while stop is called still finishes before stop returns', async () => {
+    const { deps, finished } = fakeDeps();
+    let release: (r: Run | null) => void = () => {};
+    deps.claim = () => new Promise<Run | null>((resolve) => (release = resolve));
+    const r = startRunner(deps, () => async () => sleep(2000), loopCfg());
+    await vi.advanceTimersByTimeAsync(10);
+    let stopped = false;
+    const stopping = r.stop().then(() => (stopped = true));
+    release(run({ id: 'late' }));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(stopped).toBe(false);
+    await vi.advanceTimersByTimeAsync(2000);
+    await stopping;
+    expect(finished).toHaveLength(1);
   });
 
   it('stop waits for the running run and then claims nothing more', async () => {

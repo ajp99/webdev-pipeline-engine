@@ -14,6 +14,7 @@ export async function cancelRun(formData: FormData) {
   const runId = String(formData.get('runId') ?? '');
   const supabase = await createClient();
   const { error } = await supabase.rpc('request_run_cancel', { p_run: runId });
-  if (error) throw new Error(error.message);
+  // A run that finished between the page load and the click is not an error: show the page as it is now.
+  if (error && !/already/.test(error.message)) throw new Error(error.message);
   revalidatePath('/owner', 'layout');
 }
