@@ -24,10 +24,10 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P1-T04 Stage and gate consistency test**  
   Acceptance: A test parses `stages.yaml` and `gates.yaml` and fails if the SQL `stage` enum or the `gate_config` seed rows disagree with them. TypeScript types come from the generated database types (P1-T03); the console and `advance_stage()` read gate behavior from `gate_config`. No code generator.
 
-- [ ] **P1-T05 Authentication and roles (moves to 2a, owner login only, D-298)**  
+- [x] **P1-T05 Authentication and roles (moves to 2a, owner login only, D-298)**  
   Acceptance: Owner login (email + password); the owner's row in `owners` is inserted by a service-role bootstrap script. Unauthenticated users are redirected. There is no client login until go-live (G15).
 
-- [ ] **P1-T06 Owner console shell (moves to 2a, D-297)**  
+- [x] **P1-T06 Owner console shell (moves to 2a, D-297)**  
   Acceptance: Project list and approval queue pages. Each pending gate shows its type (soft, hard, client), the Accept, Feedback and Reject actions, and an overdue badge computed from `escalate_after_hours`.
 
 - [x] **P1-T07 Implement advance_stage()**  

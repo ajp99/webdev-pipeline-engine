@@ -1,4 +1,4 @@
-// Tests for pnpm doctor: each defect planted in the fake machine must be reported, a good one must pass.
+// Tests for pnpm run doctor: each defect planted in the fake machine must be reported, a good one must pass.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseEnv, tablesFromMigrations, runChecks, render } from './doctor.mjs';
