@@ -17,7 +17,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 
 ## Tasks
 
-- [ ] **P2-T01 Template schema and generic template**  
+- [x] **P2-T01 Template schema and generic template**  
   Acceptance: Templates are stored as JSON with versions. Question types: short text, long text, single choice, multiple choice, file upload, links. Each question has a `required` flag set by the owner. The console validates edits against the schema and rejects invalid ones with clear errors. A generic approved template exists, including the design section from task P2-T15.
 
 - [-] **P2-T02 Industry template generation and editing (moved to go-live, G18)**  

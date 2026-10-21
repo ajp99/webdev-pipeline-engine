@@ -1,0 +1,377 @@
+{
+  "industry": "generic",
+  "version": 1,
+  "sections": [
+    {
+      "id": "business",
+      "title": "About the business",
+      "description": "Who the client is and what they do.",
+      "questions": [
+        {
+          "id": "business_name",
+          "type": "short_text",
+          "label": "What is the name of the business?",
+          "required": true
+        },
+        {
+          "id": "what_you_do",
+          "type": "long_text",
+          "label": "What does the business do, and who is it for?",
+          "required": true,
+          "help": "A few sentences in the client's own words."
+        },
+        {
+          "id": "location",
+          "type": "short_text",
+          "label": "Where is the business based, and where does it serve customers?",
+          "required": false
+        },
+        {
+          "id": "contact_email",
+          "type": "short_text",
+          "label": "Which email address should enquiries from the site go to?",
+          "required": true
+        },
+        {
+          "id": "contact_phone",
+          "type": "short_text",
+          "label": "Phone number to show on the site, if any",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "goals",
+      "title": "Goals and audience",
+      "questions": [
+        {
+          "id": "site_goal",
+          "type": "single_choice",
+          "label": "What is the main job of the website?",
+          "required": true,
+          "options": [
+            {
+              "value": "leads",
+              "label": "Get enquiries or leads"
+            },
+            {
+              "value": "bookings",
+              "label": "Take bookings or appointments"
+            },
+            {
+              "value": "sell_online",
+              "label": "Sell products online"
+            },
+            {
+              "value": "inform",
+              "label": "Give information"
+            },
+            {
+              "value": "portfolio",
+              "label": "Show work or a portfolio"
+            }
+          ]
+        },
+        {
+          "id": "main_audience",
+          "type": "long_text",
+          "label": "Who are the ideal visitors, and what do they want when they arrive?",
+          "required": true
+        },
+        {
+          "id": "success_measure",
+          "type": "long_text",
+          "label": "How will the client know the site is working?",
+          "required": false
+        },
+        {
+          "id": "competitors",
+          "type": "links",
+          "label": "Up to 3 competitor or similar sites",
+          "required": false,
+          "max_links": 3,
+          "note_per_link": true
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "title": "Pages and content",
+      "questions": [
+        {
+          "id": "pages_wanted",
+          "type": "multiple_choice",
+          "label": "Which pages should the site have?",
+          "required": true,
+          "options": [
+            {
+              "value": "home",
+              "label": "Home"
+            },
+            {
+              "value": "about",
+              "label": "About"
+            },
+            {
+              "value": "services",
+              "label": "Services"
+            },
+            {
+              "value": "pricing",
+              "label": "Pricing"
+            },
+            {
+              "value": "gallery",
+              "label": "Gallery"
+            },
+            {
+              "value": "testimonials",
+              "label": "Testimonials"
+            },
+            {
+              "value": "blog",
+              "label": "Blog or news"
+            },
+            {
+              "value": "faq",
+              "label": "FAQ"
+            },
+            {
+              "value": "contact",
+              "label": "Contact"
+            }
+          ]
+        },
+        {
+          "id": "copy_status",
+          "type": "single_choice",
+          "label": "Does the client have the text for the site?",
+          "required": true,
+          "options": [
+            {
+              "value": "ready",
+              "label": "Yes, it is ready"
+            },
+            {
+              "value": "partial",
+              "label": "Some of it"
+            },
+            {
+              "value": "need_help",
+              "label": "No, it needs to be written"
+            }
+          ]
+        },
+        {
+          "id": "existing_copy_files",
+          "type": "file_upload",
+          "label": "Existing text or documents to reuse",
+          "required": false,
+          "accept": ["docx", "pdf", "txt", "md"],
+          "max_files": 5,
+          "max_mb": 25
+        },
+        {
+          "id": "domain_name",
+          "type": "short_text",
+          "label": "Domain name the client owns or wants, if any",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "design",
+      "title": "Design",
+      "description": "Style, layout and brand. Style cards are shown as sample images.",
+      "questions": [
+        {
+          "id": "design_style_cards",
+          "type": "multiple_choice",
+          "label": "Which style directions feel right? Pick 1 or 2.",
+          "required": true,
+          "max_selections": 2,
+          "options": [
+            {
+              "value": "minimal",
+              "label": "Minimal"
+            },
+            {
+              "value": "bold",
+              "label": "Bold"
+            },
+            {
+              "value": "warm",
+              "label": "Warm"
+            },
+            {
+              "value": "corporate",
+              "label": "Corporate"
+            }
+          ]
+        },
+        {
+          "id": "layout_density",
+          "type": "single_choice",
+          "label": "How dense should the layout be?",
+          "required": true,
+          "options": [
+            {
+              "value": "airy",
+              "label": "Airy, lots of white space"
+            },
+            {
+              "value": "balanced",
+              "label": "Balanced"
+            },
+            {
+              "value": "dense",
+              "label": "Dense, lots on screen"
+            }
+          ]
+        },
+        {
+          "id": "reference_sites",
+          "type": "links",
+          "label": "Up to 3 sites the client likes, and what they like about each",
+          "required": false,
+          "max_links": 3,
+          "note_per_link": true
+        },
+        {
+          "id": "colors_and_fonts",
+          "type": "long_text",
+          "label": "Colors and font styles the client prefers or already uses",
+          "required": false
+        },
+        {
+          "id": "brand_guideline",
+          "type": "file_upload",
+          "label": "Brand guideline, if there is one",
+          "required": false,
+          "accept": ["pdf"],
+          "max_files": 1,
+          "max_mb": 25
+        },
+        {
+          "id": "imagery_style",
+          "type": "single_choice",
+          "label": "What kind of images should the site use?",
+          "required": false,
+          "options": [
+            {
+              "value": "photography",
+              "label": "Photography"
+            },
+            {
+              "value": "illustration",
+              "label": "Illustration"
+            },
+            {
+              "value": "mixed",
+              "label": "A mix"
+            },
+            {
+              "value": "minimal_imagery",
+              "label": "Very few images"
+            }
+          ]
+        },
+        {
+          "id": "imagery_files",
+          "type": "file_upload",
+          "label": "Images to use on the site",
+          "required": false,
+          "accept": ["png", "jpeg", "webp"],
+          "max_files": 10,
+          "max_mb": 5,
+          "help": "Images over 5 MB are rejected."
+        },
+        {
+          "id": "things_to_avoid",
+          "type": "long_text",
+          "label": "Anything to avoid in the look or the imagery",
+          "required": false
+        },
+        {
+          "id": "existing_website",
+          "type": "long_text",
+          "label": "Does the client have a website today? Give the address, what to keep and what to change.",
+          "required": false
+        },
+        {
+          "id": "logo",
+          "type": "file_upload",
+          "label": "Logo",
+          "required": true,
+          "accept": ["png", "svg", "jpeg", "webp", "pdf"],
+          "max_files": 1,
+          "max_mb": 5,
+          "none_allowed": true,
+          "help": "Upload the logo, or answer that there is none."
+        }
+      ]
+    },
+    {
+      "id": "features",
+      "title": "Features",
+      "questions": [
+        {
+          "id": "features_needed",
+          "type": "multiple_choice",
+          "label": "Which features does the site need?",
+          "required": false,
+          "options": [
+            {
+              "value": "contact_form",
+              "label": "Contact form"
+            },
+            {
+              "value": "booking",
+              "label": "Online booking"
+            },
+            {
+              "value": "newsletter",
+              "label": "Newsletter sign-up"
+            },
+            {
+              "value": "shop",
+              "label": "Online shop"
+            },
+            {
+              "value": "map",
+              "label": "Map"
+            },
+            {
+              "value": "social_links",
+              "label": "Social media links"
+            }
+          ]
+        },
+        {
+          "id": "integrations",
+          "type": "long_text",
+          "label": "Tools the site should connect to (calendar, CRM, payments, mailing list)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "practical",
+      "title": "Timing and anything else",
+      "questions": [
+        {
+          "id": "launch_date",
+          "type": "short_text",
+          "label": "Is there a date the site must be live by?",
+          "required": false
+        },
+        {
+          "id": "anything_else",
+          "type": "long_text",
+          "label": "Anything else we should know?",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

@@ -11,3 +11,4 @@ export type { Database, Json } from './database.types';
 export { Constants } from './database.types';
 
 export * from './queue';
+export * from './template';
