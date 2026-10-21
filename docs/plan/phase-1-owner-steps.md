@@ -2,7 +2,7 @@
 
 Development is dev-only (D-263): everything runs on your laptop in WSL2 against a local Supabase, and there is no hosted project. These steps finish tasks P1-T02, P1-T08, P1-T09, P1-T11 and P1-T16 (P1-T05 and P1-T06 moved to Phase 2a; P1-T10 and P1-T15 moved to go-live). Do them in this order. Never paste keys into chat. Hosting, client email and the other deferred items are in [go-live-readiness.md](go-live-readiness.md).
 
-At any point, `pnpm doctor` checks your setup and tells you what is missing (it changes nothing and prints no key).
+At any point, `pnpm run doctor` checks your setup and tells you what is missing (it changes nothing and prints no key). Use `run`: plain `pnpm doctor` is pnpm's own built-in command and prints nothing.
 
 0. **GitHub settings first (P1-T11).** Repository Settings, Code security: turn on secret scanning and push protection, and revoke the personal access token that was pasted into chat earlier.
 1. **Start the local Supabase (P1-T02).** Needs Docker in WSL2: `supabase/config.toml` is already committed (public sign-ups off), so skip `supabase init` and run `supabase start`. Note the local API URL, anon key and service role key it prints.

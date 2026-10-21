@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Writes apps/web/.env.local and apps/worker/.env from the running local Supabase (owner steps 4 and 6).
 # Prints no key. Needs `supabase start` to be running. Asks for the owner email and a password (hidden).
-# Refuses to overwrite an existing file unless you pass --force. Run `pnpm doctor` afterwards.
+# Refuses to overwrite an existing file unless you pass --force. Run `pnpm run doctor` afterwards.
 # Usage: bash scripts/setup-env.sh [--force]
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -46,4 +46,4 @@ ENV
 
 pnpm --filter @wpe/worker bootstrap-owner
 sed -i '/^OWNER_PASSWORD=/d' apps/worker/.env
-echo "Wrote the two env files and removed OWNER_PASSWORD. Now run: pnpm doctor"
+echo "Wrote the two env files and removed OWNER_PASSWORD. Now run: pnpm run doctor"

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* global process, console, fetch */
-// pnpm doctor (P2-T17): reports whether this machine is set up for local development.
+// pnpm run doctor (P2-T17; plain `pnpm doctor` is pnpm's own built-in command and prints nothing): reports whether this machine is set up for local development.
 // Reports only: it changes nothing, creates no users and never prints a key or password.
 // Checks: Node version, git hooks, env files, the local Supabase (reachable, email provider on,
 // public sign-ups off), every table from the migrations present, and the owner row.

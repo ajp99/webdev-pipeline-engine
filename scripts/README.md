@@ -6,7 +6,7 @@ Owner-run and maintenance scripts. Nothing here runs automatically except where 
 | --- | --- | --- |
 | provisioning | P3-T09 | Creates a client repo from the master starter, installs the GitHub App, links the Vercel project, records the IDs |
 | backup | P1-T10 | Encrypted database export, scheduled and before project close; deletes exports older than 180 days |
-| doctor (`pnpm doctor`) | P2-T17 | Reports whether this machine is set up: Node, git hooks, env files, local Supabase reachable, email provider on, public sign-ups off, all tables present, owner login exists. Changes nothing, prints no key |
+| doctor (`pnpm run doctor`) | P2-T17 | Reports whether this machine is set up: Node, git hooks, env files, local Supabase reachable, email provider on, public sign-ups off, all tables present, owner login exists. Changes nothing, prints no key. Type `pnpm run doctor`: plain `pnpm doctor` is pnpm's own built-in command, which silently checks something else |
 | setup-env (`bash scripts/setup-env.sh`) | P2-T17 | Writes `apps/web/.env.local` and `apps/worker/.env` from the running local Supabase, creates the owner login, removes the password afterwards. Prints no key |
 | bootstrap owner | P1-T05 | Inserts the owner row into `owners` with the service role |
 | handover | P5-T10 | Pushes one clean commit into the empty repo the client creates and shares |
