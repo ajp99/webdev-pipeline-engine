@@ -155,3 +155,8 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - What changed: on the owner's laptop `pnpm doctor` printed nothing because pnpm has a built-in `doctor` command that takes priority over a package script. Our script is run as `pnpm run doctor`; scripts README, the owner steps, `setup-env.sh` and the script comments now say so. The script name is unchanged.
 - Evidence: in the agent's checkout `pnpm doctor` exits 0 with no output, while `pnpm run doctor` prints the report and exits 1 when env files are missing.
 - Follow-ups or blockers: D-241 and `docs/spec/15-operations.md` still say `pnpm doctor`; the spec is locked, so the owner decides whether to reword them (a proposal can be filed).
+
+## 2026-10-21 P1-T05, T06 Live checks done
+- What changed: nothing in the code; the two live checks that were open since 2026-10-08 were done on the owner's laptop and both tasks are ticked.
+- Evidence: P1-T05: the owner login created by `bootstrap-owner` signs in at `/login` (the password grant returns an `access_token`, sign-up returns `signup_disabled`); signed out, `/owner`, `/owner/queue` and `/client` redirect to `/login`. P1-T06: `/owner` lists the demo projects with stage and waiting count, and the Approval queue showed the demo item whose Accept moved two projects from `intake` to `requirements` (see the P1-T09 entry). Two bugs found on the way were fixed in #25 and #26.
+- Follow-ups or blockers: none. The client-blocked-from-owner check on live data stays with the client login at go-live (G15); the database checks cover it.
