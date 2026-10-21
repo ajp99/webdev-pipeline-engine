@@ -66,13 +66,34 @@ select case when not has_schema_privilege('anon', 'private', 'usage') and not ha
   then 'PASS      anon cannot use the private schema' else 'FAIL      anon or PUBLIC can use the private schema' end;
 select case when has_schema_privilege('authenticated', 'private', 'usage') and has_schema_privilege('service_role', 'private', 'usage')
   then 'PASS      the API roles can use the private schema (policies need it)' else 'FAIL      an API role cannot use the private schema' end;
-select case when (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+-- The public functions the API roles can run, per role (D-264, D-302). Anything new must be added here on purpose.
+select case when (select coalesce(array_agg(p.proname::text order by p.proname), '{}') from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
-      and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('service_role', p.oid, 'execute')))
-    = array['advance_stage']
-  then 'PASS      the only function in public the API can call is advance_stage'
-  else 'FAIL      the API can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+      and has_function_privilege('authenticated', p.oid, 'execute'))
+    = array['advance_stage','enqueue_run','request_run_cancel']
+  then 'PASS      the owner session can call only advance_stage, enqueue_run and request_run_cancel'
+  else 'FAIL      the owner session can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
-      and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('service_role', p.oid, 'execute'))) end;
+      and has_function_privilege('authenticated', p.oid, 'execute')) end;
+select case when (select coalesce(array_agg(p.proname::text order by p.proname), '{}') from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.prorettype <> 'trigger'::regtype
+      and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
+      and has_function_privilege('service_role', p.oid, 'execute'))
+    = array['advance_stage','claim_run','enqueue_run','finish_run','heartbeat_run']
+  then 'PASS      the worker can call the four queue functions it uses and advance_stage, nothing else'
+  else 'FAIL      the worker can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.prorettype <> 'trigger'::regtype
+      and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
+      and has_function_privilege('service_role', p.oid, 'execute')) end;
+select case when not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname in ('claim_run','heartbeat_run','finish_run')
+      and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute')))
+  then 'PASS      the worker-only queue functions are closed to anon and the owner session'
+  else 'FAIL      anon or the owner session can run a worker-only queue function' end;
+select case when not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname in ('enqueue_run','claim_run','heartbeat_run','finish_run','request_run_cancel')
+      and has_function_privilege('anon', p.oid, 'execute'))
+  then 'PASS      anon, and PUBLIC, can run none of the queue functions'
+  else 'FAIL      anon or PUBLIC can run a queue function' end;
