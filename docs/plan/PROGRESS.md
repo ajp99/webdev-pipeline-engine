@@ -140,3 +140,8 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - What changed: the independent review of Phase 1 found no blockers. Fixed: the login action now shows "wrong email or password" only for `invalid_credentials` and otherwise shows "sign-in is unavailable" and logs the cause; a new test in `packages/shared` fails on any import cycle between its source files (`next build` was tried and does not catch the cycle of #26); owner-steps text updated; G23 (minimum password length) and G24 (Accept is not one transaction) added to go-live.
 - Evidence: the full mutation job (`mutations.yml`, all 87 files) ran green in CI on PR #25 (`42adf16`), the latest run; no rule changed since. The owner read `0001_init.sql` before the gate and has no changes to ask for. Local checks: lint, typecheck, tests, format and docs lint pass; the new cycle test fails on the pre-#26 code and passes now.
 - Follow-ups or blockers: the owner's acceptance of the gate is the last open step.
+
+## 2026-10-21 Phase 1 gate accepted
+- What changed: Phase 1 marked `done` in `phase-1-foundation.md` and `docs/plan/README.md`, by the owner merging this PR.
+- Evidence: the gate evidence is in the 2026-10-21 entries above (local stack, 241 checks, gate demo, MCP read-only probe); the independent review found no blockers and its follow-ups were merged in #28.
+- Follow-ups or blockers: Phase 2a is next (early tasks P2-T17 and P2-T01 per D-312); no proposals are open.

@@ -1,6 +1,6 @@
 # Phase 1: Foundation
 
-**Status:** in progress
+**Status:** done
 
 **Goal:** Database, authentication, tooling, and an owner console shell, with the approval and stage-advance rules enforced in the database.
 
