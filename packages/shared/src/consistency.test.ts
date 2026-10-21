@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { STAGES } from './index';
-import { STAGE_ARTIFACT } from './queue';
+import { ROUND_ARTIFACT, STAGE_ARTIFACT } from './queue';
 import { Constants } from './database.types';
 
 // P1-T04: the SQL and the TypeScript constants must agree with docs/spec/stages.yaml and gates.yaml.
@@ -92,5 +92,28 @@ describe('queue logic agrees with advance_stage() (P1-T06, P1-T07)', () => {
       [...caseBlock.matchAll(/when '(\w+)'\s+then '(\w+)'/g)].map((m) => [m[1]!, m[2]!]),
     );
     expect(fromSql).toEqual(STAGE_ARTIFACT);
+  });
+});
+
+describe('stages.yaml outputs include each stage gating artifact (P2-T17, D-235, D-241)', () => {
+  const outputs = new Map<string, string[]>(
+    stagesYaml.stages.map((s: { id: string; outputs?: string[] }) => [s.id, s.outputs ?? []]),
+  );
+
+  it('lists the gating artifact type of every gated stage in that stage outputs', () => {
+    for (const [stage, type] of Object.entries(STAGE_ARTIFACT)) {
+      expect(outputs.get(stage), `${stage} outputs`).toContain(type);
+    }
+  });
+
+  it('lists round_summary in the build_rounds outputs', () => {
+    expect(outputs.get('build_rounds')).toContain(ROUND_ARTIFACT);
+  });
+
+  it('gates only stages that produce something, and no stage without a gate outputs a gating type alone', () => {
+    const gated = new Set(Object.keys(STAGE_ARTIFACT));
+    for (const [stage, outs] of outputs) {
+      if (outs.length === 0) expect(gated.has(stage), `${stage} has no outputs`).toBe(false);
+    }
   });
 });

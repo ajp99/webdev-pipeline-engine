@@ -42,7 +42,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P4-T10 Token tracking**  
   Acceptance: `stage_runs` records tokens used. The console shows a progress bar of token use against the plan's token budget. No dollar amounts and no warnings.
 
-- [x] **P4-T11 GitHub webhook (dropped)**  
+- [-] **P4-T11 GitHub webhook (dropped)**  
   Dropped by D-279: Accept happens only in the console, so there is no webhook endpoint and no webhook credential. D-058 is superseded.
 
 - [ ] **P4-T12 Phase 4 gate evidence**  

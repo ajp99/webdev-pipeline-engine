@@ -14,8 +14,10 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "dev": "pnpm --filter @wpe/web dev",
+    "doctor": "node scripts/doctor.mjs",
     "docs:lint": "node scripts/docs-lint.mjs",
-    "docs:lint:test": "node --test scripts/docs-lint.test.mjs"
+    "docs:lint:test": "node --test scripts/docs-lint.test.mjs",
+    "doctor:test": "node --test scripts/doctor.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

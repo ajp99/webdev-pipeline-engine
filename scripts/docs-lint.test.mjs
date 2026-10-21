@@ -63,3 +63,35 @@ test('a broken relative link is reported; external and anchor links are not', ()
     ['docs/a.md:1: broken link missing.md'],
   );
 });
+
+const PLAN = (box, id = 'P1-T05') => `- [${box}] **${id} Something**  \n  Acceptance: x\n`;
+const withPlan = (plan, progress) => ({
+  ...clean(),
+  'docs/plan/phase-1-x.md': plan,
+  'docs/plan/PROGRESS.md': progress,
+});
+
+test('a ticked task with a progress entry passes', () =>
+  assert.deepEqual(lint(tree(withPlan(PLAN('x'), '## 2026-10-21 P1-T05 Login\n- done\n'))), []));
+test('a ticked task without a progress entry is reported', () => {
+  const p = lint(tree(withPlan(PLAN('x'), '## 2026-10-21 P1-T06 Console\n- done\n')));
+  assert.ok(p.some((m) => m.includes('P1-T05 is ticked but has no PROGRESS.md entry')));
+});
+test('unticked and moved tasks need no entry', () => {
+  assert.deepEqual(lint(tree(withPlan(PLAN(' ') + PLAN('-', 'P1-T06'), '# Progress\n'))), []);
+});
+test('a grouped heading covers every task it lists', () => {
+  const f = withPlan(
+    PLAN('x', 'P1-T08') + PLAN('x', 'P1-T09'),
+    '## 2026-10-21 P1-T02, T08 and T09 Evidence\n',
+  );
+  assert.deepEqual(lint(tree(f)), []);
+});
+test('taskIdsInHeading expands short forms', async () => {
+  const { taskIdsInHeading } = await import('./docs-lint.mjs');
+  assert.deepEqual(taskIdsInHeading('## d P2-T17, T01 and P1-T05 x'), [
+    'P2-T17',
+    'P2-T01',
+    'P1-T05',
+  ]);
+});
