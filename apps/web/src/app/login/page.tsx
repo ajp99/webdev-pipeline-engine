@@ -2,6 +2,7 @@ import { signIn } from './actions';
 
 const MESSAGES: Record<string, string> = {
   invalid: 'Email or password is wrong.',
+  unavailable: 'Sign-in is unavailable right now. Check that the local Supabase is running.',
   no_role: 'This account is not set up for the pipeline. Ask the owner.',
 };
 
