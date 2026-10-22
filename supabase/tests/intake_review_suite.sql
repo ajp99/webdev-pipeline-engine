@@ -65,3 +65,29 @@ select t.adv('a follow-up must be an object', t.setup(1), null, 'service_role', 
 select t.adv('the review needs a summary', t.setup(1), null, 'service_role', t.cir(1, '[]', '[]', '  '), 'error:needs a summary');
 select t.adv('gaps must be a list', t.setup(1), null, 'service_role', t.cir(1, '[]', '{"a": 1}'), 'error:gaps must be a list');
 select t.adv('follow-ups must be a list', t.setup(1), null, 'service_role', t.cir(1, '{"a": 1}'), 'error:follow-ups must be a list');
+
+-- The reviewer's findings: what lands in an immutable row is checked element by element and bounded.
+select t.adv('a missing summary (null) is refused', t.setup(1), null, 'service_role', t.cir(1, '[]', '[]', null), 'error:needs a summary');
+select t.adv('missing gaps (null) are refused', t.setup(1), null, 'service_role', t.cir(1, '[]', null), 'error:gaps must be a list');
+select t.adv('missing follow-ups (null) are refused', t.setup(1), null, 'service_role', t.cir(1, null), 'error:follow-ups must be a list');
+select t.adv('a gap must be an object', t.setup(1), null, 'service_role', t.cir(1, '[]', '[1, "x"]'), 'error:each gap');
+select t.adv('a gap needs a text issue', t.setup(1), null, 'service_role', t.cir(1, '[]', '[{"issue": 5}]'), 'error:each gap');
+select t.adv('a gap may not carry other keys', t.setup(1), null, 'service_role', t.cir(1, '[]', '[{"issue": "x", "evil": 1}]'), 'error:each gap');
+select t.adv('a gap question id must be text', t.setup(1), null, 'service_role', t.cir(1, '[]', '[{"issue": "x", "question_id": 7}]'), 'error:each gap');
+select t.adv('a gap may name its question', t.setup(1), null, 'service_role', t.cir(1, '[]', '[{"issue": "x", "question_id": "site_goal"}]'), 'ok');
+select t.adv('at most 40 gaps', t.setup(1), null, 'service_role',
+  t.cir(1, '[]', (select jsonb_agg(jsonb_build_object('issue', 'g' || i))::text from generate_series(1, 41) i)), 'error:at most 40 gaps');
+select t.adv('a follow-up text must be a string', t.setup(1), null, 'service_role', t.cir(1, '[{"id": "fu2_1", "text": 123}]'), 'error:needs text');
+select t.adv('a follow-up may not carry other keys', t.setup(1), null, 'service_role', t.cir(1, '[{"id": "fu2_1", "text": "Q?", "evil": 1}]'), 'error:needs text');
+select t.adv('a follow-up reason must be a string', t.setup(1), null, 'service_role', t.cir(1, '[{"id": "fu2_1", "text": "Q?", "reason": ["x"]}]'), 'error:needs text');
+select t.adv('a follow-up text is at most 500 characters', t.setup(1), null, 'service_role', t.cir(1, '[{"id": "fu2_1", "text": "' || repeat('x', 501) || '"}]'), 'error:needs text');
+select t.adv('a follow-up text of 500 characters is fine', t.setup(1), null, 'service_role', t.cir(1, '[{"id": "fu2_1", "text": "' || repeat('x', 500) || '"}]'), 'ok');
+select t.adv('the summary is at most 1500 characters', t.setup(1), null, 'service_role', t.cir(1, '[]', '[]', repeat('x', 1501)), 'error:too long');
+select t.adv('a summary of 1500 characters is fine', t.setup(1), null, 'service_role', t.cir(1, '[]', '[]', repeat('x', 1500)), 'ok');
+select t.adv('a gap issue is at most 1100 characters', t.setup(1), null, 'service_role', t.cir(1, '[]', '[{"issue": "' || repeat('x', 1101) || '"}]'), 'error:each gap');
+select t.adv('follow-up ids start at 1', t.setup(1), null, 'service_role', t.cir(1, '[{"id": "fu2_0", "text": "Q?"}]'), 'error:needs text and an id');
+select t.adv('follow-up ids have no leading zero', t.setup(1), null, 'service_role', t.cir(1, '[{"id": "fu2_01", "text": "Q?"}]'), 'error:needs text and an id');
+select t.adv('follow-up ids run from 1 to n without a gap', t.setup(1), null, 'service_role', t.cir(1, '[' || t.fu(2, 1) || ',' || t.fu(2, 3) || ']'), 'error:must run from');
+select t.adv('follow-up ids may come in any order', t.setup(1), null, 'service_role', t.cir(1, '[' || t.fu(2, 2) || ',' || t.fu(2, 1) || ']'), 'ok');
+select t.adv('a review before the last round is not marked capped', t.setup(2), null, 'service_role', t.cir(2, '[' || t.fu(3, 1) || ']'), 'ok',
+  '(select content->''capped'' from artifacts where project_id=''cccccccc-0000-0000-0000-000000000001'' and type=''intake_record'')=''false''::jsonb');

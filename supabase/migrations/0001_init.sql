@@ -1034,8 +1034,26 @@ begin
   if p_summary is null or btrim(p_summary) = '' then
     raise exception 'complete_intake_review: the review needs a summary';
   end if;
+  if length(p_summary) > 1500 or length(coalesce(p_model, '')) > 100 then
+    raise exception 'complete_intake_review: summary or model name too long';
+  end if;
   if p_gaps is null or jsonb_typeof(p_gaps) <> 'array' then
     raise exception 'complete_intake_review: gaps must be a list';
+  end if;
+  if jsonb_array_length(p_gaps) > 40 then
+    raise exception 'complete_intake_review: at most 40 gaps';
+  end if;
+  -- Gaps are stored in an immutable row, so each element is checked: an object with a text issue and an
+  -- optional question id, nothing else, and bounded in length.
+  if exists (
+    select 1 from jsonb_array_elements(p_gaps) g
+     where jsonb_typeof(g) <> 'object'
+        or jsonb_typeof(g->'issue') is distinct from 'string'
+        or btrim(g->>'issue') = '' or length(g->>'issue') > 1100
+        or (g ? 'question_id' and (jsonb_typeof(g->'question_id') <> 'string' or length(g->>'question_id') > 100))
+        or exists (select 1 from jsonb_object_keys(g) k where k not in ('issue', 'question_id'))
+  ) then
+    raise exception 'complete_intake_review: each gap needs a text issue (and may name a question id)';
   end if;
   if p_followups is null or jsonb_typeof(p_followups) <> 'array' then
     raise exception 'complete_intake_review: follow-ups must be a list';
@@ -1050,10 +1068,19 @@ begin
   if exists (
     select 1 from jsonb_array_elements(p_followups) f
      where jsonb_typeof(f) <> 'object'
-        or btrim(coalesce(f->>'text', '')) = ''
-        or coalesce(f->>'id', '') !~ ('^fu' || (p_round + 1) || '_[0-9]+$')
+        or jsonb_typeof(f->'text') is distinct from 'string'
+        or btrim(f->>'text') = '' or length(f->>'text') > 500
+        or (f ? 'reason' and (jsonb_typeof(f->'reason') <> 'string' or length(f->>'reason') > 500))
+        or exists (select 1 from jsonb_object_keys(f) k where k not in ('id', 'text', 'reason'))
+        or jsonb_typeof(f->'id') is distinct from 'string'
+        or (f->>'id') !~ ('^fu' || (p_round + 1) || '_[1-9][0-9]*$')
   ) then
     raise exception 'complete_intake_review: each follow-up needs text and an id like fu%_1', p_round + 1;
+  end if;
+  -- The ids are exactly fu<next>_1 to fu<next>_n, so they read in order and cannot repeat.
+  if (select count(*) from jsonb_array_elements(p_followups) f
+       where substring(f->>'id' from '_([0-9]+)$')::int between 1 and n) <> n then
+    raise exception 'complete_intake_review: follow-up ids must run from fu%_1 to fu%_%', p_round + 1, p_round + 1, n;
   end if;
   if (select count(distinct f->>'id') from jsonb_array_elements(p_followups) f) <> n then
     raise exception 'complete_intake_review: follow-up ids must be unique';
