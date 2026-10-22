@@ -1,6 +1,6 @@
 # Proposal: A free model provider for single-shot agent roles in development
 
-- **Status:** open
+- **Status:** accepted
 - **Date:** 2026-10-22
 - **Raised by:** Claude (agent), at the owner's request in chat
 - **Task or spec reference:** P2-T05 (intake agent review); D-275, D-313; `docs/spec/04-intake.md` step 5; `docs/spec/06-agents-skills-tools.md` (agents table); `docs/spec/13-cost.md`
@@ -40,4 +40,4 @@ Not changed by this proposal: the Builder, the Prototype agent and QC fixes (Age
 
 ## Owner decision
 
-(Left blank for the owner.)
+Approved on 2026-10-22, in chat, by the owner: "Approve Option A as written (Recommended)", in answer to "Do you approve the proposal docs/proposals/2026-10-22-dev-model-provider.md?". The spec edits of item 6 were applied as decision D-316 in `DECISIONS.md`, the intake sentence in `docs/spec/04-intake.md`, the Intake row in `docs/spec/06-agents-skills-tools.md`, the P2-T05 line in the phase file, `apps/worker/.env.example` and go-live item G29. At the owner's request they went into the same pull request as this proposal (PR #38), not a separate spec-only one.
