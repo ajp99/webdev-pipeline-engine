@@ -17,8 +17,8 @@ D-313 says development agent runs use the owner's existing Anthropic key, and th
 4. A reply that does not match the schema is retried once; after that the run fails to the owner's queue (the same rule as any failed run, P2-T04). A rate-limit answer (HTTP 429) is retried after the wait the provider names; it counts as a sign of life for the watchdog.
 5. New go-live item (G29): before real clients, switch the single-shot roles to Anthropic (Haiku 4.5 as the spec says, D-313's key), re-run the agent evals, and record the cost.
 6. If approved, the spec edits are exactly these, in their own spec-only PR:
-   - D-313 (new draft row D-316 beside it): "Until go-live, single-shot agent roles may run on a free provider (Gemini, Google AI Studio free tier) through a provider-neutral client; Anthropic stays the go-live provider (G29). Only fictional client data is sent to a free tier."
-   - `docs/spec/04-intake.md` step 5 and the `docs/spec/06-agents-skills-tools.md` Intake row: after "Haiku 4.5 to start" add "(in development: Gemini Flash on the free tier, D-316)".
+   - D-313 (plus a new decision row beside it, numbered when approved): "Until go-live, single-shot agent roles may run on a free provider (Gemini, Google AI Studio free tier) through a provider-neutral client; Anthropic stays the go-live provider (G29). Only fictional client data is sent to a free tier."
+   - `docs/spec/04-intake.md` step 5 and the `docs/spec/06-agents-skills-tools.md` Intake row: after "Haiku 4.5 to start" add "(in development: Gemini Flash on the free tier, per the new decision row)".
    - `docs/plan/phase-2-intake-and-prd.md` P2-T05: "(Haiku 4.5 to start)" gets the same note, and the `.env.example` gets `MODEL_PROVIDER`, `MODEL_NAME` and `GEMINI_API_KEY`.
 
 Not changed by this proposal: the Builder, the Prototype agent and QC fixes (Agent SDK roles, Phase 3 onward) need Claude's tool use. Whether they can run on anything else is a separate decision, to be made before Phase 3.
@@ -34,7 +34,7 @@ Not changed by this proposal: the Builder, the Prototype agent and QC fixes (Age
 
 ## Impact
 
-- Spec text, only if approved: D-313 and a new D-316 in `DECISIONS.md`; `docs/spec/04-intake.md`; `docs/spec/06-agents-skills-tools.md`; `docs/plan/phase-2-intake-and-prd.md` (P2-T05); `docs/plan/go-live-readiness.md` (G29).
+- Spec text, only if approved: D-313 and a new decision row in `DECISIONS.md`; `docs/spec/04-intake.md`; `docs/spec/06-agents-skills-tools.md`; `docs/plan/phase-2-intake-and-prd.md` (P2-T05); `docs/plan/go-live-readiness.md` (G29).
 - Code: a small model client with two providers in `apps/worker`, `.env.example` entries, and the P2-T05 agent built on it. The evals in the plan (Phase 3) should run per provider.
 - Risk: output quality and JSON reliability differ between providers. The schema check, one retry and the owner's review of every gap list limit the damage; the go-live switch to Anthropic is a re-evaluation, not a promise of identical results.
 
