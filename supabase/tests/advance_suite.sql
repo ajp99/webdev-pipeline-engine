@@ -60,6 +60,13 @@ $$ select format('insert into rounds(project_id,number,status,change_request_id)
   case when cr then '(select id from change_requests limit 1)' else 'null' end) $$;
 create function t.go(nxt text) returns text language sql as
 $$ select format('select advance_stage(%L,%L)','cccccccc-0000-0000-0000-000000000001',nxt) $$;
+-- accept_gate / reject_gate on the scratch project's newest artifact of a type (P2-T18).
+create function t.acc(typ text, gate text default 'soft', note text default null, rnd int default null) returns text language sql as
+$$ select format('select accept_gate(%L, %L, (select id from artifacts where project_id=%L and type=%L order by version desc limit 1), %L, %s)',
+  'cccccccc-0000-0000-0000-000000000001', gate, 'cccccccc-0000-0000-0000-000000000001', typ, note, coalesce(rnd::text, 'null')) $$;
+create function t.rej(typ text, rnd int default null) returns text language sql as
+$$ select format('select reject_gate(%L, (select id from artifacts where project_id=%L and type=%L order by version desc limit 1), %s)',
+  'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', typ, coalesce(rnd::text, 'null')) $$;
 create function t.cs() returns text language sql as
 $$ select 'select stage::text from projects where id=''cccccccc-0000-0000-0000-000000000001''' $$;
 
@@ -92,10 +99,9 @@ select t.adv('identity: the giver is kept as an email snapshot after the login i
 -- the client gate is the owner's record with a note (D-298)
 select t.adv('evidence: a client-gate record without a note is refused by the table', t.proj('requirements')||';'||t.art('prd'), null, current_user, 'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''client'',''client'' from artifacts where type=''prd'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'error:client_approval_needs_evidence');
 select t.adv('evidence: a blank note is refused', t.proj('requirements')||';'||t.art('prd'), null, current_user, 'insert into approvals(artifact_id,approved_by,role,gate_type,evidence_note) select id,'''||:'O'||''',''client'',''client'',''   '' from artifacts where type=''prd'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'error:client_approval_needs_evidence');
-select t.adv('evidence: an owner approval needs no note', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', 'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''owner'',''soft'' from artifacts where type=''plan'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'ok');
-select t.adv('an approval dated in the future is stored as now', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
-  'insert into approvals(artifact_id,approved_by,role,gate_type,at) select id,''00000000-0000-0000-0000-0000000000a0'',''owner'',''soft'',timestamptz ''2099-01-01'' from artifacts where type=''plan'' and project_id=''cccccccc-0000-0000-0000-000000000001''', 'ok',
-  '(select max(at) from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id=''cccccccc-0000-0000-0000-000000000001'') <= now()');
+select t.adv('evidence: an owner approval needs no note', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', t.acc('plan'), 'ok');
+select t.adv('an approval is stamped with the database time', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', t.acc('plan'), 'ok',
+  '(select max(at) from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id=''cccccccc-0000-0000-0000-000000000001'') >= now()-interval ''1 minute''');
 
 -- requirements: the client gate
 select t.adv('requirements: an owner approval is not enough', t.proj('requirements')||';'||t.art('prd')||';'||t.appr('prd',1,'soft'), :'O', 'authenticated', t.go('plan'), 'error:client approval');

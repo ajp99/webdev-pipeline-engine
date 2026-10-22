@@ -986,6 +986,16 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      accept_gate: {
+        Args: {
+          p_artifact: string;
+          p_gate: Database['public']['Enums']['gate_type'];
+          p_note?: string;
+          p_project: string;
+          p_round?: number;
+        };
+        Returns: string;
+      };
       advance_stage: {
         Args: { p_next: Database['public']['Enums']['stage']; p_project: string };
         Returns: undefined;
@@ -1043,6 +1053,28 @@ export type Database = {
         Args: { p_run: string; p_worker: string };
         Returns: Database['public']['Enums']['run_status'];
       };
+      reject_gate: {
+        Args: { p_artifact: string; p_project: string; p_round?: number };
+        Returns: undefined;
+      };
+      remaining_gates: {
+        Args: { p_project?: string };
+        Returns: {
+          artifact_id: string;
+          artifact_type: Database['public']['Enums']['artifact_type'];
+          artifact_version: number;
+          due_at: string;
+          gate_type: Database['public']['Enums']['gate_type'];
+          gatekeeper: Database['public']['Enums']['approver_role'];
+          overdue: boolean;
+          project_id: string;
+          ready_to_advance: boolean;
+          round: number;
+          since: string;
+          stage: Database['public']['Enums']['stage'];
+          state: string;
+        }[];
+      };
       request_run_cancel: {
         Args: { p_run: string };
         Returns: Database['public']['Enums']['run_status'];
@@ -1051,7 +1083,7 @@ export type Database = {
     Enums: {
       answer_action: 'next_round' | 'immediate_fix';
       approver_role: 'owner' | 'client';
-      artifact_status: 'draft' | 'approved' | 'superseded';
+      artifact_status: 'draft' | 'approved' | 'rejected' | 'superseded';
       artifact_type:
         | 'intake_record'
         | 'prd'
@@ -1215,7 +1247,7 @@ export const Constants = {
     Enums: {
       answer_action: ['next_round', 'immediate_fix'],
       approver_role: ['owner', 'client'],
-      artifact_status: ['draft', 'approved', 'superseded'],
+      artifact_status: ['draft', 'approved', 'rejected', 'superseded'],
       artifact_type: [
         'intake_record',
         'prd',

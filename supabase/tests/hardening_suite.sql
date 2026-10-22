@@ -6,7 +6,7 @@
 
 \echo '### hardening: approvals record the content hash and the giver''s email (D-265, D-269)'
 select t.adv('an approval stores the SHA-256 of the artifact content and the giver''s email', t.proj('plan')||';'||t.art('plan',1,'draft','{"a": 1}'), :'O', 'authenticated',
-  'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''owner'',''soft'' from artifacts where project_id='''||:'P'||''' and type=''plan''', 'ok',
+  t.acc('plan'), 'ok',
   '(select ap.content_sha256 = encode(sha256(convert_to(a.content::text,''UTF8'')),''hex'') and ap.approved_by_email = ''owner@x'' from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id='''||:'P'||''')');
 select t.adv('a different content gives a different hash', t.proj('plan')||';'||t.art('plan',1,'superseded','{"a": 1}')||';'||t.art('plan',2,'draft','{"a": 2}')||';'||t.appr('plan',1,'soft')||';'||t.appr('plan',2,'soft'), :'O', 'authenticated', 'select 1', 'ok',
   '(select count(distinct content_sha256) from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id='''||:'P'||''')=2');
@@ -71,8 +71,8 @@ select case when (select coalesce(array_agg(p.proname::text order by p.proname),
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
       and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['advance_stage','enqueue_run','request_run_cancel']
-  then 'PASS      the owner session can call only advance_stage, enqueue_run and request_run_cancel'
+    = array['accept_gate','advance_stage','enqueue_run','reject_gate','remaining_gates','request_run_cancel']
+  then 'PASS      the owner session can call only the gate functions (accept_gate, reject_gate, remaining_gates), advance_stage, enqueue_run and request_run_cancel'
   else 'FAIL      the owner session can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
