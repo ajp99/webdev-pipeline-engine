@@ -10,7 +10,7 @@ select t.adv('an approval stores the SHA-256 of the artifact content and the giv
   '(select ap.content_sha256 = encode(sha256(convert_to(a.content::text,''UTF8'')),''hex'') and ap.approved_by_email = ''owner@x'' from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id='''||:'P'||''')');
 select t.adv('a different content gives a different hash', t.proj('plan')||';'||t.art('plan',1,'superseded','{"a": 1}')||';'||t.art('plan',2,'draft','{"a": 2}')||';'||t.appr('plan',1,'soft')||';'||t.appr('plan',2,'soft'), :'O', 'authenticated', 'select 1', 'ok',
   '(select count(distinct content_sha256) from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id='''||:'P'||''')=2');
-select t.adv('values sent with an approval are replaced by the database''s', t.proj('plan')||';'||t.art('plan',1,'draft','{"a": 1}'), null, 'service_role',
+select t.adv('values sent with an approval are replaced by the database''s', t.proj('plan')||';'||t.art('plan',1,'draft','{"a": 1}'), null, current_user,
   'insert into approvals(artifact_id,approved_by,approved_by_email,content_sha256,role,gate_type) select id,'''||:'O'||''',''forged@x'','''||repeat('0',64)||''',''owner'',''soft'' from artifacts where project_id='''||:'P'||''' and type=''plan''', 'ok',
   '(select ap.content_sha256 <> repeat(''0'',64) and ap.approved_by_email = ''owner@x'' from approvals ap join artifacts a on a.id=ap.artifact_id where a.project_id='''||:'P'||''')');
 select t.adv('the email snapshot stays when the giver and the login are deleted (D-309)', t.proj('plan')||';'||t.art('plan')||';insert into auth.users(id,email) values (''00000000-0000-0000-0000-0000000000d1'',''d@x'');insert into owners(id) values (''00000000-0000-0000-0000-0000000000d1'');'||t.appr('plan',1,'soft',0,'00000000-0000-0000-0000-0000000000d1')||';delete from owners where id='''||:'D'||''';delete from auth.users where id='''||:'D'||'''', :'O', 'authenticated', 'select 1', 'ok',
@@ -19,9 +19,9 @@ select t.adv('a direct update cannot change the stored hash', t.proj('plan')||';
 select t.adv('deleting a login cannot be used to rewrite the snapshot', t.proj('plan')||';'||t.art('plan')||';insert into auth.users(id,email) values (''00000000-0000-0000-0000-0000000000d1'',''d@x'');insert into owners(id) values (''00000000-0000-0000-0000-0000000000d1'');'||t.appr('plan',1,'soft',0,'00000000-0000-0000-0000-0000000000d1')||
   $s$;create function public.evil() returns trigger language plpgsql as $f$ begin update public.approvals set approved_by = null, approved_by_email = 'forged@x'; return old; end $f$;create trigger evil before delete on auth.users for each row execute function public.evil()$s$,
   null, current_user, 'delete from auth.users where id = '''||:'D'||'''', 'error:append-only', null);
-select t.adv('the table refuses a malformed hash even if the trigger is skipped', t.proj('plan')||';'||t.art('plan')||';set local session_replication_role = replica', null, 'service_role',
+select t.adv('the table refuses a malformed hash even if the trigger is skipped', t.proj('plan')||';'||t.art('plan')||';set local session_replication_role = replica', null, current_user,
   'insert into approvals(artifact_id,approved_by,role,gate_type,content_sha256) select id,'''||:'O'||''',''owner'',''soft'',''abc'' from artifacts where project_id='''||:'P'||''' and type=''plan''', 'error:content_sha256');
-select t.adv('the table refuses an approval with no hash even if the trigger is skipped', t.proj('plan')||';'||t.art('plan')||';set local session_replication_role = replica', null, 'service_role',
+select t.adv('the table refuses an approval with no hash even if the trigger is skipped', t.proj('plan')||';'||t.art('plan')||';set local session_replication_role = replica', null, current_user,
   'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''owner'',''soft'' from artifacts where project_id='''||:'P'||''' and type=''plan''', 'error:content_sha256');
 
 \echo '### hardening: gate_config and the gatekeeper (D-272)'
@@ -81,8 +81,8 @@ select case when (select coalesce(array_agg(p.proname::text order by p.proname),
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
       and has_function_privilege('service_role', p.oid, 'execute'))
-    = array['advance_stage','claim_run','complete_intake_review','enqueue_run','finish_run','heartbeat_run']
-  then 'PASS      the worker can call the four queue functions it uses, complete_intake_review and advance_stage, nothing else'
+    = array['claim_run','complete_intake_review','enqueue_run','finish_run','heartbeat_run']
+  then 'PASS      the worker can call the four queue functions it uses and complete_intake_review, nothing else'
   else 'FAIL      the worker can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')

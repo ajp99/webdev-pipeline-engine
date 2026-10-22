@@ -783,6 +783,12 @@ begin
         return ib;
       end if;
     end if;
+    -- close_project() refuses to complete a project with an accepted change request that is not deployed.
+    if v.stage = 'handover' and exists (
+      select 1 from public.change_requests c where c.project_id = p_project and c.status = 'accepted'
+    ) then
+      return 'an accepted change request is not deployed yet';
+    end if;
   end if;
   return null;
 end;
@@ -837,6 +843,7 @@ begin
   perform set_config('app.stage_advance', 'off', true);
 end;
 $$;
+revoke all on function advance_stage(uuid, stage) from public, anon, service_role;
 grant execute on function advance_stage(uuid, stage) to authenticated;
 
 -- The artifact a gate action applies to: it must belong to the project, be the newest version of the stage's
@@ -930,6 +937,10 @@ begin
     raise exception 'accept_gate: the % gate is already approved on this version', p_gate;
   end if;
   if v.stage = 'build_rounds' then
+    -- A round is accepted at the soft gate; the stage has no other gate to pass per round.
+    if p_gate <> 'soft' then
+      raise exception 'accept_gate: a build round is accepted at its soft gate';
+    end if;
     if not exists (select 1 from public.rounds r where r.project_id = p_project and r.number = p_round and r.status = 'in_review') then
       raise exception 'accept_gate: round % is not in review', p_round;
     end if;
@@ -983,6 +994,11 @@ begin
   end if;
   nxt := stages[array_position(stages, v.stage) + 1];
   perform public.advance_stage(p_project, nxt);
+  -- A run still queued belongs to the stage the project just left (or repeats the one about to start): it
+  -- would block enqueue_run and never be claimed, so it is cancelled first.
+  for g in select r.id from public.stage_runs r where r.project_id = p_project and r.status = 'queued' loop
+    perform public.request_run_cancel(g.id);
+  end loop;
   if private.stage_has_agent(nxt) then
     perform public.enqueue_run(p_project, nxt);
   end if;
@@ -1012,6 +1028,11 @@ begin
     raise exception 'reject_gate: project is %, only an active project can be rejected from', v.status;
   end if;
   art := private.current_gate_artifact(p_project, p_artifact, p_round, 'reject_gate');
+  if v.stage = 'build_rounds' and not exists (
+    select 1 from public.rounds r where r.project_id = p_project and r.number = p_round and r.status = 'in_review'
+  ) then
+    raise exception 'reject_gate: round % is not in review', p_round;
+  end if;
   update public.artifacts set status = 'rejected' where id = art.id;
 end;
 $$;
@@ -1131,6 +1152,9 @@ begin
   if gated is null then
     return new;
   end if;
+  -- Lock the project row first: a concurrent accept_gate holds it while it moves the stage, and the stage
+  -- must be read after that commits, not before.
+  perform 1 from public.projects p where p.id = new.project_id for share;
   select p.stage into cur from public.projects p where p.id = new.project_id;
   if cur is null or array_position(stages, cur) <= array_position(stages, gated) then
     return new;
@@ -1534,6 +1558,9 @@ end $$;
 -- rule, and records a client-gate approval (D-298) with its evidence note. Update and delete policies
 -- exist only so that the append-only trigger answers with a clear error instead of silently touching
 -- zero rows.
+-- RLS does not bind the worker's role, so its table privilege goes too: only accept_gate (which runs as the
+-- function owner) writes approvals.
+revoke insert on approvals from authenticated, service_role;
 create policy owner_read_approvals on approvals
   for select to authenticated using (private.is_owner());
 create policy owner_update_approvals on approvals

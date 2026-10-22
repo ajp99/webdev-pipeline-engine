@@ -77,7 +77,7 @@ $$ select 'select stage::text from projects where id=''cccccccc-0000-0000-0000-0
 -- rules common to every stage
 select t.adv('no artifact at all: intake cannot advance', t.proj('intake'), :'O', 'authenticated', t.go('requirements'), 'error:intake_record');
 select t.adv('intake advances with an owner soft approval', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'ok', '(' || t.cs() || ') = ''requirements''');
-select t.adv('the worker (service role) cannot advance a project', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), null, 'service_role', t.go('requirements'), 'error:not allowed');
+select t.adv('the worker (service role) cannot advance a project', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), null, 'service_role', t.go('requirements'), 'error:permission denied');
 select t.adv('a user who is not an owner cannot call advance_stage', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'A', 'authenticated', t.go('requirements'), 'error:not allowed');
 select t.adv('skipping a stage is refused', t.proj('intake')||';'||t.art('intake_record')||';'||t.appr('intake_record',1,'soft'), :'O', 'authenticated', t.go('plan'), 'error:is not the stage after');
 select t.adv('going backwards is refused', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft'), :'O', 'authenticated', t.go('requirements'), 'error:is not the stage after');

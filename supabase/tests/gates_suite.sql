@@ -122,7 +122,8 @@ select t.adv('accepting a gate that does not advance queues no run', t.proj('pro
   '(select count(*) from stage_runs where project_id='''||:'CP'||''')=0');
 select t.adv('a client sign-off queues no run', t.proj('requirements')||';'||t.art('prd')||';'||t.agent_on(), :'O', 'authenticated', t.acc('prd','client','email'), 'ok',
   '(select count(*) from stage_runs where project_id='''||:'CP'||''')=0');
-select t.adv('if the run cannot be queued the whole accept is undone', t.proj('intake')||';'||t.art('intake_record')||';'||t.ir(1,'reviewed')||';'||t.agent_on()||';insert into stage_runs(project_id,stage) values (''cccccccc-0000-0000-0000-000000000001'',''intake'')', :'O', 'authenticated', t.acc('intake_record'), 'error:already has a queued run');
+select t.adv('a leftover queued run is cancelled and the next stage run is queued', t.proj('intake')||';'||t.art('intake_record')||';'||t.ir(1,'reviewed')||';'||t.agent_on()||';insert into stage_runs(project_id,stage) values (''cccccccc-0000-0000-0000-000000000001'',''intake'')', :'O', 'authenticated', t.acc('intake_record'), 'ok',
+  '(select count(*) from stage_runs where project_id='''||:'CP'||''' and status=''cancelled'')=1 and (select count(*) from stage_runs where project_id='''||:'CP'||''' and stage=''requirements'' and status=''queued'')=1');
 
 \echo '### the intake rule (D-318)'
 select t.adv('intake: the latest round open blocks accept', t.proj('intake')||';'||t.art('intake_record')||';'||t.ir(1,'reviewed')||';'||t.ir(2,'open'), :'O', 'authenticated', t.acc('intake_record'), 'error:accept_gate: the latest intake round is not reviewed yet');
@@ -164,7 +165,7 @@ select t.adv('rejecting an artifact of another type is refused', t.proj('plan')|
 select t.adv('a round summary can be rejected', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1), :'O', 'authenticated', t.rej('round_summary',1), 'ok', t.art_status('round_summary',1,'rejected'));
 select t.adv('a rejected round summary leaves the round waiting for the agent', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1), :'O', 'authenticated', t.rej('round_summary',1)||'; '||t.rg('r.round=1 and r.state=''waiting'''), 'ok');
 select t.adv('the owner cannot write an approval row directly through the API (D-258)', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
-  'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''owner'',''soft'' from artifacts where type=''plan'' and project_id='''||:'CP'||'''', 'error:row-level security');
+  'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''owner'',''soft'' from artifacts where type=''plan'' and project_id='''||:'CP'||'''', 'error:permission denied for table approvals');
 select t.adv('the same approval cannot be written twice even by a migration', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft'), null, current_user, t.appr('plan',1,'soft'), 'error:approvals_once');
 
 \echo '### the artifact version block (D-259)'
@@ -183,3 +184,11 @@ select t.adv('a round summary is allowed during build rounds', t.proj('build_rou
 select t.adv('a round summary is refused after build rounds', t.proj('qc_report')||';'||t.rs(1), :'O', 'authenticated', 'insert into artifacts(project_id,type,version,content) values ('''||:'CP'||''',''round_summary'',2,''{"round": 1}'')', 'error:needs an accepted change request');
 select t.adv('an artifact type with no gate is not blocked', t.proj('handover'), :'O', 'authenticated', 'insert into artifacts(project_id,type,version) values ('''||:'CP'||''',''backlog'',1)', 'ok');
 select t.adv('the SQL editor and migrations are not blocked', t.proj('prototype')||';'||t.art('plan'), null, current_user, 'insert into artifacts(project_id,type,version) values ('''||:'CP'||''',''plan'',2)', 'ok');
+
+\echo '### review fixes'
+select t.adv('the worker cannot write an approval row either', t.proj('plan')||';'||t.art('plan'), null, 'service_role',
+  'insert into approvals(artifact_id,approved_by,role,gate_type) select id,'''||:'O'||''',''owner'',''soft'' from artifacts where type=''plan'' and project_id='''||:'CP'||'''', 'error:permission denied for table approvals');
+select t.adv('build rounds: a round is accepted only at its soft gate', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1)||';insert into gate_config(stage,project_id,gate_type,gatekeeper) values (''build_rounds'',''cccccccc-0000-0000-0000-000000000001'',''hard'',''owner'')', :'O', 'authenticated', t.acc('round_summary','hard',null,1), 'error:a build round is accepted at its soft gate');
+select t.adv('build rounds: reject needs the round in review', t.proj('build_rounds')||';'||t.rnd(1,'building')||';'||t.rs(1), :'O', 'authenticated', t.rej('round_summary',1), 'error:reject_gate: round 1 is not in review');
+select t.adv('handover: an accepted change request that is not deployed means not ready to advance', t.proj('handover')||';'||t.art('handover_guide')||';'||t.appr('handover_guide',1,'hard')||';insert into change_requests(project_id,description,status,decision) values (''cccccccc-0000-0000-0000-000000000001'',''cr'',''accepted'',''accept_mini_round'')', :'O', 'authenticated',
+  t.rg('not r.ready_to_advance'), 'ok');
