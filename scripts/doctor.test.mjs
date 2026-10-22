@@ -10,7 +10,7 @@ function machine(over = {}) {
   const files = {
     '/r/apps/web/.env.local':
       'NEXT_PUBLIC_SUPABASE_URL=http://x\nNEXT_PUBLIC_SUPABASE_ANON_KEY=ANON-KEY-VALUE\n',
-    '/r/apps/worker/.env': `SUPABASE_URL=http://x\nSUPABASE_SERVICE_ROLE_KEY=${SECRET}\nANTHROPIC_API_KEY=k\n`,
+    '/r/apps/worker/.env': `SUPABASE_URL=http://x\nSUPABASE_SERVICE_ROLE_KEY=${SECRET}\nMODEL_PROVIDER=gemini\nMODEL_NAME=m\nGEMINI_API_KEY=k\n`,
     ...over.files,
   };
   for (const [k, v] of Object.entries(files)) if (v === null) delete files[k];
@@ -71,12 +71,47 @@ test('a leftover OWNER_PASSWORD only warns', async () => {
   const rs = await runChecks(
     machine({
       files: {
-        '/r/apps/worker/.env': `SUPABASE_URL=u\nSUPABASE_SERVICE_ROLE_KEY=${SECRET}\nANTHROPIC_API_KEY=k\nOWNER_PASSWORD=pw\n`,
+        '/r/apps/worker/.env': `SUPABASE_URL=u\nSUPABASE_SERVICE_ROLE_KEY=${SECRET}\nMODEL_PROVIDER=gemini\nMODEL_NAME=m\nGEMINI_API_KEY=k\nOWNER_PASSWORD=pw\n`,
       },
     }),
   );
   assert.deepEqual(names(rs, 'warn'), ['OWNER_PASSWORD is still in apps/worker/.env']);
   assert.ok(!levels(rs).includes('fail'));
+});
+const workerEnv = (extra) => ({
+  '/r/apps/worker/.env': `SUPABASE_URL=u\nSUPABASE_SERVICE_ROLE_KEY=${SECRET}\n${extra}`,
+});
+test('no model provider only warns', async () => {
+  const rs = await runChecks(machine({ files: workerEnv('') }));
+  assert.deepEqual(names(rs, 'warn'), ['MODEL_PROVIDER is empty']);
+  assert.ok(!levels(rs).includes('fail'));
+});
+test('a provider without its key, or with an unknown name, warns', async () => {
+  let rs = await runChecks(machine({ files: workerEnv('MODEL_PROVIDER=gemini\nMODEL_NAME=m\n') }));
+  assert.deepEqual(names(rs, 'warn'), ['GEMINI_API_KEY is empty']);
+  rs = await runChecks(
+    machine({ files: workerEnv('MODEL_PROVIDER=anthropic\nMODEL_NAME=m\nGEMINI_API_KEY=k\n') }),
+  );
+  assert.deepEqual(names(rs, 'warn'), ['ANTHROPIC_API_KEY is empty']);
+  rs = await runChecks(machine({ files: workerEnv('MODEL_PROVIDER=nope\nMODEL_NAME=m\n') }));
+  assert.deepEqual(names(rs, 'warn'), ['MODEL_PROVIDER "nope" is not known']);
+});
+test('a provider with a key but no model name warns', async () => {
+  const rs = await runChecks(
+    machine({ files: workerEnv('MODEL_PROVIDER=gemini\nGEMINI_API_KEY=k\n') }),
+  );
+  assert.deepEqual(names(rs, 'warn'), ['MODEL_NAME is empty']);
+});
+test('a Gemini key in the web env fails', async () => {
+  const rs = await runChecks(
+    machine({
+      files: {
+        '/r/apps/web/.env.local':
+          'NEXT_PUBLIC_SUPABASE_URL=u\nNEXT_PUBLIC_SUPABASE_ANON_KEY=a\nGEMINI_API_KEY=g\n',
+      },
+    }),
+  );
+  assert.ok(names(rs, 'fail').includes('apps/web must hold no worker secrets'));
 });
 test('Supabase down is one failure and stops the database checks', async () => {
   const rs = await runChecks(machine({ down: true }));

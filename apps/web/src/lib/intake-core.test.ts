@@ -3,9 +3,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  effectiveAnswers,
   validateTemplate,
   type Answers,
   type IntakeTemplate,
+  type ReviewRecord,
   type RoundStatus,
   type UploadCounts,
 } from '@wpe/shared';
@@ -13,7 +15,9 @@ import type { FormFields } from './intake-form';
 import {
   canChangeFiles,
   reopenRound,
+  saveFollowups,
   saveSection,
+  startReview,
   submitRound,
   unlockRound,
   type IntakeStore,
@@ -37,6 +41,10 @@ class MemStore implements IntakeStore {
   data = new Map<number, Answers>();
   files: UploadCounts = {};
   writes = 0;
+  review: ReviewRecord | null = null;
+  runActive = false;
+  queued = 0;
+  queueError: string | null = null;
   constructor(status: RoundStatus | null = 'open') {
     if (status) this.rounds.set(1, status);
   }
@@ -47,8 +55,37 @@ class MemStore implements IntakeStore {
   async answers(_p: string, round: number) {
     return this.data.get(round) ?? {};
   }
+  async effectiveAnswers() {
+    return effectiveAnswers(
+      [...this.data].flatMap(([round, a]) =>
+        Object.entries(a).map(([question_id, answer]) => ({ round, question_id, answer })),
+      ),
+    );
+  }
   async uploadCounts() {
     return this.files;
+  }
+  async saveFollowupAnswers(_p: string, round: number, answers: Record<string, string | null>) {
+    this.writes++;
+    const cur = { ...(this.data.get(round) ?? {}) };
+    for (const [id, v] of Object.entries(answers)) {
+      if (v === null) delete cur[id];
+      else cur[id] = v;
+    }
+    this.data.set(round, cur);
+  }
+  async latestReview() {
+    return this.review;
+  }
+  async reviewRunActive() {
+    return this.runActive;
+  }
+  async lastReviewStatus() {
+    return this.runActive ? 'running' : null;
+  }
+  async enqueueReview() {
+    if (this.queueError) throw new Error(this.queueError);
+    this.queued++;
   }
   async saveAnswers(_p: string, round: number, answers: Answers) {
     this.writes++;
@@ -228,5 +265,111 @@ describe('canChangeFiles', () => {
     expect((await canChangeFiles(store, 'p')).ok).toBe(true);
     expect((await canChangeFiles(new MemStore('submitted'), 'p')).ok).toBe(false);
     expect((await canChangeFiles(new MemStore('reviewed'), 'p')).ok).toBe(false);
+  });
+});
+
+const review = (round: number, ids: string[]): ReviewRecord => ({
+  round,
+  summary: 's',
+  gaps: [],
+  followups: ids.map((id) => ({ id, text: `Question ${id}?`, reason: 'r' })),
+  model: 'm',
+  capped: false,
+});
+
+describe('startReview', () => {
+  it('queues a review of a submitted round', async () => {
+    const s = new MemStore('submitted');
+    expect(await startReview(s, 'p')).toMatchObject({ ok: true });
+    expect(s.queued).toBe(1);
+  });
+  it.each(['open', 'reviewed'] as const)('refuses a %s round', async (status) => {
+    const s = new MemStore(status);
+    expect(await startReview(s, 'p')).toMatchObject({ ok: false });
+    expect(s.queued).toBe(0);
+  });
+  it('refuses while a review is queued or running', async () => {
+    const s = new MemStore('submitted');
+    s.runActive = true;
+    expect(await startReview(s, 'p')).toMatchObject({ ok: false, message: /already/ });
+    expect(s.queued).toBe(0);
+  });
+  it('refuses a project with no round', async () => {
+    expect(await startReview(new MemStore(null), 'p')).toMatchObject({ ok: false });
+  });
+  it('passes on the database refusal instead of throwing', async () => {
+    const s = new MemStore('submitted');
+    s.queueError = 'enqueue_run: the project already has a queued run';
+    expect(await startReview(s, 'p')).toEqual({
+      ok: false,
+      message: 'enqueue_run: the project already has a queued run',
+    });
+  });
+});
+
+async function round1Answers() {
+  const open = new MemStore();
+  await fillAll(open);
+  return open.data.get(1)!;
+}
+
+describe('follow-up rounds', () => {
+  function round2() {
+    const s = new MemStore('reviewed');
+    s.data.set(1, { business_name: 'Acme', what_you_do: 'Plumbing', contact_email: 'a@b.co' });
+    s.rounds.set(2, 'open');
+    s.review = review(1, ['fu2_1', 'fu2_2']);
+    return s;
+  }
+
+  it('saves the answers to the follow-up questions in the open round, and clears an emptied one', async () => {
+    const s = round2();
+    const r = await saveFollowups(s, 'p', f({ fu_fu2_1: '  Home and About ', fu_fu2_2: '' }));
+    expect(r).toMatchObject({ ok: true });
+    expect(s.data.get(2)).toEqual({ fu2_1: 'Home and About' });
+    await saveFollowups(s, 'p', f({ fu_fu2_1: '' }));
+    expect(s.data.get(2)).toEqual({});
+  });
+  it('refuses to save into a locked round, or one with no follow-ups', async () => {
+    const locked = round2();
+    locked.rounds.set(2, 'submitted');
+    expect(await saveFollowups(locked, 'p', f({ fu_fu2_1: 'x' }))).toMatchObject({ ok: false });
+    const none = round2();
+    none.review = review(1, []);
+    expect(await saveFollowups(none, 'p', f({}))).toMatchObject({ ok: false });
+    expect(none.writes).toBe(0);
+  });
+  it('ignores a review of another round', async () => {
+    const s = round2();
+    s.review = review(2, ['fu3_1']);
+    expect(await saveFollowups(s, 'p', f({ fu_fu3_1: 'x' }))).toMatchObject({ ok: false });
+  });
+  it('refuses an answer over the length limit', async () => {
+    const s = round2();
+    const r = await saveFollowups(s, 'p', f({ fu_fu2_1: 'x'.repeat(5001) }));
+    expect(r).toMatchObject({ ok: false, message: /5000/ });
+    expect(s.writes).toBe(0);
+  });
+  it('lets the round be submitted only when every follow-up is answered', async () => {
+    const s = round2();
+    s.data.set(1, await round1Answers());
+    const first = await submitRound(s, template, 'p');
+    expect(first).toMatchObject({ ok: false, message: /follow-up/ });
+    await saveFollowups(s, 'p', f({ fu_fu2_1: 'a', fu_fu2_2: 'b' }));
+    expect(await submitRound(s, template, 'p')).toMatchObject({ ok: true });
+    expect(s.rounds.get(2)).toBe('submitted');
+  });
+  it('records only what changed when a template answer is edited in a later round', async () => {
+    const s = round2();
+    s.data.set(1, await round1Answers());
+    await saveSection(
+      s,
+      template,
+      'p',
+      'business',
+      f({ ...ALL, q_business_name: 'Acme Plumbing' }),
+    );
+    expect(s.data.get(2)).toEqual({ business_name: 'Acme Plumbing' });
+    expect((await s.effectiveAnswers()).business_name).toBe('Acme Plumbing');
   });
 });

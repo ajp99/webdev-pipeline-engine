@@ -995,6 +995,118 @@ $$;
 revoke all on function request_run_cancel(uuid) from public, anon, authenticated, service_role;
 grant execute on function request_run_cancel(uuid) to authenticated;
 
+-- The intake agent's review of a submitted round (P2-T05, D-077, D-079, D-006, D-275). The worker calls it
+-- once, with the model's checked reply, and in one transaction it writes the review as the next immutable
+-- intake_record artifact version, locks the round (reviewed), and opens the next round when there are
+-- follow-up questions. A round is round 1 (the template) plus at most 3 follow-up rounds, so round 4 is the
+-- last: it cannot ask for more, and its gap list is for the owner. The follow-up text lives in the artifact;
+-- the answers go into intake_responses (asked_by 'agent') under the ids fu<round>_<n>.
+create function complete_intake_review(
+  p_project uuid, p_round int, p_summary text, p_gaps jsonb, p_followups jsonb, p_model text
+) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  proj public.projects%rowtype;
+  rnd  public.intake_rounds%rowtype;
+  n    int;
+  art  uuid;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'complete_intake_review: not allowed';
+  end if;
+  select * into proj from public.projects where id = p_project for update;
+  if not found then
+    raise exception 'complete_intake_review: project not found';
+  end if;
+  if proj.status <> 'active' or proj.stage <> 'intake' then
+    raise exception 'complete_intake_review: the project must be active and at the intake stage';
+  end if;
+  select * into rnd from public.intake_rounds where project_id = p_project and round = p_round for update;
+  if not found then
+    raise exception 'complete_intake_review: round % not found', p_round;
+  end if;
+  if rnd.status <> 'submitted' then
+    raise exception 'complete_intake_review: only a submitted round can be reviewed (round % is %)', p_round, rnd.status;
+  end if;
+  if exists (select 1 from public.intake_rounds where project_id = p_project and round > p_round) then
+    raise exception 'complete_intake_review: only the latest round can be reviewed';
+  end if;
+  if p_summary is null or btrim(p_summary) = '' then
+    raise exception 'complete_intake_review: the review needs a summary';
+  end if;
+  if length(p_summary) > 1500 or length(coalesce(p_model, '')) > 100 then
+    raise exception 'complete_intake_review: summary or model name too long';
+  end if;
+  if p_gaps is null or jsonb_typeof(p_gaps) <> 'array' then
+    raise exception 'complete_intake_review: gaps must be a list';
+  end if;
+  if jsonb_array_length(p_gaps) > 40 then
+    raise exception 'complete_intake_review: at most 40 gaps';
+  end if;
+  -- Gaps are stored in an immutable row, so each element is checked: an object with a text issue and an
+  -- optional question id, nothing else, and bounded in length.
+  if exists (
+    select 1 from jsonb_array_elements(p_gaps) g
+     where jsonb_typeof(g) <> 'object'
+        or jsonb_typeof(g->'issue') is distinct from 'string'
+        or btrim(g->>'issue') = '' or length(g->>'issue') > 1100
+        or (g ? 'question_id' and (jsonb_typeof(g->'question_id') <> 'string' or length(g->>'question_id') > 100))
+        or exists (select 1 from jsonb_object_keys(g) k where k not in ('issue', 'question_id'))
+  ) then
+    raise exception 'complete_intake_review: each gap needs a text issue (and may name a question id)';
+  end if;
+  if p_followups is null or jsonb_typeof(p_followups) <> 'array' then
+    raise exception 'complete_intake_review: follow-ups must be a list';
+  end if;
+  n := jsonb_array_length(p_followups);
+  if n > 8 then
+    raise exception 'complete_intake_review: at most 8 follow-up questions (D-077)';
+  end if;
+  if p_round >= 4 and n > 0 then
+    raise exception 'complete_intake_review: the cap of 3 follow-up rounds is reached; list the gaps for the owner instead (D-006)';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_followups) f
+     where jsonb_typeof(f) <> 'object'
+        or jsonb_typeof(f->'text') is distinct from 'string'
+        or btrim(f->>'text') = '' or length(f->>'text') > 500
+        or (f ? 'reason' and (jsonb_typeof(f->'reason') <> 'string' or length(f->>'reason') > 500))
+        or exists (select 1 from jsonb_object_keys(f) k where k not in ('id', 'text', 'reason'))
+        or jsonb_typeof(f->'id') is distinct from 'string'
+        or (f->>'id') !~ ('^fu' || (p_round + 1) || '_[1-9][0-9]*$')
+  ) then
+    raise exception 'complete_intake_review: each follow-up needs text and an id like fu%_1', p_round + 1;
+  end if;
+  -- The ids are exactly fu<next>_1 to fu<next>_n, so they read in order and cannot repeat.
+  if (select count(*) from jsonb_array_elements(p_followups) f
+       where substring(f->>'id' from '_([0-9]+)$')::int between 1 and n) <> n then
+    raise exception 'complete_intake_review: follow-up ids must run from fu%_1 to fu%_%', p_round + 1, p_round + 1, n;
+  end if;
+  if (select count(distinct f->>'id') from jsonb_array_elements(p_followups) f) <> n then
+    raise exception 'complete_intake_review: follow-up ids must be unique';
+  end if;
+
+  insert into public.artifacts (project_id, type, version, status, content)
+  values (
+    p_project, 'intake_record',
+    coalesce((select max(version) from public.artifacts where project_id = p_project and type = 'intake_record'), 0) + 1,
+    'draft',
+    jsonb_build_object(
+      'round', p_round, 'summary', p_summary, 'gaps', p_gaps, 'followups', p_followups,
+      'model', p_model, 'capped', p_round >= 4)
+  )
+  returning id into art;
+
+  update public.intake_rounds set status = 'reviewed', reviewed_at = now() where id = rnd.id;
+  if n > 0 then
+    insert into public.intake_rounds (project_id, round) values (p_project, p_round + 1);
+  end if;
+  return art;
+end;
+$$;
+revoke all on function complete_intake_review(uuid, int, text, jsonb, jsonb, text) from public, anon, authenticated, service_role;
+grant execute on function complete_intake_review(uuid, int, text, jsonb, jsonb, text) to service_role;
+
 -- ---------------------------------------------------------------------------
 -- Row-level security
 -- ---------------------------------------------------------------------------

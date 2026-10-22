@@ -64,7 +64,9 @@ export async function runChecks(deps) {
         ? fail('apps/web/.env.local', `missing ${missing.join(', ')}`)
         : ok('apps/web/.env.local has the URL and anon key'),
     );
-    const secrets = Object.keys(web).filter((k) => /SERVICE_ROLE|ANTHROPIC|GITHUB|VERCEL/.test(k));
+    const secrets = Object.keys(web).filter((k) =>
+      /SERVICE_ROLE|ANTHROPIC|GEMINI|GITHUB|VERCEL/.test(k),
+    );
     if (secrets.length)
       results.push(
         fail(
@@ -91,10 +93,22 @@ export async function runChecks(deps) {
           'delete that line after bootstrap-owner',
         ),
       );
-    if (!worker.ANTHROPIC_API_KEY)
+    // The model for single-shot agent roles (D-316): a provider, and the key that provider needs.
+    const keyFor = { gemini: 'GEMINI_API_KEY', anthropic: 'ANTHROPIC_API_KEY' };
+    const provider = worker.MODEL_PROVIDER;
+    if (!provider)
       results.push(
-        warn('ANTHROPIC_API_KEY is empty', 'needed before the intake agent (P2-T05), D-313'),
+        warn(
+          'MODEL_PROVIDER is empty',
+          'set gemini (development) or anthropic before the intake agent (P2-T05), D-316',
+        ),
       );
+    else if (!keyFor[provider])
+      results.push(warn(`MODEL_PROVIDER "${provider}" is not known`, 'use gemini or anthropic'));
+    else if (!worker[keyFor[provider]])
+      results.push(warn(`${keyFor[provider]} is empty`, `MODEL_PROVIDER is ${provider}, D-316`));
+    if (provider && !worker.MODEL_NAME)
+      results.push(warn('MODEL_NAME is empty', 'name the model, for example a Gemini Flash model'));
   }
 
   // Local Supabase

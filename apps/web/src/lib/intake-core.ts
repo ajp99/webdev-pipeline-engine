@@ -2,11 +2,13 @@
 // @wpe/shared, then asks the store to write. The store is a small interface so the rules are tested
 // without a database; intake-store.ts is the Supabase version.
 import {
+  MAX_TEXT_CHARS,
   missingRequired,
   roundAllows,
   type Answers,
   type IntakeTemplate,
   type RoundAction,
+  type ReviewRecord,
   type RoundStatus,
   type UploadCounts,
 } from '@wpe/shared';
@@ -18,9 +20,25 @@ export interface IntakeStore {
   /** The latest round of the project, or null when the project has none. */
   latestRound(projectId: string): Promise<RoundRow | null>;
   answers(projectId: string, round: number): Promise<Answers>;
+  /** Every round's answers merged, the newest round winning (P2-T05). */
+  effectiveAnswers(projectId: string): Promise<Answers>;
   uploadCounts(projectId: string): Promise<UploadCounts>;
   /** A null answer removes the row. */
   saveAnswers(projectId: string, round: number, answers: Answers): Promise<void>;
+  /** The owner's answers to the agent's follow-up questions; a null removes the row. */
+  saveFollowupAnswers(
+    projectId: string,
+    round: number,
+    answers: Record<string, string | null>,
+  ): Promise<void>;
+  /** The newest review of the agent, or null before the first one. */
+  latestReview(projectId: string): Promise<ReviewRecord | null>;
+  /** True while a review run is queued, running, waiting or being cancelled. */
+  reviewRunActive(projectId: string): Promise<boolean>;
+  /** The status of the newest review run, or null when there was none. */
+  lastReviewStatus(projectId: string): Promise<string | null>;
+  /** Puts a review run on the queue; throws the database's message when it refuses. */
+  enqueueReview(projectId: string): Promise<void>;
   /** Moves the round from one status to another; false when it was not in the `from` status any more. */
   moveRound(projectId: string, round: number, from: RoundStatus, to: RoundStatus): Promise<boolean>;
 }
@@ -55,7 +73,18 @@ export async function saveSection(
   if (cur.error) return cur.error;
   const { answers, problems } = parseSection(section, fields);
   if (problems.length > 0) return fail(problems.map((p) => `${p.label}: ${p.message}`).join('; '));
-  await store.saveAnswers(projectId, cur.row!.round, answers);
+  const round = cur.row!.round;
+  let toWrite = answers;
+  if (round > 1) {
+    // A later round records only what changed, so the newest-round-wins merge stays meaningful.
+    const before = await store.effectiveAnswers(projectId);
+    toWrite = Object.fromEntries(
+      Object.entries(answers).filter(
+        ([id, v]) => JSON.stringify(v ?? null) !== JSON.stringify(before[id] ?? null),
+      ),
+    );
+  }
+  await store.saveAnswers(projectId, round, toWrite);
   return { ok: true, notice: 'Saved' };
 }
 
@@ -66,22 +95,75 @@ export async function submitRound(
 ): Promise<Outcome> {
   const cur = await currentRound(store, projectId, 'submit');
   if (cur.error) return cur.error;
-  // Required fields are the template's, so they apply to round 1; later rounds hold follow-ups.
-  if (cur.row!.round === 1) {
-    const missing = missingRequired(
-      template,
-      await store.answers(projectId, 1),
-      await store.uploadCounts(projectId),
+  const round = cur.row!.round;
+  const answers = await store.effectiveAnswers(projectId);
+  const missing = missingRequired(template, answers, await store.uploadCounts(projectId));
+  if (missing.length > 0)
+    return fail(
+      `Required answers are missing: ${missing.map((m) => `${m.label} (${m.section})`).join('; ')}`,
     );
-    if (missing.length > 0)
+  if (round > 1) {
+    const unanswered = (await followupsFor(store, projectId, round)).filter(
+      (q) => !isText(answers[q.id]),
+    );
+    if (unanswered.length > 0)
       return fail(
-        `Required answers are missing: ${missing.map((m) => `${m.label} (${m.section})`).join('; ')}`,
+        `Answer every follow-up question first (${unanswered.length} left); write "not known" if you cannot`,
       );
   }
   const moved = await store.moveRound(projectId, cur.row!.round, 'open', 'submitted');
   return moved
     ? { ok: true, notice: 'Round submitted' }
     : fail('the round changed; reload the page');
+}
+
+const isText = (a: unknown) => typeof a === 'string' && a.trim() !== '';
+
+/** The follow-up questions a round holds: the ones the review of the round before it asked. */
+export async function followupsFor(store: IntakeStore, projectId: string, round: number) {
+  if (round < 2) return [];
+  const review = await store.latestReview(projectId);
+  return review && review.round === round - 1 ? review.followups : [];
+}
+
+export const followupField = (id: string) => `fu_${id}`;
+
+export async function saveFollowups(
+  store: IntakeStore,
+  projectId: string,
+  fields: FormFields,
+): Promise<Outcome> {
+  const cur = await currentRound(store, projectId, 'save');
+  if (cur.error) return cur.error;
+  const questions = await followupsFor(store, projectId, cur.row!.round);
+  if (questions.length === 0) return fail('this round has no follow-up questions');
+  const out: Record<string, string | null> = {};
+  for (const q of questions) {
+    const v = (fields.get(followupField(q.id)) ?? '').trim();
+    if (v.length > MAX_TEXT_CHARS) return fail(`${q.text}: at most ${MAX_TEXT_CHARS} characters`);
+    out[q.id] = v === '' ? null : v;
+  }
+  await store.saveFollowupAnswers(projectId, cur.row!.round, out);
+  return { ok: true, notice: 'Saved' };
+}
+
+/** Queues the agent's review of a submitted round. Only one review at a time. */
+export async function startReview(store: IntakeStore, projectId: string): Promise<Outcome> {
+  const row = await store.latestRound(projectId);
+  if (!row) return fail('this project has no intake round');
+  if (row.status !== 'submitted')
+    return fail(
+      row.status === 'open'
+        ? 'Submit the round before the review'
+        : 'This round is already reviewed',
+    );
+  if (await store.reviewRunActive(projectId)) return fail('A review is already queued or running');
+  try {
+    await store.enqueueReview(projectId);
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : 'could not queue the review');
+  }
+  return { ok: true, notice: 'Review queued; the runner picks it up' };
 }
 
 export async function reopenRound(store: IntakeStore, projectId: string): Promise<Outcome> {

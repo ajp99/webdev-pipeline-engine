@@ -6,7 +6,7 @@ Eight agent roles cover the pipeline; each has a fixed input, output artifact, a
 
 | Agent | Input | Output (proposal for owner approval) | Suggested model |
 | --- | --- | --- | --- |
-| Intake | Template, client answers | Follow-up questions, gap list | Haiku 4.5 to start (move up if quality is poor) |
+| Intake | Template, client answers | Follow-up questions, gap list | Haiku 4.5 to start (move up if quality is poor; in development: Gemini Flash on the free tier, D-316) |
 | Requirements | Full intake, owner notes | PRD (client-visible), internal gap and conflict list (owner-only), change summary for each new version | Sonnet 5.5 |
 | Planner | Locked PRD, skills library | Skill and tool selection, build plan, round count and scope, token budget | Sonnet 5.5 |
 | Prototype | Plan, intake design section, starter | One design of the main page, shown as desktop and mobile screenshots | Sonnet 5.5 |

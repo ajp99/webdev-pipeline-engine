@@ -2,6 +2,8 @@
 // security lets only the owner touch these tables.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  effectiveAnswers,
+  parseReviewRecord,
   validateTemplate,
   type Answers,
   type Database,
@@ -37,6 +39,15 @@ export function supabaseIntakeStore(supabase: Db): IntakeStore {
       const out: Answers = {};
       for (const r of data) out[r.question_id] = r.answer as Answers[string];
       return out;
+    },
+
+    async effectiveAnswers(projectId) {
+      const { data, error } = await supabase
+        .from('intake_responses')
+        .select('round, question_id, answer')
+        .eq('project_id', projectId);
+      if (error) throw new Error(error.message);
+      return effectiveAnswers(data);
     },
 
     async uploadCounts(projectId) {
@@ -77,7 +88,107 @@ export function supabaseIntakeStore(supabase: Db): IntakeStore {
           .eq('round', round)
           .in('question_id', drop);
         if (error) throw new Error(error.message);
+        // In a later round, clearing an answer an earlier round gave must hide it: the newest row wins,
+        // so leave an empty one behind.
+        if (round > 1) {
+          const { data, error: e2 } = await supabase
+            .from('intake_responses')
+            .select('question_id')
+            .eq('project_id', projectId)
+            .lt('round', round)
+            .in('question_id', drop);
+          if (e2) throw new Error(e2.message);
+          const hidden = [...new Set(data.map((r) => r.question_id))];
+          if (hidden.length > 0) {
+            const { error: e3 } = await supabase.from('intake_responses').upsert(
+              hidden.map((question_id) => ({
+                project_id: projectId,
+                round,
+                question_id,
+                answer: null,
+                asked_by: 'template' as const,
+                updated_at: new Date().toISOString(),
+              })),
+              { onConflict: 'project_id,round,question_id' },
+            );
+            if (e3) throw new Error(e3.message);
+          }
+        }
       }
+    },
+
+    async saveFollowupAnswers(projectId, round, answers) {
+      const keep = Object.entries(answers).filter(([, v]) => v !== null);
+      const drop = Object.entries(answers)
+        .filter(([, v]) => v === null)
+        .map(([id]) => id);
+      if (keep.length > 0) {
+        const { error } = await supabase.from('intake_responses').upsert(
+          keep.map(([question_id, answer]) => ({
+            project_id: projectId,
+            round,
+            question_id,
+            answer: answer as never,
+            asked_by: 'agent' as const,
+            updated_at: new Date().toISOString(),
+          })),
+          { onConflict: 'project_id,round,question_id' },
+        );
+        if (error) throw new Error(error.message);
+      }
+      if (drop.length > 0) {
+        const { error } = await supabase
+          .from('intake_responses')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('round', round)
+          .in('question_id', drop);
+        if (error) throw new Error(error.message);
+      }
+    },
+
+    async latestReview(projectId) {
+      const { data, error } = await supabase
+        .from('artifacts')
+        .select('content')
+        .eq('project_id', projectId)
+        .eq('type', 'intake_record')
+        .order('version', { ascending: false })
+        .limit(1);
+      if (error) throw new Error(error.message);
+      return data[0] ? parseReviewRecord(data[0].content) : null;
+    },
+
+    async reviewRunActive(projectId) {
+      const { data, error } = await supabase
+        .from('stage_runs')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('stage', 'intake')
+        .in('status', ['queued', 'running', 'waiting', 'cancel_requested'])
+        .limit(1);
+      if (error) throw new Error(error.message);
+      return data.length > 0;
+    },
+
+    async lastReviewStatus(projectId) {
+      const { data, error } = await supabase
+        .from('stage_runs')
+        .select('status')
+        .eq('project_id', projectId)
+        .eq('stage', 'intake')
+        .order('queued_at', { ascending: false })
+        .limit(1);
+      if (error) throw new Error(error.message);
+      return data[0]?.status ?? null;
+    },
+
+    async enqueueReview(projectId) {
+      const { error } = await supabase.rpc('enqueue_run', {
+        p_project: projectId,
+        p_stage: 'intake',
+      });
+      if (error) throw new Error(error.message);
     },
 
     async moveRound(projectId, round, from: RoundStatus, to: RoundStatus) {
