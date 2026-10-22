@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   buildReviewPrompt,
   effectiveAnswers,
+  parseReviewRecord,
   intakeData,
   REVIEW_JSON_SCHEMA,
   reviewReplySchema,
@@ -189,5 +190,31 @@ describe('toCompletion', () => {
     const c = toCompletion(reply(), 1);
     expect(c.summary).toBe('Needs goals.');
     expect(c.gaps).toEqual([{ issue: 'Goal is vague', question_id: 'site_goal' }]);
+  });
+});
+
+describe('parseReviewRecord', () => {
+  const good = {
+    round: 1,
+    summary: 'ok',
+    gaps: [{ issue: 'x', question_id: 'q' }, { issue: 'y' }],
+    followups: [{ id: 'fu2_1', text: 'Which pages?', reason: 'vague' }],
+    model: 'gemini-2.5-flash',
+    capped: false,
+  };
+  it('reads a stored review', () => {
+    expect(parseReviewRecord(good)).toEqual(good);
+  });
+  it('drops malformed gaps and follow-ups, and refuses content that is not a review', () => {
+    const r = parseReviewRecord({
+      ...good,
+      gaps: [{ issue: 5 }, null, { issue: 'z' }],
+      followups: [{ id: 1 }],
+    });
+    expect(r?.gaps).toEqual([{ issue: 'z' }]);
+    expect(r?.followups).toEqual([]);
+    expect(parseReviewRecord(null)).toBeNull();
+    expect(parseReviewRecord({ round: 'a' })).toBeNull();
+    expect(parseReviewRecord({ ...good, summary: 3 })).toBeNull();
   });
 });

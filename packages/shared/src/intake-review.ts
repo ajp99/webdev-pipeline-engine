@@ -195,3 +195,40 @@ export function toCompletion(reply: ReviewReply, round: number): Completion {
     followups: followups.map((f, i) => ({ id: `fu${round + 1}_${i + 1}`, ...f })),
   };
 }
+
+/** A saved review as the console shows it: the content of an intake_record artifact. */
+export type ReviewRecord = Completion & {
+  round: number;
+  model: string | null;
+  capped: boolean;
+};
+
+const str = (v: unknown): v is string => typeof v === 'string';
+
+/** Reads an artifact's content back; null when it does not look like a review (it is stored data, not trusted). */
+export function parseReviewRecord(content: unknown): ReviewRecord | null {
+  if (typeof content !== 'object' || content === null) return null;
+  const c = content as Record<string, unknown>;
+  if (!Number.isInteger(c.round) || !str(c.summary) || !Array.isArray(c.gaps)) return null;
+  if (!Array.isArray(c.followups)) return null;
+  const gaps = c.gaps.flatMap((g) => {
+    const o = g as Record<string, unknown> | null;
+    return o && str(o.issue)
+      ? [{ issue: o.issue, ...(str(o.question_id) ? { question_id: o.question_id } : {}) }]
+      : [];
+  });
+  const followups = c.followups.flatMap((f) => {
+    const o = f as Record<string, unknown> | null;
+    return o && str(o.id) && str(o.text)
+      ? [{ id: o.id, text: o.text, reason: str(o.reason) ? o.reason : '' }]
+      : [];
+  });
+  return {
+    round: c.round as number,
+    summary: c.summary,
+    gaps,
+    followups,
+    model: str(c.model) ? c.model : null,
+    capped: c.capped === true,
+  };
+}

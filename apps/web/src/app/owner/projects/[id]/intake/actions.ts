@@ -6,7 +6,9 @@ import { requireRole } from '@/lib/auth';
 import {
   canChangeFiles,
   reopenRound,
+  saveFollowups,
   saveSection,
+  startReview,
   submitRound,
   unlockRound,
   type Outcome,
@@ -57,6 +59,23 @@ export async function saveSectionAction(formData: FormData) {
 export async function submitRoundAction(formData: FormData) {
   const c = await context(formData);
   done(c.projectId, c.section, await submitRound(c.store, c.template, c.projectId));
+}
+
+export async function saveFollowupsAction(formData: FormData) {
+  const c = await context(formData);
+  const outcome = await saveFollowups(c.store, c.projectId, {
+    get: (n) => {
+      const v = formData.get(n);
+      return typeof v === 'string' ? v : null;
+    },
+    getAll: (n) => formData.getAll(n).filter((v): v is string => typeof v === 'string'),
+  });
+  done(c.projectId, 'followups', outcome);
+}
+
+export async function startReviewAction(formData: FormData) {
+  const c = await context(formData);
+  done(c.projectId, c.section, await startReview(c.store, c.projectId));
 }
 
 export async function reopenRoundAction(formData: FormData) {
