@@ -1,6 +1,6 @@
 # Proposal: intake gate needs a settled round, gates before owner review, fixed style cards in development
 
-- **Status:** open
+- **Status:** accepted (2026-10-22)
 - **Date:** 2026-10-22
 - **Raised by:** agent, from the independent review of `complete_intake_review` (P2-T05) and the owner's answers in chat on 2026-10-22
 - **Task or spec reference:** P2-T05, P2-T06, P2-T15, P2-T18; `docs/spec/04-intake.md` step 7; D-182, D-189, D-304
@@ -33,4 +33,4 @@ The owner has already answered each point in chat on 2026-10-22 (intake gate: "Y
 
 ## Owner decision
 
-(Left blank for the owner.)
+Approved as written by the owner in chat on 2026-10-22 ("Approve as written"), with the edits in this same PR (#39), at the owner's request. Applied as decisions D-317 (order), D-318 (intake gate) and D-319 (fixed style cards), go-live item G30, and the edits to `docs/spec/04-intake.md` and the phase file.
