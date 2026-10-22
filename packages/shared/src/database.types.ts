@@ -1015,6 +1015,17 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      complete_intake_review: {
+        Args: {
+          p_followups: Json;
+          p_gaps: Json;
+          p_model: string;
+          p_project: string;
+          p_round: number;
+          p_summary: string;
+        };
+        Returns: string;
+      };
       enqueue_run: {
         Args: { p_project: string; p_stage: Database['public']['Enums']['stage'] };
         Returns: string;

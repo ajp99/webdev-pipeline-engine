@@ -81,19 +81,19 @@ select case when (select coalesce(array_agg(p.proname::text order by p.proname),
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
       and has_function_privilege('service_role', p.oid, 'execute'))
-    = array['advance_stage','claim_run','enqueue_run','finish_run','heartbeat_run']
-  then 'PASS      the worker can call the four queue functions it uses and advance_stage, nothing else'
+    = array['advance_stage','claim_run','complete_intake_review','enqueue_run','finish_run','heartbeat_run']
+  then 'PASS      the worker can call the four queue functions it uses, complete_intake_review and advance_stage, nothing else'
   else 'FAIL      the worker can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
       and has_function_privilege('service_role', p.oid, 'execute')) end;
 select case when not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('claim_run','heartbeat_run','finish_run')
+    where n.nspname='public' and p.proname in ('claim_run','heartbeat_run','finish_run','complete_intake_review')
       and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute')))
-  then 'PASS      the worker-only queue functions are closed to anon and the owner session'
-  else 'FAIL      anon or the owner session can run a worker-only queue function' end;
+  then 'PASS      the worker-only functions are closed to anon and the owner session'
+  else 'FAIL      anon or the owner session can run a worker-only function' end;
 select case when not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname='public' and p.proname in ('enqueue_run','claim_run','heartbeat_run','finish_run','request_run_cancel')
+    where n.nspname='public' and p.proname in ('enqueue_run','claim_run','heartbeat_run','finish_run','request_run_cancel','complete_intake_review')
       and has_function_privilege('anon', p.oid, 'execute'))
   then 'PASS      anon, and PUBLIC, can run none of the queue functions'
   else 'FAIL      anon or PUBLIC can run a queue function' end;
