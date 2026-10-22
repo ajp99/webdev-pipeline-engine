@@ -3,6 +3,9 @@ import { hostname } from 'node:os';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@wpe/shared';
 import { defaultSelector } from './handlers';
+import { intakeReviewHandler, unconfiguredReviewHandler } from './intake-review';
+import { supabaseReviewDeps } from './intake-review-supabase';
+import { modelFromEnv } from './model';
 import { DEFAULTS, startRunner } from './runner';
 import { supabaseRunnerDeps } from './runner-supabase';
 
@@ -27,7 +30,19 @@ const fixedPoll = process.env.WORKER_POLL_SECONDS
   ? positive('WORKER_POLL_SECONDS', 15) * 1000
   : null;
 const worker = `${hostname()}-${process.pid}`;
-const runner = startRunner(supabaseRunnerDeps(admin), defaultSelector(process.env), {
+// The intake review needs a model (MODEL_PROVIDER in .env, D-316). Without one the worker still runs;
+// an intake run then fails with the reason, shown in the console's queue.
+let review;
+try {
+  const model = modelFromEnv(process.env);
+  review = intakeReviewHandler(supabaseReviewDeps(admin), model);
+  console.log(`Intake review uses ${model.name}.`);
+} catch (e) {
+  const reason = e instanceof Error ? e.message : String(e);
+  console.log(`Intake review is off: ${reason}`);
+  review = unconfiguredReviewHandler(reason);
+}
+const runner = startRunner(supabaseRunnerDeps(admin), defaultSelector(process.env, review), {
   worker,
   heartbeatMs: DEFAULTS.heartbeatMs,
   watchdogMs: DEFAULTS.watchdogMs,

@@ -29,14 +29,19 @@ export function stubHandler(opts: { steps: number; stepMs: number }): Handler {
   };
 }
 
-export function defaultSelector(env: {
-  STUB_STEPS?: string;
-  STUB_STEP_SECONDS?: string;
-}): HandlerSelector {
+export function defaultSelector(
+  env: { STUB_STEPS?: string; STUB_STEP_SECONDS?: string },
+  /** The intake review (P2-T05); without it an intake run fails with the reason. */
+  review?: Handler,
+): HandlerSelector {
   // About 60 seconds by default, so there is time to press Cancel in the console.
   const stub = stubHandler({
     steps: Number(env.STUB_STEPS ?? 12),
     stepMs: Number(env.STUB_STEP_SECONDS ?? 5) * 1000,
   });
-  return (run) => (run.model === 'stub' ? stub : undefined);
+  return (run) => {
+    if (run.model === 'stub') return stub;
+    if (run.stage === 'intake') return review;
+    return undefined;
+  };
 }
