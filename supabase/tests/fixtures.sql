@@ -24,8 +24,18 @@ begin
               else 'FAIL      ' || name || ' (expected ' || expect || ', got ' || res || ')' end;
 end $$;
 grant usage on schema t to authenticated, service_role;
-grant select, insert, update, delete on all tables in schema public to authenticated;
-grant all on all tables in schema public to service_role;
+-- Stands in for the grants Supabase makes to every new table. The approvals table is skipped: the
+-- migration revokes its insert privilege, and this blanket grant (which runs after it) must not undo that.
+do $$
+declare tb text;
+begin
+  for tb in select tablename from pg_tables where schemaname = 'public' and tablename <> 'approvals' loop
+    execute format('grant select, insert, update, delete on public.%I to authenticated', tb);
+    execute format('grant all on public.%I to service_role', tb);
+  end loop;
+end $$;
+grant select, update, delete on public.approvals to authenticated;
+grant select, update, delete, references, trigger, truncate on public.approvals to service_role;
 grant usage, select on all sequences in schema public to authenticated, service_role;
 
 -- People: O is the owner (the only login until go-live, D-298). A and B are plain users who are not owners;

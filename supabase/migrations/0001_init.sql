@@ -31,7 +31,8 @@ create type project_status as enum ('active', 'paused', 'closed');
 create type close_reason as enum ('completed', 'cancelled');
 create type gate_type as enum ('soft', 'hard', 'client');
 create type approver_role as enum ('owner', 'client');
-create type artifact_status as enum ('draft', 'approved', 'superseded');
+-- 'rejected': the owner turned this version down (reject_gate); the stage stays open and no run starts.
+create type artifact_status as enum ('draft', 'approved', 'rejected', 'superseded');
 -- The artifact types the pipeline knows (stages.yaml outputs, plus release_note, D-223). A new type
 -- is one forward migration: alter type artifact_type add value.
 create type artifact_type as enum (
@@ -225,7 +226,7 @@ create table approvals (
   approved_by_email text,
   role approver_role not null,
   gate_type gate_type not null,
-  -- Stamped by the database when a row is written through the API (stamp_approval_time).
+  -- Defaults to the database time; accept_gate is the only writer (P2-T18).
   at timestamptz not null default now(),
   -- D-265: the SHA-256 of the artifact's content when it was approved, written by the database. The
   -- empty default only keeps the generated insert type optional; the trigger replaces it and the
@@ -638,27 +639,166 @@ $$;
 -- Only advance_stage() (which runs as its owner) calls it, so no API role needs execute.
 revoke all on function private.approval_is_valid(public.approvals, uuid) from public, anon, authenticated, service_role;
 
--- An approval written through the API gets the database time as its time. Rows written by the
--- SQL editor or a migration (current_user is postgres) keep the time they carry.
-create or replace function stamp_approval_time() returns trigger
-language plpgsql as $$
+
+
+-- ---------------------------------------------------------------------------
+-- Gate rules in the database (P2-T18, D-239, D-258, D-261, D-318)
+-- ---------------------------------------------------------------------------
+-- The artifact type whose approvals gate a stage (null for stages without one; build_rounds is gated per
+-- round by round_summary artifacts).
+create function private.stage_artifact(p_stage public.stage) returns public.artifact_type
+language sql immutable set search_path = '' as $$
+  select case p_stage
+    when 'intake'       then 'intake_record'::public.artifact_type
+    when 'requirements' then 'prd'
+    when 'plan'         then 'plan'
+    when 'prototype'    then 'prototype'
+    when 'qc_report'    then 'report'
+    when 'deploy_prep'  then 'deployment_checklist'
+    when 'handover'     then 'handover_guide'
+  end
+$$;
+-- The stage an artifact type is gated in (the reverse of the above, plus round_summary and release_note).
+create function private.artifact_stage(p_type public.artifact_type) returns public.stage
+language sql immutable set search_path = '' as $$
+  select case p_type
+    when 'intake_record'         then 'intake'::public.stage
+    when 'prd'                   then 'requirements'
+    when 'plan'                  then 'plan'
+    when 'prototype'             then 'prototype'
+    when 'round_summary'         then 'build_rounds'
+    when 'report'                then 'qc_report'
+    when 'deployment_checklist'  then 'deploy_prep'
+    when 'handover_guide'        then 'handover'
+  end
+$$;
+-- The stages that have a runnable agent: accept_gate queues a run only when it moves a project into one of
+-- them. None yet; the task that adds an agent adds its stage here (requirements with P2-T07).
+create function private.stage_has_agent(p_stage public.stage) returns boolean
+language sql immutable set search_path = '' as $$
+  select p_stage = any (array[]::public.stage[])
+$$;
+-- The gates of a stage as they apply to one project: the global defaults, with the project's own row
+-- winning for a gate type (D-272).
+create function private.effective_gates(p_project uuid, p_stage public.stage)
+returns table (gate_type public.gate_type, gatekeeper public.approver_role, escalate_after_hours int)
+language sql stable security definer set search_path = '' as $$
+  select distinct on (g.gate_type) g.gate_type, g.gatekeeper, g.escalate_after_hours
+    from public.gate_config g
+   where g.stage = p_stage and (g.project_id is null or g.project_id = p_project)
+   order by g.gate_type, g.project_id nulls last
+$$;
+-- D-318: intake is accepted only when the latest intake round is reviewed (a review that asks follow-up
+-- questions opens the next round, so an open or submitted latest round means one is still waiting). A
+-- project with no round at all is not blocked.
+create function private.intake_blocker(p_project uuid) returns text
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  r public.intake_rounds%rowtype;
 begin
-  if current_user in ('anon', 'authenticated', 'service_role') then
-    new.at := now();
+  select * into r from public.intake_rounds where project_id = p_project order by round desc limit 1;
+  if found and r.status <> 'reviewed' then
+    return format('the latest intake round is not reviewed yet (round %s is %s)', r.round, r.status);
   end if;
-  return new;
+  return null;
 end;
 $$;
-create trigger approvals_stamp_time before insert on approvals
-  for each row execute function stamp_approval_time();
+-- Why a project cannot move to its next stage yet, or null when it can. advance_stage() raises it;
+-- remaining_gates() reports whether it is null as ready_to_advance, so the two cannot drift apart.
+create function private.advance_blocker(p_project uuid) returns text
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v         public.projects%rowtype;
+  atype     public.artifact_type;
+  art       public.artifacts%rowtype;
+  gt        public.gate_type;
+  gk        public.approver_role;
+  req       public.gate_type[];
+  ib        text;
+begin
+  select * into v from public.projects where id = p_project;
+  if not found then
+    return 'project not found';
+  end if;
+  if v.stage = 'build_rounds' then
+    if not exists (select 1 from public.rounds where project_id = p_project and change_request_id is null) then
+      return 'no build rounds exist yet';
+    end if;
+    if exists (
+      select 1 from public.rounds r
+      where r.project_id = p_project and r.change_request_id is null
+        and (r.status <> 'approved'
+          or not exists (
+            select 1 from public.artifacts a join public.approvals ap on ap.artifact_id = a.id
+            where a.project_id = p_project and a.type = 'round_summary'
+              and a.content ->> 'round' = r.number::text
+              and a.status not in ('superseded', 'rejected') and ap.gate_type = 'soft'
+              and private.approval_is_valid(ap, p_project)
+              and a.version = (select max(b.version) from public.artifacts b
+                               where b.project_id = p_project and b.type = 'round_summary'
+                                 and b.content ->> 'round' = r.number::text)))
+    ) then
+      return 'every build round must be approved with a soft approval on its newest round_summary';
+    end if;
+  else
+    atype := private.stage_artifact(v.stage);
 
--- The client's prototype approval is recorded only after the owner approved that version.
-create or replace function private.artifact_has_owner_approval(p_artifact uuid) returns boolean
-language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.approvals ap where ap.artifact_id = p_artifact and ap.role = 'owner')
+    select * into art from public.artifacts
+      where project_id = p_project and type = atype
+      order by version desc limit 1;
+    if not found or art.status in ('superseded', 'rejected') then
+      return format('no current %s artifact to approve for stage %s', atype, v.stage);
+    end if;
+
+    select array_agg(distinct g.gate_type) into req
+      from public.gate_config g
+      where g.stage = v.stage and (g.project_id is null or g.project_id = p_project);
+
+    -- Each gate needs a valid approval given in the role of its effective gatekeeper (the project's own
+    -- row first, then the global default, D-272).
+    foreach gt in array req loop
+      select g.gatekeeper into gk from public.gate_config g
+        where g.stage = v.stage and g.gate_type = gt and (g.project_id is null or g.project_id = p_project)
+        order by g.project_id nulls last limit 1;
+      if not exists (select 1 from public.approvals ap
+                     where ap.artifact_id = art.id and ap.gate_type = gt and ap.role = gk
+                       and private.approval_is_valid(ap, p_project)) then
+        return format('missing %s approval on %s v%s for stage %s', gt, atype, art.version, v.stage);
+      end if;
+    end loop;
+
+    if 'client' = any (req) and array_length(req, 1) > 1 then
+      if not exists (
+        select 1 from public.approvals c join public.approvals o on o.artifact_id = c.artifact_id
+        where c.artifact_id = art.id and c.gate_type = 'client' and o.gate_type <> 'client' and o.at <= c.at
+          and private.approval_is_valid(c, p_project) and private.approval_is_valid(o, p_project)
+      ) then
+        return 'the client approval must come after an owner approval';
+      end if;
+    end if;
+    -- D-318: intake is accepted only on a settled round.
+    if v.stage = 'intake' then
+      ib := private.intake_blocker(p_project);
+      if ib is not null then
+        return ib;
+      end if;
+    end if;
+    -- close_project() refuses to complete a project with an accepted change request that is not deployed.
+    if v.stage = 'handover' and exists (
+      select 1 from public.change_requests c where c.project_id = p_project and c.status = 'accepted'
+    ) then
+      return 'an accepted change request is not deployed yet';
+    end if;
+  end if;
+  return null;
+end;
 $$;
-revoke all on function private.artifact_has_owner_approval(uuid) from public, anon;
-grant execute on function private.artifact_has_owner_approval(uuid) to authenticated, service_role;
+revoke all on function private.stage_artifact(public.stage), private.artifact_stage(public.artifact_type),
+  private.stage_has_agent(public.stage), private.effective_gates(uuid, public.stage),
+  private.intake_blocker(uuid), private.advance_blocker(uuid)
+  from public, anon, authenticated, service_role;
+-- The version-block trigger runs with the caller's rights and reads this pure mapping.
+grant execute on function private.artifact_stage(public.artifact_type) to authenticated, service_role;
 
 create function advance_stage(p_project uuid, p_next stage) returns void
 language plpgsql security definer set search_path = '' as $$
@@ -666,11 +806,7 @@ declare
   v         public.projects%rowtype;
   stages    public.stage[] := enum_range(null::public.stage);
   idx       int;
-  atype     public.artifact_type;
-  art       public.artifacts%rowtype;
-  gt        public.gate_type;
-  gk        public.approver_role;
-  req       public.gate_type[];
+  blocker   text;
 begin
   if not private.is_owner() then
     raise exception 'advance_stage: not allowed';
@@ -692,70 +828,9 @@ begin
     raise exception 'advance_stage: % is not the stage after %', p_next, v.stage;
   end if;
 
-  if v.stage = 'build_rounds' then
-    if not exists (select 1 from public.rounds where project_id = p_project and change_request_id is null) then
-      raise exception 'advance_stage: no build rounds exist yet';
-    end if;
-    if exists (
-      select 1 from public.rounds r
-      where r.project_id = p_project and r.change_request_id is null
-        and (r.status <> 'approved'
-          or not exists (
-            select 1 from public.artifacts a join public.approvals ap on ap.artifact_id = a.id
-            where a.project_id = p_project and a.type = 'round_summary'
-              and a.content ->> 'round' = r.number::text
-              and a.status <> 'superseded' and ap.gate_type = 'soft'
-              and private.approval_is_valid(ap, p_project)
-              and a.version = (select max(b.version) from public.artifacts b
-                               where b.project_id = p_project and b.type = 'round_summary'
-                                 and b.content ->> 'round' = r.number::text)))
-    ) then
-      raise exception 'advance_stage: every build round must be approved with a soft approval on its newest round_summary';
-    end if;
-  else
-    atype := case v.stage
-      when 'intake'       then 'intake_record'
-      when 'requirements' then 'prd'
-      when 'plan'         then 'plan'
-      when 'prototype'    then 'prototype'
-      when 'qc_report'    then 'report'
-      when 'deploy_prep'  then 'deployment_checklist'
-      when 'handover'     then 'handover_guide'
-    end;
-
-    select * into art from public.artifacts
-      where project_id = p_project and type = atype
-      order by version desc limit 1;
-    if not found or art.status = 'superseded' then
-      raise exception 'advance_stage: no current % artifact to approve for stage %', atype, v.stage;
-    end if;
-
-    select array_agg(distinct g.gate_type) into req
-      from public.gate_config g
-      where g.stage = v.stage and (g.project_id is null or g.project_id = p_project);
-
-    -- Each gate needs a valid approval given in the role of its effective gatekeeper (the project's own
-    -- row first, then the global default, D-272).
-    foreach gt in array req loop
-      select g.gatekeeper into gk from public.gate_config g
-        where g.stage = v.stage and g.gate_type = gt and (g.project_id is null or g.project_id = p_project)
-        order by g.project_id nulls last limit 1;
-      if not exists (select 1 from public.approvals ap
-                     where ap.artifact_id = art.id and ap.gate_type = gt and ap.role = gk
-                       and private.approval_is_valid(ap, p_project)) then
-        raise exception 'advance_stage: missing % approval on % v% for stage %', gt, atype, art.version, v.stage;
-      end if;
-    end loop;
-
-    if 'client' = any (req) and array_length(req, 1) > 1 then
-      if not exists (
-        select 1 from public.approvals c join public.approvals o on o.artifact_id = c.artifact_id
-        where c.artifact_id = art.id and c.gate_type = 'client' and o.gate_type <> 'client' and o.at <= c.at
-          and private.approval_is_valid(c, p_project) and private.approval_is_valid(o, p_project)
-      ) then
-        raise exception 'advance_stage: the client approval must come after an owner approval';
-      end if;
-    end if;
+  blocker := private.advance_blocker(p_project);
+  if blocker is not null then
+    raise exception 'advance_stage: %', blocker;
   end if;
 
   perform set_config('app.stage_advance', 'on', true);
@@ -768,7 +843,333 @@ begin
   perform set_config('app.stage_advance', 'off', true);
 end;
 $$;
+revoke all on function advance_stage(uuid, stage) from public, anon, service_role;
 grant execute on function advance_stage(uuid, stage) to authenticated;
+
+-- The artifact a gate action applies to: it must belong to the project, be the newest version of the stage's
+-- gated type (for build rounds, the newest summary of the named round) and still be a draft. Used by
+-- accept_gate and reject_gate, so a stale console form cannot act on an old version.
+create function private.current_gate_artifact(p_project uuid, p_artifact uuid, p_round int, p_fn text)
+returns public.artifacts
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v      public.projects%rowtype;
+  art    public.artifacts%rowtype;
+  newest int;
+begin
+  select * into v from public.projects where id = p_project;
+  select * into art from public.artifacts where id = p_artifact and project_id = p_project;
+  if not found then
+    raise exception '%: that artifact does not belong to this project', p_fn;
+  end if;
+  if v.stage = 'build_rounds' then
+    if p_round is null then
+      raise exception '%: name the build round', p_fn;
+    end if;
+    if art.type <> 'round_summary' or art.content ->> 'round' is distinct from p_round::text then
+      raise exception '%: that is not a summary of round %', p_fn, p_round;
+    end if;
+    select max(b.version) into newest from public.artifacts b
+      where b.project_id = p_project and b.type = 'round_summary' and b.content ->> 'round' = p_round::text;
+  else
+    if p_round is not null then
+      raise exception '%: only build rounds take a round number', p_fn;
+    end if;
+    if art.type is distinct from private.stage_artifact(v.stage) then
+      raise exception '%: stage % is gated by a % artifact', p_fn, v.stage, private.stage_artifact(v.stage);
+    end if;
+    select max(b.version) into newest from public.artifacts b
+      where b.project_id = p_project and b.type = art.type;
+  end if;
+  if art.version <> newest then
+    raise exception '%: that is not the newest version of the % (reload)', p_fn, art.type;
+  end if;
+  if art.status <> 'draft' then
+    raise exception '%: that version is already %', p_fn, art.status;
+  end if;
+  return art;
+end;
+$$;
+revoke all on function private.current_gate_artifact(uuid, uuid, int, text)
+  from public, anon, authenticated, service_role;
+
+-- Accept: records the owner's approval of one gate and marks the artifact approved when its gates are all
+-- done (D-258). It advances the project in the same transaction only when this approval completes the gates
+-- and the gate is the owner's: a client sign-off, which the owner records with an evidence note (D-298),
+-- never advances (D-234). Returns what happened: 'recorded' (more owner gates follow), 'waiting_on_client',
+-- 'ready_to_advance' (the owner presses Advance) or 'advanced'. For build rounds p_round names the round,
+-- which becomes approved; the stage never advances from there.
+create function accept_gate(p_project uuid, p_gate public.gate_type, p_artifact uuid,
+                            p_note text default null, p_round int default null)
+returns text
+language plpgsql security definer set search_path = '' as $$
+declare
+  v       public.projects%rowtype;
+  art     public.artifacts%rowtype;
+  gk      public.approver_role;
+  g       record;
+  stages  public.stage[] := enum_range(null::public.stage);
+  nxt     public.stage;
+  blocker text;
+  left_n  int := 0;
+  client_left boolean := false;
+begin
+  if not private.is_owner() then
+    raise exception 'accept_gate: not allowed';
+  end if;
+  select * into v from public.projects where id = p_project for update;
+  if not found then
+    raise exception 'accept_gate: project not found';
+  end if;
+  if v.status <> 'active' then
+    raise exception 'accept_gate: project is %, only an active project can be accepted', v.status;
+  end if;
+
+  select e.gatekeeper into gk from private.effective_gates(p_project, v.stage) e where e.gate_type = p_gate;
+  if gk is null then
+    raise exception 'accept_gate: stage % has no % gate', v.stage, p_gate;
+  end if;
+  art := private.current_gate_artifact(p_project, p_artifact, p_round, 'accept_gate');
+
+  if exists (select 1 from public.approvals ap
+              where ap.artifact_id = art.id and ap.gate_type = p_gate and ap.role = gk
+                and private.approval_is_valid(ap, p_project)) then
+    raise exception 'accept_gate: the % gate is already approved on this version', p_gate;
+  end if;
+  if v.stage = 'build_rounds' then
+    -- A round is accepted at the soft gate; the stage has no other gate to pass per round.
+    if p_gate <> 'soft' then
+      raise exception 'accept_gate: a build round is accepted at its soft gate';
+    end if;
+    if not exists (select 1 from public.rounds r where r.project_id = p_project and r.number = p_round and r.status = 'in_review') then
+      raise exception 'accept_gate: round % is not in review', p_round;
+    end if;
+  else
+    -- Gates are passed in order (soft, hard, client): every earlier gate of the stage needs its approval.
+    for g in select * from private.effective_gates(p_project, v.stage) e where e.gate_type < p_gate loop
+      if not exists (select 1 from public.approvals ap
+                      where ap.artifact_id = art.id and ap.gate_type = g.gate_type and ap.role = g.gatekeeper
+                        and private.approval_is_valid(ap, p_project)) then
+        raise exception 'accept_gate: the % approval must come first', g.gate_type;
+      end if;
+    end loop;
+  end if;
+  if gk = 'client' and btrim(coalesce(p_note, '')) = '' then
+    raise exception 'accept_gate: a client approval needs an evidence note naming the channel';
+  end if;
+  -- D-318
+  if v.stage = 'intake' then
+    blocker := private.intake_blocker(p_project);
+    if blocker is not null then
+      raise exception 'accept_gate: %', blocker;
+    end if;
+  end if;
+
+  insert into public.approvals (artifact_id, approved_by, role, gate_type, evidence_note)
+  values (art.id, auth.uid(), gk, p_gate, nullif(btrim(p_note), ''));
+
+  if v.stage = 'build_rounds' then
+    update public.rounds set status = 'approved' where project_id = p_project and number = p_round;
+    update public.artifacts set status = 'approved' where id = art.id;
+    return case when private.advance_blocker(p_project) is null then 'ready_to_advance' else 'recorded' end;
+  end if;
+
+  for g in select * from private.effective_gates(p_project, v.stage) loop
+    if not exists (select 1 from public.approvals ap
+                    where ap.artifact_id = art.id and ap.gate_type = g.gate_type and ap.role = g.gatekeeper
+                      and private.approval_is_valid(ap, p_project)) then
+      left_n := left_n + 1;
+      if g.gatekeeper = 'client' then
+        client_left := true;
+      end if;
+    end if;
+  end loop;
+
+  if left_n > 0 then
+    return case when client_left then 'waiting_on_client' else 'recorded' end;
+  end if;
+  update public.artifacts set status = 'approved' where id = art.id;
+  if gk = 'client' then
+    return 'ready_to_advance';
+  end if;
+  nxt := stages[array_position(stages, v.stage) + 1];
+  perform public.advance_stage(p_project, nxt);
+  -- A run still queued belongs to the stage the project just left (or repeats the one about to start): it
+  -- would block enqueue_run and never be claimed, so it is cancelled first.
+  for g in select r.id from public.stage_runs r where r.project_id = p_project and r.status = 'queued' loop
+    perform public.request_run_cancel(g.id);
+  end loop;
+  if private.stage_has_agent(nxt) then
+    perform public.enqueue_run(p_project, nxt);
+  end if;
+  return 'advanced';
+end;
+$$;
+revoke all on function accept_gate(uuid, public.gate_type, uuid, text, int) from public, anon, authenticated, service_role;
+grant execute on function accept_gate(uuid, public.gate_type, uuid, text, int) to authenticated;
+
+-- Reject: marks the version rejected. The stage stays open and no run starts (D-234); a new version comes
+-- from the next run.
+create function reject_gate(p_project uuid, p_artifact uuid, p_round int default null)
+returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  v   public.projects%rowtype;
+  art public.artifacts%rowtype;
+begin
+  if not private.is_owner() then
+    raise exception 'reject_gate: not allowed';
+  end if;
+  select * into v from public.projects where id = p_project for update;
+  if not found then
+    raise exception 'reject_gate: project not found';
+  end if;
+  if v.status <> 'active' then
+    raise exception 'reject_gate: project is %, only an active project can be rejected from', v.status;
+  end if;
+  art := private.current_gate_artifact(p_project, p_artifact, p_round, 'reject_gate');
+  if v.stage = 'build_rounds' and not exists (
+    select 1 from public.rounds r where r.project_id = p_project and r.number = p_round and r.status = 'in_review'
+  ) then
+    raise exception 'reject_gate: round % is not in review', p_round;
+  end if;
+  update public.artifacts set status = 'rejected' where id = art.id;
+end;
+$$;
+revoke all on function reject_gate(uuid, uuid, int) from public, anon, authenticated, service_role;
+grant execute on function reject_gate(uuid, uuid, int) to authenticated;
+
+-- The gates of every active project (or one) that the console shows, one row per gate (D-261). state:
+-- 'satisfied'; 'missing' (the next gate to pass); 'blocked' (an earlier gate of the stage is not approved
+-- yet); 'waiting' (no current artifact or round in review: the agent has to produce it). since is when the
+-- gate began to wait (the artifact's time, moved on by earlier approvals) and due_at adds the gate's
+-- deadline. ready_to_advance is the same on every row of a project: all its gates are approved and only
+-- the owner's Advance is left. A build_rounds project with no round in review gets one row with no round.
+create function remaining_gates(p_project uuid default null)
+returns table (
+  project_id uuid, stage public.stage, gate_type public.gate_type, gatekeeper public.approver_role,
+  round int, artifact_id uuid, artifact_type public.artifact_type, artifact_version int,
+  state text, since timestamptz, due_at timestamptz, overdue boolean, ready_to_advance boolean)
+language plpgsql stable security definer set search_path = '' as $$
+#variable_conflict use_column
+declare
+  pr      public.projects%rowtype;
+  art     public.artifacts%rowtype;
+  g       record;
+  rd      record;
+  atype   public.artifact_type;
+  ready   boolean;
+  pending boolean;
+  s       timestamptz;
+  t       timestamptz;
+  gk      public.approver_role;
+  hrs     int;
+  n       int;
+begin
+  if not private.is_owner() then
+    raise exception 'remaining_gates: not allowed';
+  end if;
+  for pr in select * from public.projects p
+             where p.status = 'active' and p.stage <> 'closed' and (p_project is null or p.id = p_project)
+             order by p.created_at, p.id loop
+    ready := private.advance_blocker(pr.id) is null;
+    if pr.stage = 'build_rounds' then
+      select e.gatekeeper, e.escalate_after_hours into gk, hrs
+        from private.effective_gates(pr.id, pr.stage) e where e.gate_type = 'soft';
+      gk := coalesce(gk, 'owner');
+      hrs := coalesce(hrs, 24);
+      n := 0;
+      for rd in select r.number from public.rounds r where r.project_id = pr.id and r.status = 'in_review' order by r.number loop
+        n := n + 1;
+        select * into art from public.artifacts a
+          where a.project_id = pr.id and a.type = 'round_summary' and a.content ->> 'round' = rd.number::text
+          order by a.version desc limit 1;
+        if found and art.status not in ('superseded', 'rejected') then
+          return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, rd.number, art.id, art.type, art.version,
+            'missing', art.created_at, art.created_at + make_interval(hours => hrs),
+            now() > art.created_at + make_interval(hours => hrs), ready;
+        else
+          return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, rd.number, null::uuid,
+            'round_summary'::public.artifact_type, null::int, 'waiting', null::timestamptz, null::timestamptz, false, ready;
+        end if;
+      end loop;
+      if n = 0 then
+        return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, null::int, null::uuid,
+          'round_summary'::public.artifact_type, null::int, case when ready then 'satisfied' else 'waiting' end,
+          null::timestamptz, null::timestamptz, false, ready;
+      end if;
+    else
+      atype := private.stage_artifact(pr.stage);
+      select * into art from public.artifacts a where a.project_id = pr.id and a.type = atype
+        order by a.version desc limit 1;
+      if not found or art.status in ('superseded', 'rejected') then
+        for g in select * from private.effective_gates(pr.id, pr.stage) order by gate_type loop
+          return query select pr.id, pr.stage, g.gate_type, g.gatekeeper, null::int, null::uuid, atype, null::int,
+            'waiting', null::timestamptz, null::timestamptz, false, false;
+        end loop;
+      else
+        s := art.created_at;
+        pending := false;
+        for g in select * from private.effective_gates(pr.id, pr.stage) order by gate_type loop
+          select max(ap.at) into t from public.approvals ap
+            where ap.artifact_id = art.id and ap.gate_type = g.gate_type and ap.role = g.gatekeeper
+              and private.approval_is_valid(ap, pr.id);
+          if t is not null then
+            s := greatest(s, t);
+            return query select pr.id, pr.stage, g.gate_type, g.gatekeeper, null::int, art.id, atype, art.version,
+              'satisfied', s, s + make_interval(hours => g.escalate_after_hours), false, ready;
+          else
+            return query select pr.id, pr.stage, g.gate_type, g.gatekeeper, null::int, art.id, atype, art.version,
+              case when pending then 'blocked' else 'missing' end, s,
+              s + make_interval(hours => g.escalate_after_hours),
+              (not pending and now() > s + make_interval(hours => g.escalate_after_hours)), ready;
+            pending := true;
+          end if;
+        end loop;
+      end if;
+    end if;
+  end loop;
+end;
+$$;
+revoke all on function remaining_gates(uuid) from public, anon, authenticated, service_role;
+grant execute on function remaining_gates(uuid) to authenticated;
+
+-- D-259: once a project is past a stage, an API caller (the owner, the worker) cannot add a new version of
+-- that stage's gated artifact, unless the row names an accepted change request of the same project.
+-- release_note has no gated stage and a round_summary is gated in build_rounds, so both are free while their stage is current. Functions that run as their owner and the
+-- SQL editor (current_user is postgres) are not affected.
+create function guard_gated_artifact_version() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  cur    public.stage;
+  gated  public.stage;
+  stages public.stage[] := enum_range(null::public.stage);
+begin
+  if current_user not in ('anon', 'authenticated', 'service_role') then
+    return new;
+  end if;
+  gated := private.artifact_stage(new.type);
+  if gated is null then
+    return new;
+  end if;
+  -- Lock the project row first: a concurrent accept_gate holds it while it moves the stage, and the stage
+  -- must be read after that commits, not before.
+  perform 1 from public.projects p where p.id = new.project_id for share;
+  select p.stage into cur from public.projects p where p.id = new.project_id;
+  if cur is null or array_position(stages, cur) <= array_position(stages, gated) then
+    return new;
+  end if;
+  if new.change_request_id is null
+     or not exists (select 1 from public.change_requests c
+                     where c.id = new.change_request_id and c.project_id = new.project_id and c.status = 'accepted') then
+    raise exception 'the project is past the % stage; a new % version needs an accepted change request', gated, new.type;
+  end if;
+  return new;
+end;
+$$;
+create trigger artifacts_version_block before insert on artifacts
+  for each row execute function guard_gated_artifact_version();
+
 
 -- The one place a project is closed (D-237). Completed closes come from advance_stage() at the end
 -- of handover; the cancel function (P2-T20) calls it with 'cancelled'. Sets status and close_reason.
@@ -1152,25 +1553,16 @@ begin
   end loop;
 end $$;
 
--- Approvals: the owner reads them and adds their own approvals on an artifact of an active project;
--- nothing else. A client-gate approval is the owner's record of the client's approval (D-298): its
--- evidence_note is required by a check, the PRD only while the stage is requirements, the prototype only
--- while the stage is prototype and after the owner approved that version. Update and delete policies
+-- Approvals: the owner reads them; nothing writes them through the API. Every approval is written by
+-- accept_gate (P2-T18), which checks the stage, the current version, the order of the gates and the intake
+-- rule, and records a client-gate approval (D-298) with its evidence note. Update and delete policies
 -- exist only so that the append-only trigger answers with a clear error instead of silently touching
 -- zero rows.
+-- RLS does not bind the worker's role, so its table privilege goes too: only accept_gate (which runs as the
+-- function owner) writes approvals.
+revoke insert on approvals from authenticated, service_role;
 create policy owner_read_approvals on approvals
   for select to authenticated using (private.is_owner());
-create policy owner_add_approval on approvals
-  for insert to authenticated with check (
-    private.is_owner() and approved_by = auth.uid()
-    and exists (select 1 from artifacts a join projects p on p.id = a.project_id
-                where a.id = artifact_id and p.status = 'active'
-                  and (role = 'owner'
-                    or (a.status <> 'superseded'
-                        and ((a.type = 'prd' and p.stage = 'requirements')
-                          or (a.type = 'prototype' and p.stage = 'prototype'
-                              and private.artifact_has_owner_approval(a.id))))))
-  );
 create policy owner_update_approvals on approvals
   for update to authenticated using (private.is_owner());
 create policy owner_delete_approvals on approvals

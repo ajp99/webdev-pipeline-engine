@@ -1,2 +1,0 @@
--- mutation: the owner may record a client-gate approval on a superseded artifact
-alter policy owner_add_approval on approvals with check (private.is_owner() and approved_by = auth.uid() and exists (select 1 from artifacts a join projects p on p.id = a.project_id where a.id = artifact_id and p.status = 'active' and (role = 'owner' or ((a.type = 'prd' and p.stage = 'requirements') or (a.type = 'prototype' and p.stage = 'prototype' and private.artifact_has_owner_approval(a.id))))));

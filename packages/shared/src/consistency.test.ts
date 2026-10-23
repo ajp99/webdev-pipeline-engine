@@ -85,13 +85,25 @@ describe('generated database types (P1-T03)', () => {
   });
 });
 
-describe('queue logic agrees with advance_stage() (P1-T06, P1-T07)', () => {
-  it('uses the same stage-to-artifact mapping as the SQL CASE', () => {
-    const caseBlock = sql.match(/atype := case v\.stage([\s\S]*?)end;/i)?.[1] ?? '';
-    const fromSql = Object.fromEntries(
-      [...caseBlock.matchAll(/when '(\w+)'\s+then '(\w+)'/g)].map((m) => [m[1]!, m[2]!]),
-    );
-    expect(fromSql).toEqual(STAGE_ARTIFACT);
+describe('the TypeScript stage-to-artifact mapping agrees with the database (P1-T06, P2-T18)', () => {
+  const pairs = (fn: string, subject: string) => {
+    const body =
+      sql.match(
+        new RegExp(
+          `create function private\\.${fn}[\\s\\S]*?select case ${subject}([\\s\\S]*?)end\\n\\$\\$;`,
+          'i',
+        ),
+      )?.[1] ?? '';
+    return [...body.matchAll(/when '(\w+)'\s+then '(\w+)'/g)].map((m) => [m[1]!, m[2]!] as const);
+  };
+
+  it('uses the same stage-to-artifact mapping as private.stage_artifact()', () => {
+    expect(Object.fromEntries(pairs('stage_artifact', 'p_stage'))).toEqual(STAGE_ARTIFACT);
+  });
+
+  it('private.artifact_stage() is the reverse, plus round_summary in build_rounds', () => {
+    const reverse = Object.fromEntries(pairs('artifact_stage', 'p_type').map(([t, st]) => [st, t]));
+    expect(reverse).toEqual({ ...STAGE_ARTIFACT, build_rounds: ROUND_ARTIFACT });
   });
 });
 

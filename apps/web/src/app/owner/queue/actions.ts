@@ -1,60 +1,32 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { buildQueue, remainingGates, STAGES } from '@wpe/shared';
+import { buildQueue } from '@wpe/shared';
 import { requireRole } from '@/lib/auth';
 import { loadQueueInput } from '@/lib/queue-data';
 import { createClient } from '@/lib/supabase/server';
 
 /**
- * Accept: records the owner's approval for the next gate of a project's stage and, when no gate of
- * the stage is left, advances the project through advance_stage(). Nothing advances without the
- * approval record; the database checks it again.
+ * Accept: asks the database to record the owner's approval of the project's next gate. accept_gate
+ * checks the stage, the version, the order of the gates and the intake rule, marks the artifact, and
+ * advances the project in the same transaction only when this approval completes the gates (D-258).
+ * Nothing advances without the approval record.
  */
 export async function acceptGate(formData: FormData) {
-  const session = await requireRole('owner', '/owner/queue');
+  await requireRole('owner', '/owner/queue');
   const projectId = String(formData.get('projectId') ?? '');
   const artifactId = String(formData.get('artifactId') ?? '');
   const gateType = String(formData.get('gateType') ?? '');
+  if (gateType !== 'soft' && gateType !== 'hard' && gateType !== 'client')
+    throw new Error('Unknown gate type. Reload the queue.');
 
   const supabase = await createClient();
-  const before = await loadQueueInput(supabase);
-  const next = remainingGates(before, projectId)[0];
-  // The form may be stale (someone else approved, the artifact was replaced): only act on the live next gate.
-  if (
-    !next ||
-    !next.actionable ||
-    next.round !== null ||
-    next.artifactId !== artifactId ||
-    next.gateType !== gateType
-  ) {
-    throw new Error('This gate is no longer waiting for your approval. Reload the queue.');
-  }
-
-  const inserted = await supabase.from('approvals').insert({
-    artifact_id: artifactId,
-    approved_by: session.userId,
-    role: 'owner',
-    gate_type: next.gateType,
+  const accepted = await supabase.rpc('accept_gate', {
+    p_project: projectId,
+    p_gate: gateType,
+    p_artifact: artifactId,
   });
-  if (inserted.error) throw new Error(inserted.error.message);
-
-  const after = await loadQueueInput(supabase);
-  if (remainingGates(after, projectId).length === 0) {
-    const approved = await supabase
-      .from('artifacts')
-      .update({ status: 'approved' })
-      .eq('id', artifactId);
-    if (approved.error) throw new Error(approved.error.message);
-    const stage = next.stage;
-    const nextStage = STAGES[STAGES.indexOf(stage) + 1];
-    if (!nextStage) throw new Error(`No stage follows ${stage}`);
-    const advanced = await supabase.rpc('advance_stage', {
-      p_project: projectId,
-      p_next: nextStage,
-    });
-    if (advanced.error) throw new Error(advanced.error.message);
-  }
+  if (accepted.error) throw new Error(accepted.error.message);
   revalidatePath('/owner', 'layout');
 }
 
