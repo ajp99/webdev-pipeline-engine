@@ -84,8 +84,8 @@ select t.run('anon reads nothing', null, 'anon', 'select * from projects', 'erro
 
 \echo '### schema facts'
 
-select 'PASS      23 tables' where (select count(*) from information_schema.tables where table_schema='public')=23
-union all select 'FAIL      table count is ' || (select count(*) from information_schema.tables where table_schema='public') where (select count(*) from information_schema.tables where table_schema='public')<>23
+select 'PASS      24 tables' where (select count(*) from information_schema.tables where table_schema='public')=24
+union all select 'FAIL      table count is ' || (select count(*) from information_schema.tables where table_schema='public') where (select count(*) from information_schema.tables where table_schema='public')<>24
 union all select 'PASS      stage_runs.cost removed' where not exists (select 1 from information_schema.columns where table_name='stage_runs' and column_name='cost')
 union all select 'PASS      token_budget replaces cost_warn_threshold' where not exists (select 1 from information_schema.columns where table_name='projects' and column_name='cost_warn_threshold') and exists (select 1 from information_schema.columns where table_name='project_internal' and column_name='token_budget')
 union all select 'PASS      9 gate defaults' where (select count(*) from gate_config where project_id is null)=9

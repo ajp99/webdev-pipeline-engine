@@ -71,8 +71,8 @@ select case when (select coalesce(array_agg(p.proname::text order by p.proname),
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
       and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['accept_gate','advance_stage','enqueue_run','reject_gate','remaining_gates','request_run_cancel']
-  then 'PASS      the owner session can call only the gate functions (accept_gate, reject_gate, remaining_gates), advance_stage, enqueue_run and request_run_cancel'
+    = array['accept_gate','advance_stage','enqueue_run','feedback_gate','reject_gate','remaining_gates','request_run_cancel']
+  then 'PASS      the owner session can call only the gate functions (accept_gate, feedback_gate, reject_gate, remaining_gates), advance_stage, enqueue_run and request_run_cancel'
   else 'FAIL      the owner session can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')

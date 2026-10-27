@@ -328,6 +328,52 @@ export type Database = {
           },
         ];
       };
+      gate_feedback: {
+        Row: {
+          artifact_id: string;
+          body: string;
+          created_at: string;
+          created_by: string;
+          id: string;
+          project_id: string;
+          round: number | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          artifact_id: string;
+          body: string;
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          project_id: string;
+          round?: number | null;
+        };
+        Update: {
+          artifact_id?: string;
+          body?: string;
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          project_id?: string;
+          round?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'gate_feedback_artifact_id_project_id_fkey';
+            columns: ['artifact_id', 'project_id'];
+            isOneToOne: false;
+            referencedRelation: 'artifacts';
+            referencedColumns: ['id', 'project_id'];
+          },
+          {
+            foreignKeyName: 'gate_feedback_project_id_fkey';
+            columns: ['project_id'];
+            isOneToOne: false;
+            referencedRelation: 'projects';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       intake_responses: {
         Row: {
           answer: Json | null;
@@ -1040,6 +1086,10 @@ export type Database = {
         Args: { p_project: string; p_stage: Database['public']['Enums']['stage'] };
         Returns: string;
       };
+      feedback_gate: {
+        Args: { p_artifact: string; p_body: string; p_project: string; p_round?: number };
+        Returns: number;
+      };
       finish_run: {
         Args: {
           p_run: string;
@@ -1061,9 +1111,12 @@ export type Database = {
         Args: { p_project?: string };
         Returns: {
           artifact_id: string;
+          artifact_status: Database['public']['Enums']['artifact_status'];
           artifact_type: Database['public']['Enums']['artifact_type'];
           artifact_version: number;
           due_at: string;
+          feedback_cap: number;
+          feedback_used: number;
           gate_type: Database['public']['Enums']['gate_type'];
           gatekeeper: Database['public']['Enums']['approver_role'];
           overdue: boolean;
