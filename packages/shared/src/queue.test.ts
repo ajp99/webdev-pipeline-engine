@@ -25,6 +25,9 @@ const row = (over: Partial<GateRow> = {}): GateRow => ({
   due_at: new Date(NOW.getTime() + 19 * 3_600_000).toISOString(),
   overdue: false,
   ready_to_advance: false,
+  artifact_status: 'draft',
+  feedback_used: 0,
+  feedback_cap: 3,
   ...over,
 });
 const input = (gates: GateRow[], projects: QueueProject[] = [project()]): QueueInput => ({
@@ -188,5 +191,92 @@ describe('buildQueue', () => {
     );
     expect(q.items.map((i) => i.projectId)).toEqual(['p2', 'p1']);
     expect(q.items[0]!.escalateAfterHours).toBe(48);
+  });
+
+  describe('Feedback and Reject (P2-T19)', () => {
+    it('offers Feedback and Reject on a draft at its next gate, with the loops used', () => {
+      const q = buildQueue(input([row({ feedback_used: 1 })]));
+      expect(q.items[0]).toMatchObject({
+        canReject: true,
+        canFeedback: true,
+        rejected: false,
+        feedbackUsed: 1,
+        feedbackCap: 3,
+      });
+    });
+    it('hides Feedback once the cap is used, keeping Accept and Reject', () => {
+      const q = buildQueue(input([row({ feedback_used: 3, feedback_cap: 3 })]));
+      expect(q.items[0]).toMatchObject({ canFeedback: false, canReject: true, actionable: true });
+    });
+    it('uses the cap from the database (the prototype has 2)', () => {
+      const q = buildQueue(
+        input(
+          [row({ stage: 'prototype', feedback_used: 2, feedback_cap: 2 })],
+          [project({ stage: 'prototype' })],
+        ),
+      );
+      expect(q.items[0]!.canFeedback).toBe(false);
+    });
+    it('shows a rejected version once, with Feedback only, and not as waiting for the agent', () => {
+      const rej = {
+        state: 'waiting' as const,
+        artifact_status: 'rejected' as const,
+        since: null,
+        due_at: null,
+      };
+      const q = buildQueue(
+        input([
+          row({ ...rej, feedback_used: 1 }),
+          row({ ...rej, gate_type: 'hard', feedback_used: 1 }),
+        ]),
+      );
+      expect(q.items).toHaveLength(1);
+      expect(q.items[0]).toMatchObject({
+        rejected: true,
+        actionable: false,
+        canReject: false,
+        canFeedback: true,
+        artifactId: 'a1',
+      });
+      expect(q.waitingForAgent).toEqual([]);
+    });
+    it('offers nothing on a rejected version whose loops are used up', () => {
+      const q = buildQueue(
+        input([
+          row({
+            state: 'waiting',
+            artifact_status: 'rejected',
+            feedback_used: 3,
+            since: null,
+            due_at: null,
+          }),
+        ]),
+      );
+      expect(q.items[0]).toMatchObject({ canFeedback: false, canReject: false, actionable: false });
+    });
+    it('still lists a project with no version at all as waiting for the agent', () => {
+      const q = buildQueue(
+        input([
+          row({
+            state: 'waiting',
+            artifact_id: null,
+            artifact_status: null,
+            since: null,
+            due_at: null,
+          }),
+        ]),
+      );
+      expect(q.items).toEqual([]);
+      expect(q.waitingForAgent).toHaveLength(1);
+    });
+    it('offers no Feedback or Reject on a build round yet (phase 4)', () => {
+      const q = buildQueue(
+        input(
+          [row({ stage: 'build_rounds', round: 1, artifact_type: 'round_summary' })],
+          [project({ stage: 'build_rounds' })],
+        ),
+      );
+      expect(q.items[0]).toMatchObject({ canFeedback: false, canReject: false });
+    });
   });
 });

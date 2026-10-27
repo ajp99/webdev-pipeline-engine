@@ -1,5 +1,7 @@
 import type { QueueItem } from '@wpe/shared';
-import { acceptGate } from '@/app/owner/queue/actions';
+import { acceptGate, rejectGate, sendFeedback } from '@/app/owner/queue/actions';
+
+const FEEDBACK_MAX = 10_000;
 
 const TYPE_STYLE: Record<string, string> = {
   soft: 'bg-sky-100 text-sky-800',
@@ -18,11 +20,13 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
   const reason =
     item.round !== null
       ? 'Round review arrives in phase 4'
-      : !item.actionable
-        ? item.gatekeeper === 'client'
-          ? 'Waiting for the client'
-          : 'Waiting for the agent'
-        : undefined;
+      : item.rejected
+        ? 'Rejected: send Feedback for a new version, or wait for one'
+        : !item.actionable
+          ? item.gatekeeper === 'client'
+            ? 'Waiting for the client'
+            : 'Waiting for the agent'
+          : undefined;
   return (
     <li className="rounded border border-neutral-200 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -57,24 +61,56 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
             Accept
           </button>
         </form>
-        <button
-          type="button"
-          disabled
-          title="Sending notes back to the agent arrives in phase 2"
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm disabled:opacity-40"
-        >
-          Feedback
-        </button>
-        <button
-          type="button"
-          disabled
-          title="Sending the stage back arrives in phase 2"
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm disabled:opacity-40"
-        >
-          Reject
-        </button>
+        <form action={rejectGate}>
+          <input type="hidden" name="projectId" value={item.projectId} />
+          <input type="hidden" name="artifactId" value={item.artifactId ?? ''} />
+          <button
+            type="submit"
+            disabled={!item.canReject}
+            className="rounded border border-neutral-300 px-3 py-1.5 text-sm disabled:opacity-40"
+          >
+            Reject
+          </button>
+        </form>
         {reason ? <span className="text-sm text-neutral-500">{reason}</span> : null}
       </div>
+      {item.round === null && item.feedbackCap > 0 ? (
+        <div className="mt-3 text-sm">
+          {item.canFeedback ? (
+            <details>
+              <summary className="cursor-pointer text-neutral-700">
+                Feedback ({item.feedbackUsed} of {item.feedbackCap} used)
+              </summary>
+              <form action={sendFeedback} className="mt-2 flex flex-col gap-2">
+                <input type="hidden" name="projectId" value={item.projectId} />
+                <input type="hidden" name="artifactId" value={item.artifactId ?? ''} />
+                <label htmlFor={`fb-${item.key}`} className="text-neutral-600">
+                  Notes for the agent
+                </label>
+                <textarea
+                  id={`fb-${item.key}`}
+                  name="body"
+                  required
+                  maxLength={FEEDBACK_MAX}
+                  rows={4}
+                  className="rounded border border-neutral-300 p-2"
+                />
+                <button
+                  type="submit"
+                  className="self-start rounded border border-neutral-300 px-3 py-1.5"
+                >
+                  Send feedback
+                </button>
+              </form>
+            </details>
+          ) : item.feedbackUsed >= item.feedbackCap ? (
+            <p className="text-neutral-500">
+              Feedback used up ({item.feedbackUsed} of {item.feedbackCap}):{' '}
+              {item.rejected ? 'edit the version by hand.' : 'accept or reject this version.'}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </li>
   );
 }

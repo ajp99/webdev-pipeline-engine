@@ -31,6 +31,11 @@ export type GateRow = {
   overdue: boolean;
   /** The same on every row of a project: all its gates are approved and only Advance is left. */
   ready_to_advance: boolean;
+  /** The named artifact's status; a waiting row names a version only when the owner rejected it. */
+  artifact_status: 'draft' | 'approved' | 'rejected' | 'superseded' | null;
+  /** Feedback loops used on the gated type (per round for build rounds) and the cap (spec 03). */
+  feedback_used: number | null;
+  feedback_cap: number | null;
 };
 
 export type QueueInput = {
@@ -55,6 +60,14 @@ export type QueueItem = {
   hoursWaiting: number;
   escalateAfterHours: number;
   overdue: boolean;
+  /** The version was rejected: Accept and Reject are gone, Feedback is still possible (spec 03). */
+  rejected: boolean;
+  /** The owner can reject this version now (a draft outside build rounds). */
+  canReject: boolean;
+  /** The owner can send Feedback now: a draft or rejected version with loops left. */
+  canFeedback: boolean;
+  feedbackUsed: number;
+  feedbackCap: number;
 };
 
 export type ReadyToAdvance = { project: QueueProject; nextStage: Stage };
@@ -90,18 +103,29 @@ export function buildQueue(input: QueueInput): Queue {
     if (project.status !== 'active') continue;
     const rows = input.gates.filter((g) => g.project_id === project.id);
     if (rows.length === 0) continue;
-    if (rows.every((g) => g.state === 'waiting' && g.round === null)) waitingForAgent.push(project);
+    // A version the owner rejected is still offered for Feedback (once per project, on its first gate).
+    const rejected = rows.find(
+      (g) => g.state === 'waiting' && g.round === null && g.artifact_status === 'rejected',
+    );
+    if (!rejected && rows.every((g) => g.state === 'waiting' && g.round === null))
+      waitingForAgent.push(project);
     // Every gate of the stage is approved but the project has not moved: the owner advances it.
     const nextStage = STAGE_ORDER[STAGE_ORDER.indexOf(project.stage) + 1];
     if (rows[0]!.ready_to_advance && nextStage) ready.push({ project, nextStage });
     // Only the next gate to pass is shown (the ones behind it appear once it is approved); a round
     // in review that has no summary yet is shown as waiting for the agent.
     for (const g of rows) {
-      if (g.state !== 'missing' && !(g.state === 'waiting' && g.round !== null)) continue;
+      if (g.state !== 'missing' && !(g.state === 'waiting' && g.round !== null) && g !== rejected)
+        continue;
       const since = g.since ?? input.now.toISOString();
       const escalate =
         g.since && g.due_at ? (Date.parse(g.due_at) - Date.parse(g.since)) / HOUR : 24;
       const hoursWaiting = (input.now.getTime() - new Date(since).getTime()) / HOUR;
+      const isRejected = g.artifact_status === 'rejected';
+      const feedbackUsed = g.feedback_used ?? 0;
+      const feedbackCap = g.feedback_cap ?? 0;
+      // Build-round review comes with phase 4, so the console acts on no round yet.
+      const draft = g.state === 'missing' && g.artifact_id !== null && g.round === null;
       items.push({
         key: `${g.project_id}:${g.stage}:${g.gate_type}:${g.round ?? ''}`,
         projectId: g.project_id,
@@ -117,6 +141,12 @@ export function buildQueue(input: QueueInput): Queue {
         hoursWaiting,
         escalateAfterHours: Math.round(escalate),
         overdue: g.overdue,
+        rejected: isRejected,
+        canReject: draft,
+        canFeedback:
+          (draft || (isRejected && g.artifact_id !== null)) && feedbackUsed < feedbackCap,
+        feedbackUsed,
+        feedbackCap,
       });
     }
   }
