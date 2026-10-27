@@ -36,7 +36,7 @@ begin
 end $$;
 grant select, update, delete on public.approvals to authenticated;
 grant select on public.gate_feedback to authenticated, service_role;
-grant select, update, delete, references, trigger, truncate on public.approvals to service_role;
+grant select, update, delete on public.approvals to service_role;
 grant usage, select on all sequences in schema public to authenticated, service_role;
 
 -- People: O is the owner (the only login until go-live, D-298). A and B are plain users who are not owners;

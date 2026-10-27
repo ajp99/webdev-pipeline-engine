@@ -15,11 +15,13 @@ P2-T19 adds Feedback. The owner chose these rules in the question rounds of 2026
 
    `| gate_feedback | The owner's Feedback on an artifact waiting at a gate; one row per loop; append-only, written only by feedback_gate(); the agent reads it | project_id, artifact_id, round, body, created_by, created_at |`
 
-2. `docs/spec/03-pipeline-and-gates.md`, in "Loops and limits", after the "Feedback caps" line, add:
+2. `docs/spec/10-data-model.md`, rounds row: `feedback_count (at most 3)` becomes `feedback_count (at most 3, kept by feedback_gate)`.
 
-   `- Feedback is recorded by one database call (feedback_gate), owner session only. The version keeps its status: a draft can still be accepted or rejected, and a rejected version can get Feedback. Each Feedback is one loop, counted per artifact type (per round for build rounds) across all its versions; once the cap is used, only Accept or Reject is left. When the stage has an agent, a run is queued in the same transaction unless one is already queued.`
+3. `docs/spec/03-pipeline-and-gates.md`, in "Loops and limits", after the "Feedback caps" line, add:
 
-3. `docs/plan/phase-2-intake-and-prd.md`, P2-T19 acceptance: "Feedback works on the soft gates" becomes "Feedback works at every gate stage".
+   `- Feedback is recorded by one database call (feedback_gate), owner session only. The version keeps its status: a draft can still be accepted or rejected, and a rejected version can get Feedback. Each Feedback is one loop, counted per artifact type (per round for build rounds) across all its versions; once the cap is used, only Accept or Reject is left. On the QC report the cap is its 2 fix loops. When the stage has an agent, a run is queued in the same transaction unless one is already queued.`
+
+4. `docs/plan/phase-2-intake-and-prd.md`, P2-T19 acceptance: "Feedback works on the soft gates" becomes "Feedback works at every gate stage".
 
 ## Options considered
 
@@ -29,7 +31,7 @@ P2-T19 adds Feedback. The owner chose these rules in the question rounds of 2026
 
 ## Impact
 
-Spec 10 and spec 03 text; the P2-T19 plan line. The code is already built this way (migration PR for P2-T19). `rounds.feedback_count` stays as in spec 10 and is kept in step by `feedback_gate`.
+Spec 10 and spec 03 text; the P2-T19 plan line. The code is already built this way (migration PR for P2-T19). `rounds.feedback_count` stays as in spec 10 as a mirror: `gate_feedback` rows are what the cap counts, and a trigger lets only `feedback_gate` change the column, so the two cannot disagree. Spec 10's rounds row could say "feedback_count (at most 3, kept by feedback_gate)".
 
 ## Owner decision
 

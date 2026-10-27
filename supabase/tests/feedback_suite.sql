@@ -126,3 +126,26 @@ select t.adv('remaining_gates: rounds count per round', t.proj('build_rounds')||
 select t.adv('remaining_gates: a round waiting for its summary still shows its loops', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1,1,'rejected')||';'||t.fbrows('round_summary',1,1), :'O', 'authenticated',
   t.rg('r.round=1 and r.state=''waiting'' and r.feedback_used=1 and r.feedback_cap=3 and r.artifact_id is not null and r.artifact_status=''rejected'''), 'ok');
 select t.adv('round: feedback on a rejected summary of a round in review is allowed', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1,1,'rejected'), :'O', 'authenticated', t.fbr('round_summary',1,1), 'ok');
+
+\echo '### review fixes (P2-T19)'
+select t.adv('the owner cannot truncate feedback rows', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',1), :'O', 'authenticated', 'truncate gate_feedback', 'error:permission denied for table gate_feedback');
+select t.adv('the worker cannot truncate feedback rows', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',1), null, 'service_role', 'truncate gate_feedback', 'error:permission denied for table gate_feedback');
+select t.adv('the owner cannot truncate approvals', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft'), :'O', 'authenticated', 'truncate approvals', 'error:permission denied for table approvals');
+select t.adv('the worker cannot truncate approvals', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft'), null, 'service_role', 'truncate approvals', 'error:permission denied for table approvals');
+select t.adv('the worker reads feedback rows to give them to the agent', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',2), null, 'service_role',
+  'select case when (select count(*) from gate_feedback where project_id='''||:'CP'||''')=2 then 1 else t.fail() end', 'ok');
+select t.adv('round: the owner cannot set feedback_count directly', t.proj('build_rounds')||';'||t.rnd(1,'in_review'), :'O', 'authenticated',
+  'update rounds set feedback_count=1 where project_id='''||:'CP'||'''', 'error:can only change through feedback_gate');
+select t.adv('round: the worker cannot set feedback_count directly', t.proj('build_rounds')||';'||t.rnd(1,'in_review'), null, 'service_role',
+  'update rounds set feedback_count=1 where project_id='''||:'CP'||'''', 'error:can only change through feedback_gate');
+select t.adv('round: a new round cannot start with loops used', t.proj('build_rounds'), :'O', 'authenticated',
+  'insert into rounds(project_id,number,feedback_count) values ('''||:'CP'||''',1,2)', 'error:can only change through feedback_gate');
+select t.adv('round: a new round starts at 0', t.proj('build_rounds'), :'O', 'authenticated',
+  'insert into rounds(project_id,number) values ('''||:'CP'||''',1)', 'ok');
+select t.adv('round: other round fields stay editable', t.proj('build_rounds')||';'||t.rnd(1,'in_review'), :'O', 'authenticated',
+  'update rounds set scope=''{}'' where project_id='''||:'CP'||'''', 'ok');
+select t.adv('round: the count cap still holds on feedback_gate''s path', t.proj('build_rounds')||';'||t.rnd(1,'in_review'), null, current_user,
+  'update rounds set feedback_count=4 where project_id='''||:'CP'||''' and set_config(''app.gate_feedback'',''on'',true) is not null', 'error:feedback_limit');
+select t.adv('round: feedback_gate turns the guard off again afterwards', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1), :'O', 'authenticated',
+  t.fb('round_summary','x',1)||'; update rounds set feedback_count=0 where project_id='''||:'CP'||'''', 'error:can only change through feedback_gate');
+

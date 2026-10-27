@@ -633,6 +633,23 @@ create trigger projects_stage_guard
   before update of stage on projects
   for each row execute function guard_stage_change();
 
+-- rounds.feedback_count mirrors the round's gate_feedback rows (the cap counts the rows): only feedback_gate()
+-- changes it, so the two cannot disagree.
+create function guard_round_feedback_count() returns trigger
+language plpgsql as $$
+begin
+  if coalesce(current_setting('app.gate_feedback', true), '') <> 'on'
+     and ((tg_op = 'INSERT' and new.feedback_count <> 0)
+          or (tg_op = 'UPDATE' and new.feedback_count is distinct from old.feedback_count)) then
+    raise exception 'rounds.feedback_count can only change through feedback_gate()';
+  end if;
+  return new;
+end;
+$$;
+create trigger rounds_feedback_count_guard
+  before insert or update of feedback_count on rounds
+  for each row execute function guard_round_feedback_count();
+
 -- A project moves forward only through this function, only one stage at a time (the order of the
 -- stage enum is the order in docs/spec/stages.yaml), and only while it is active.
 --
@@ -1135,7 +1152,9 @@ begin
   insert into public.gate_feedback (project_id, artifact_id, round, body, created_by)
   values (p_project, art.id, p_round, btrim(p_body), auth.uid());
   if v.stage = 'build_rounds' then
+    perform set_config('app.gate_feedback', 'on', true);
     update public.rounds set feedback_count = feedback_count + 1 where project_id = p_project and number = p_round;
+    perform set_config('app.gate_feedback', 'off', true);
   end if;
   if private.stage_has_agent(v.stage)
      and not exists (select 1 from public.stage_runs r where r.project_id = p_project and r.status = 'queued') then
@@ -1177,6 +1196,7 @@ declare
   n       int;
   fu      int;
   fc      int;
+  has_art boolean;
 begin
   if not private.is_owner() then
     raise exception 'remaining_gates: not allowed';
@@ -1198,15 +1218,16 @@ begin
         select * into art from public.artifacts a
           where a.project_id = pr.id and a.type = 'round_summary' and a.content ->> 'round' = rd.number::text
           order by a.version desc limit 1;
-        if found and art.status not in ('superseded', 'rejected') then
+        has_art := found;
+        if has_art and art.status not in ('superseded', 'rejected') then
           return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, rd.number, art.id, art.type, art.version,
             'missing', art.created_at, art.created_at + make_interval(hours => hrs),
             now() > art.created_at + make_interval(hours => hrs), ready, art.status, fu, fc;
         else
           return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, rd.number,
-            case when found and art.status = 'rejected' then art.id end, 'round_summary'::public.artifact_type,
-            case when found and art.status = 'rejected' then art.version end, 'waiting', null::timestamptz,
-            null::timestamptz, false, ready, case when found then art.status end, fu, fc;
+            case when has_art and art.status = 'rejected' then art.id end, 'round_summary'::public.artifact_type,
+            case when has_art and art.status = 'rejected' then art.version end, 'waiting', null::timestamptz,
+            null::timestamptz, false, ready, case when has_art then art.status end, fu, fc;
         end if;
       end loop;
       if n = 0 then
@@ -1220,14 +1241,15 @@ begin
       fc := private.feedback_cap(atype);
       select * into art from public.artifacts a where a.project_id = pr.id and a.type = atype
         order by a.version desc limit 1;
-      if not found or art.status in ('superseded', 'rejected') then
+      has_art := found;
+      if not has_art or art.status in ('superseded', 'rejected') then
         -- A rejected newest version is still named, so the owner can send Feedback on it.
         for g in select * from private.effective_gates(pr.id, pr.stage) order by gate_type loop
           return query select pr.id, pr.stage, g.gate_type, g.gatekeeper, null::int,
-            case when found and art.status = 'rejected' then art.id end, atype,
-            case when found and art.status = 'rejected' then art.version end,
+            case when has_art and art.status = 'rejected' then art.id end, atype,
+            case when has_art and art.status = 'rejected' then art.version end,
             'waiting', null::timestamptz, null::timestamptz, false, false,
-            case when found then art.status end, fu, fc;
+            case when has_art then art.status end, fu, fc;
         end loop;
       else
         s := art.created_at;
@@ -1683,7 +1705,9 @@ end $$;
 -- zero rows.
 -- RLS does not bind the worker's role, so its table privilege goes too: only accept_gate (which runs as the
 -- function owner) writes approvals.
-revoke insert on approvals from authenticated, service_role;
+-- TRUNCATE skips row-level security and the append-only row trigger, so it goes too (with trigger and
+-- references, which no API role needs).
+revoke insert, truncate, trigger, references on approvals from authenticated, service_role;
 create policy owner_read_approvals on approvals
   for select to authenticated using (private.is_owner());
 create policy owner_update_approvals on approvals
@@ -1693,7 +1717,7 @@ create policy owner_delete_approvals on approvals
 
 -- Gate feedback: the owner reads it; only feedback_gate() writes it (as approvals above). The worker reads
 -- it with the service key to hand the notes to the agent.
-revoke insert, update, delete on gate_feedback from authenticated, service_role;
+revoke insert, update, delete, truncate, trigger, references on gate_feedback from authenticated, service_role;
 create policy owner_read_gate_feedback on gate_feedback
   for select to authenticated using (private.is_owner());
 
