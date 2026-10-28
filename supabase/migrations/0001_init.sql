@@ -185,9 +185,32 @@ create table intake_responses (
   constraint intake_question_id check (
     asked_by = 'template'
     or (asked_by = 'agent' and question_id ~ '^fu[1-9][0-9]*_[1-9][0-9]*$')
-    or (asked_by = 'owner' and question_id ~ '^ow[1-9][0-9]*_[1-9][0-9]*$'))
+    or (asked_by = 'owner' and question_id ~ '^ow[1-9][0-9]*_[1-9][0-9]*$')),
+  -- A follow-up question belongs to the round its id names: fu2_1 and ow2_1 are in round 2.
+  constraint intake_question_round check (
+    asked_by = 'template' or substring(question_id from '^(?:fu|ow)([0-9]+)_')::int = round)
 );
 create index intake_responses_project_idx on intake_responses (project_id);
+
+-- An answer row keeps its identity: only the answer (and its time) changes. An agent question is written only
+-- by complete_intake_review (which runs as the function owner), never directly through the API.
+create function guard_intake_response() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if current_user in ('anon', 'authenticated', 'service_role') then
+    if tg_op = 'INSERT' and new.asked_by = 'agent' then
+      raise exception 'an agent question is written only by complete_intake_review';
+    end if;
+    if tg_op = 'UPDATE' and (new.project_id, new.round, new.question_id, new.asked_by, new.question)
+       is distinct from (old.project_id, old.round, old.question_id, old.asked_by, old.question) then
+      raise exception 'only the answer of an intake row can change';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+create trigger intake_responses_guard before insert or update on intake_responses
+  for each row execute function guard_intake_response();
 
 create table uploads (
   id uuid primary key default gen_random_uuid(),

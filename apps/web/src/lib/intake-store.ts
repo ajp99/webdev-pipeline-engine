@@ -121,13 +121,17 @@ export function supabaseIntakeStore(supabase: Db): IntakeStore {
       // The question rows exist since the review saved them (P2-T06), so an answer is an update, and an
       // emptied answer is set back to null: deleting the row would remove the question.
       for (const [question_id, answer] of Object.entries(answers)) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('intake_responses')
           .update({ answer: answer as never, updated_at: new Date().toISOString() })
           .eq('project_id', projectId)
           .eq('round', round)
-          .eq('question_id', question_id);
+          .eq('question_id', question_id)
+          .select('question_id');
         if (error) throw new Error(error.message);
+        // No row means the question was removed (or never saved): do not report "Saved" for a lost answer.
+        if (data.length === 0)
+          throw new Error('This question no longer exists in the round. Reload the page.');
       }
     },
 
