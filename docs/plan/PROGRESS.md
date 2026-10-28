@@ -222,3 +222,8 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - Evidence: shared 86, worker 69 and web 70 tests pass; lint, typecheck, format and `next build` pass. Database side: PR #42.
 - Follow-ups or blockers: the live check is the owner's (Reject a draft; send Feedback until the cap; Accept). Feedback on intake only records the notes and queues nothing until P2-T06 adds the re-review agent. The task stays unticked until then.
 
+## 2026-10-28 P2-T18 and P2-T19 live check passed
+- What changed: nothing in code. The owner ran the live check on the laptop (Accept, Reject and Feedback in the approval queue against the local Supabase) and reported that it works.
+- Evidence: the owner's confirmation on 2026-10-28; CI green on #42 and #43.
+- Follow-ups or blockers: P2-T18 and P2-T19 are ticked. The intake re-review that Feedback on intake asks for is P2-T06. The P2-T05 live check is still open.
+
