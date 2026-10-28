@@ -227,3 +227,8 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - Evidence: the owner's confirmation on 2026-10-28; CI green on #42 and #43.
 - Follow-ups or blockers: P2-T18 and P2-T19 are ticked. The intake re-review that Feedback on intake asks for is P2-T06. The P2-T05 live check is still open.
 
+
+## 2026-10-28 Dependency: Next.js security upgrade
+- What changed: `next` in `apps/web` upgraded from 16.4.0 to 16.4.1 (`^16.4.1`), the lowest release outside the npm advisory ranges (GHSA-p3m5-59mp-jv5r, GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr, all `>=16.0.0 <=16.4.0`). The lockfile changes only `next` and the `@next/*` packages it pulls in; no other dependency changed and no application code changed.
+- Evidence: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm format:check` and `pnpm --filter @wpe/web build` all pass; the build no longer stops on the security advisory.
+- Follow-ups or blockers: none.
