@@ -118,31 +118,15 @@ export function supabaseIntakeStore(supabase: Db): IntakeStore {
     },
 
     async saveFollowupAnswers(projectId, round, answers) {
-      const keep = Object.entries(answers).filter(([, v]) => v !== null);
-      const drop = Object.entries(answers)
-        .filter(([, v]) => v === null)
-        .map(([id]) => id);
-      if (keep.length > 0) {
-        const { error } = await supabase.from('intake_responses').upsert(
-          keep.map(([question_id, answer]) => ({
-            project_id: projectId,
-            round,
-            question_id,
-            answer: answer as never,
-            asked_by: 'agent' as const,
-            updated_at: new Date().toISOString(),
-          })),
-          { onConflict: 'project_id,round,question_id' },
-        );
-        if (error) throw new Error(error.message);
-      }
-      if (drop.length > 0) {
+      // The question rows exist since the review saved them (P2-T06), so an answer is an update, and an
+      // emptied answer is set back to null: deleting the row would remove the question.
+      for (const [question_id, answer] of Object.entries(answers)) {
         const { error } = await supabase
           .from('intake_responses')
-          .delete()
+          .update({ answer: answer as never, updated_at: new Date().toISOString() })
           .eq('project_id', projectId)
           .eq('round', round)
-          .in('question_id', drop);
+          .eq('question_id', question_id);
         if (error) throw new Error(error.message);
       }
     },

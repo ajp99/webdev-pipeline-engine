@@ -40,7 +40,7 @@ create type artifact_type as enum (
   'round_summary', 'backlog', 'qc_results', 'report', 'deployment_checklist', 'handover_guide',
   'release_note'
 );
-create type asked_by as enum ('template', 'agent');
+create type asked_by as enum ('template', 'agent', 'owner');
 create type comment_disposition as enum ('forwarded', 'change_request', 'ignored');
 -- D-174: after go-live an accepted change request runs as a mini-round (accept_mini_round).
 create type change_decision as enum ('accept_current_round', 'accept_mini_round', 'defer', 'decline');
@@ -173,8 +173,19 @@ create table intake_responses (
   question_id text not null,
   answer jsonb,
   asked_by asked_by not null,
+  -- P2-T06: the text of a follow-up question lives in its row, so the owner can add or remove one. A template
+  -- question has no text here (it is in the project's template copy). The review's follow-ups are copied in
+  -- when the review is saved; the immutable intake_record keeps what the agent asked.
+  question text,
   updated_at timestamptz not null default now(),
-  unique (project_id, round, question_id)
+  unique (project_id, round, question_id),
+  constraint intake_question_text check (
+    (asked_by = 'template' and question is null)
+    or (asked_by <> 'template' and question is not null and btrim(question) <> '' and length(question) <= 500)),
+  constraint intake_question_id check (
+    asked_by = 'template'
+    or (asked_by = 'agent' and question_id ~ '^fu[1-9][0-9]*_[1-9][0-9]*$')
+    or (asked_by = 'owner' and question_id ~ '^ow[1-9][0-9]*_[1-9][0-9]*$'))
 );
 create index intake_responses_project_idx on intake_responses (project_id);
 
@@ -1524,7 +1535,8 @@ grant execute on function request_run_cancel(uuid) to authenticated;
 -- intake_record artifact version, locks the round (reviewed), and opens the next round when there are
 -- follow-up questions. A round is round 1 (the template) plus at most 3 follow-up rounds, so round 4 is the
 -- last: it cannot ask for more, and its gap list is for the owner. The follow-up text lives in the artifact;
--- the answers go into intake_responses (asked_by 'agent') under the ids fu<round>_<n>.
+-- each follow-up is also a row of intake_responses (asked_by 'agent', the question text and no answer yet)
+-- under the id fu<round>_<n>; the owner can remove it or add questions of their own (P2-T06).
 create function complete_intake_review(
   p_project uuid, p_round int, p_summary text, p_gaps jsonb, p_followups jsonb, p_model text
 ) returns uuid
@@ -1624,6 +1636,9 @@ begin
   update public.intake_rounds set status = 'reviewed', reviewed_at = now() where id = rnd.id;
   if n > 0 then
     insert into public.intake_rounds (project_id, round) values (p_project, p_round + 1);
+    insert into public.intake_responses (project_id, round, question_id, answer, asked_by, question)
+    select p_project, p_round + 1, f->>'id', null, 'agent', f->>'text'
+      from jsonb_array_elements(p_followups) f;
   end if;
   return art;
 end;

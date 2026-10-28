@@ -383,6 +383,7 @@ export type Database = {
           asked_by: Database['public']['Enums']['asked_by'];
           id: string;
           project_id: string;
+          question: string | null;
           question_id: string;
           round: number;
           updated_at: string;
@@ -393,6 +394,7 @@ export type Database = {
           asked_by: Database['public']['Enums']['asked_by'];
           id?: string;
           project_id: string;
+          question?: string | null;
           question_id: string;
           round: number;
           updated_at?: string;
@@ -402,6 +404,7 @@ export type Database = {
           asked_by?: Database['public']['Enums']['asked_by'];
           id?: string;
           project_id?: string;
+          question?: string | null;
           question_id?: string;
           round?: number;
           updated_at?: string;
@@ -1151,7 +1154,7 @@ export type Database = {
         | 'deployment_checklist'
         | 'handover_guide'
         | 'release_note';
-      asked_by: 'template' | 'agent';
+      asked_by: 'template' | 'agent' | 'owner';
       backlog_status: 'open' | 'answered' | 'assumption_accepted';
       change_decision: 'accept_current_round' | 'accept_mini_round' | 'defer' | 'decline';
       change_status: 'received' | 'accepted' | 'deferred' | 'declined' | 'deployed';
@@ -1316,7 +1319,7 @@ export const Constants = {
         'handover_guide',
         'release_note',
       ],
-      asked_by: ['template', 'agent'],
+      asked_by: ['template', 'agent', 'owner'],
       backlog_status: ['open', 'answered', 'assumption_accepted'],
       change_decision: ['accept_current_round', 'accept_mini_round', 'defer', 'decline'],
       change_status: ['received', 'accepted', 'deferred', 'declined', 'deployed'],
