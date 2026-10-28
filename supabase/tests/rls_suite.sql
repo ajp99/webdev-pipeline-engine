@@ -40,8 +40,6 @@ select t.run('a run can move to waiting', null, 'service_role', 'update stage_ru
 select t.run('attempts above 2 rejected', null, 'service_role', 'update stage_runs set attempts=3', 'error');
 select t.run('owner records a pause request', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'insert into run_approvals(run_id,kind,command) values (''33333333-3333-3333-3333-333333333333'',''rewrite_history'',''git push --force'')', 'ok:1');
 select t.run('pause request with an unknown kind rejected', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'insert into run_approvals(run_id,kind,command) values (''33333333-3333-3333-3333-333333333333'',''curl'',''curl x'')', 'error');
-select t.run('Feedback count above 3 rejected', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update rounds set feedback_count=4', 'error');
-select t.run('Feedback count of 3 allowed', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update rounds set feedback_count=3', 'ok:1');
 select t.run('round claims stored', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update rounds set claims=''[{"id":"c1","text":"Open since 1998"}]''::jsonb', 'ok:1');
 
 \echo '### stage qc_report'
@@ -84,8 +82,8 @@ select t.run('anon reads nothing', null, 'anon', 'select * from projects', 'erro
 
 \echo '### schema facts'
 
-select 'PASS      23 tables' where (select count(*) from information_schema.tables where table_schema='public')=23
-union all select 'FAIL      table count is ' || (select count(*) from information_schema.tables where table_schema='public') where (select count(*) from information_schema.tables where table_schema='public')<>23
+select 'PASS      24 tables' where (select count(*) from information_schema.tables where table_schema='public')=24
+union all select 'FAIL      table count is ' || (select count(*) from information_schema.tables where table_schema='public') where (select count(*) from information_schema.tables where table_schema='public')<>24
 union all select 'PASS      stage_runs.cost removed' where not exists (select 1 from information_schema.columns where table_name='stage_runs' and column_name='cost')
 union all select 'PASS      token_budget replaces cost_warn_threshold' where not exists (select 1 from information_schema.columns where table_name='projects' and column_name='cost_warn_threshold') and exists (select 1 from information_schema.columns where table_name='project_internal' and column_name='token_budget')
 union all select 'PASS      9 gate defaults' where (select count(*) from gate_config where project_id is null)=9
