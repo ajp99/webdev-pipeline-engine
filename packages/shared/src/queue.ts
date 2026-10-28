@@ -31,6 +31,9 @@ export type GateRow = {
   overdue: boolean;
   /** The same on every row of a project: all its gates are approved and only Advance is left. */
   ready_to_advance: boolean;
+  /** Feedback loops used in the stage (per round for build rounds) and the stage's cap (gate_config). */
+  feedback_used: number | null;
+  feedback_cap: number | null;
 };
 
 export type QueueInput = {
@@ -55,6 +58,12 @@ export type QueueItem = {
   hoursWaiting: number;
   escalateAfterHours: number;
   overdue: boolean;
+  /** The owner can reject this version now (a draft outside build rounds). */
+  canReject: boolean;
+  /** The owner can send Feedback now: a draft with loops left. */
+  canFeedback: boolean;
+  feedbackUsed: number;
+  feedbackCap: number;
 };
 
 export type ReadyToAdvance = { project: QueueProject; nextStage: Stage };
@@ -102,6 +111,10 @@ export function buildQueue(input: QueueInput): Queue {
       const escalate =
         g.since && g.due_at ? (Date.parse(g.due_at) - Date.parse(g.since)) / HOUR : 24;
       const hoursWaiting = (input.now.getTime() - new Date(since).getTime()) / HOUR;
+      const feedbackUsed = g.feedback_used ?? 0;
+      const feedbackCap = g.feedback_cap ?? 0;
+      // Build-round review comes with phase 4, so the console acts on no round yet.
+      const draft = g.state === 'missing' && g.artifact_id !== null && g.round === null;
       items.push({
         key: `${g.project_id}:${g.stage}:${g.gate_type}:${g.round ?? ''}`,
         projectId: g.project_id,
@@ -117,6 +130,10 @@ export function buildQueue(input: QueueInput): Queue {
         hoursWaiting,
         escalateAfterHours: Math.round(escalate),
         overdue: g.overdue,
+        canReject: draft,
+        canFeedback: draft && feedbackUsed < feedbackCap,
+        feedbackUsed,
+        feedbackCap,
       });
     }
   }

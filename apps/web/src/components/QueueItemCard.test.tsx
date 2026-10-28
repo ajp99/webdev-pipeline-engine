@@ -2,7 +2,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { QueueItem } from '@wpe/shared';
 
-vi.mock('@/app/owner/queue/actions', () => ({ acceptGate: () => {} }));
+vi.mock('@/app/owner/queue/actions', () => ({
+  acceptGate: () => {},
+  rejectGate: () => {},
+  sendFeedback: () => {},
+}));
 import { QueueItemCard, waitedLabel } from './QueueItemCard';
 
 const base: QueueItem = {
@@ -20,6 +24,10 @@ const base: QueueItem = {
   hoursWaiting: 30,
   escalateAfterHours: 24,
   overdue: true,
+  canReject: true,
+  canFeedback: true,
+  feedbackUsed: 1,
+  feedbackCap: 3,
 };
 const html = (over: Partial<QueueItem> = {}) =>
   renderToStaticMarkup(<QueueItemCard item={{ ...base, ...over }} />);
@@ -46,5 +54,23 @@ describe('QueueItemCard', () => {
     expect(waitedLabel(0.2)).toBe('under an hour');
     expect(waitedLabel(30)).toBe('30 h');
     expect(waitedLabel(72)).toBe('3 days');
+  });
+  it('offers Reject and a Feedback form with the loops used', () => {
+    const h = html();
+    expect(h).not.toMatch(/<button[^>]* disabled=""[^>]*>Reject/);
+    expect(h).toContain('Feedback (1 of 3 used)');
+    expect(h).toContain('name="body"');
+    expect(h).toContain('maxLength="10000"');
+  });
+  it('after the cap shows no Feedback form, only Accept or Reject', () => {
+    const h = html({ canFeedback: false, feedbackUsed: 3 });
+    expect(h).not.toContain('name="body"');
+    expect(h).toContain('Feedback used up (3 of 3): accept or reject this version.');
+    expect(h).not.toMatch(/<button[^>]* disabled=""[^>]*>Accept/);
+  });
+  it('a build round shows no Feedback form yet', () => {
+    const h = html({ round: 1, canFeedback: false, canReject: false });
+    expect(h).not.toContain('name="body"');
+    expect(h).not.toContain('Feedback used up');
   });
 });
