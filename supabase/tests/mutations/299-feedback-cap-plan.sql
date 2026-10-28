@@ -1,2 +1,2 @@
 -- mutation: the plan cap is wrong
-select m.patch_fn($q$private.feedback_cap(public.artifact_type)$q$, $q$when 'plan' then 3$q$, $q$when 'plan' then 9$q$);
+update gate_config set feedback_cap = 9 where stage = 'plan' and project_id is null and feedback_cap is not null;

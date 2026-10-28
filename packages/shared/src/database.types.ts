@@ -295,6 +295,7 @@ export type Database = {
       gate_config: {
         Row: {
           escalate_after_hours: number;
+          feedback_cap: number | null;
           gate_type: Database['public']['Enums']['gate_type'];
           gatekeeper: Database['public']['Enums']['approver_role'];
           id: string;
@@ -304,6 +305,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           escalate_after_hours?: number;
+          feedback_cap?: number | null;
           gate_type: Database['public']['Enums']['gate_type'];
           gatekeeper: Database['public']['Enums']['approver_role'];
           id?: string;
@@ -312,6 +314,7 @@ export type Database = {
         };
         Update: {
           escalate_after_hours?: number;
+          feedback_cap?: number | null;
           gate_type?: Database['public']['Enums']['gate_type'];
           gatekeeper?: Database['public']['Enums']['approver_role'];
           id?: string;
@@ -695,7 +698,6 @@ export type Database = {
           change_request_id: string | null;
           claims: NonNullable<Json>;
           claims_cleared_at: string | null;
-          feedback_count: number;
           id: string;
           number: number;
           pr_number: number | null;
@@ -711,7 +713,6 @@ export type Database = {
           change_request_id?: string | null;
           claims?: NonNullable<Json>;
           claims_cleared_at?: string | null;
-          feedback_count?: number;
           id?: string;
           number: number;
           pr_number?: number | null;
@@ -726,7 +727,6 @@ export type Database = {
           change_request_id?: string | null;
           claims?: NonNullable<Json>;
           claims_cleared_at?: string | null;
-          feedback_count?: number;
           id?: string;
           number?: number;
           pr_number?: number | null;
@@ -1111,7 +1111,6 @@ export type Database = {
         Args: { p_project?: string };
         Returns: {
           artifact_id: string;
-          artifact_status: Database['public']['Enums']['artifact_status'];
           artifact_type: Database['public']['Enums']['artifact_type'];
           artifact_version: number;
           due_at: string;

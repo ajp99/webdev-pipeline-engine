@@ -1,5 +1,5 @@
--- Gate feedback (P2-T19, D-234, D-133, D-120): feedback_gate, the gate_feedback table, the loop caps and the
--- feedback columns of remaining_gates. Loaded after gates_suite.sql, which defines t.rg, t.is_stage,
+-- Gate feedback (P2-T19, D-234, D-133, D-120): feedback_gate, the gate_feedback table, the loop caps in
+-- gate_config and the feedback columns of remaining_gates. Loaded after gates_suite.sql, which defines t.rg, t.is_stage,
 -- t.art_status and t.agent_on (and, before it, t.proj, t.art, t.rs, t.rnd, t.acc, t.rej).
 \set O '00000000-0000-0000-0000-0000000000a0'
 \set A '00000000-0000-0000-0000-0000000000a1'
@@ -62,8 +62,7 @@ select t.adv('an unknown project gets no feedback', t.proj('plan')||';'||t.art('
 select t.adv('feedback on an older version is refused', t.proj('plan')||';'||t.art('plan',1,'superseded')||';'||t.art('plan',2), :'O', 'authenticated',
   'select feedback_gate('''||:'CP'||''', (select id from artifacts where type=''plan'' and version=1 and project_id='''||:'CP'||'''), ''x'')', 'error:not the newest version');
 select t.adv('feedback on an approved version is refused', t.proj('plan')||';'||t.art('plan',1,'approved'), :'O', 'authenticated', t.fb('plan'), 'error:that version is already approved');
-select t.adv('feedback on a rejected version is allowed (Reject, then Feedback)', t.proj('plan')||';'||t.art('plan',1,'rejected'), :'O', 'authenticated', t.fb('plan'), 'ok',
-  t.fbcount(1)||' and '||t.art_status('plan',1,'rejected'));
+select t.adv('feedback on a rejected version is refused (drafts only)', t.proj('plan')||';'||t.art('plan',1,'rejected'), :'O', 'authenticated', t.fb('plan'), 'error:that version is already rejected');
 select t.adv('accept still refuses a rejected version', t.proj('plan')||';'||t.art('plan',1,'rejected'), :'O', 'authenticated', t.acc('plan'), 'error:that version is already rejected');
 select t.adv('reject still refuses a rejected version', t.proj('plan')||';'||t.art('plan',1,'rejected'), :'O', 'authenticated', t.rej('plan'), 'error:that version is already rejected');
 select t.adv('feedback on another project''s artifact is refused', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
@@ -97,7 +96,7 @@ select t.adv('after the cap Reject is still possible', t.proj('plan')||';'||t.ar
 
 \echo '### build rounds (D-133)'
 select t.adv('round: feedback on a round in review counts on the round', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1), :'O', 'authenticated', t.fbr('round_summary',1,1), 'ok',
-  '(select feedback_count from rounds where project_id='''||:'CP'||''' and number=1)=1 and (select round from gate_feedback where project_id='''||:'CP'||''')=1');
+  '(select round from gate_feedback where project_id='''||:'CP'||''')=1');
 select t.adv('round: feedback needs the round named', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1), :'O', 'authenticated', t.fb('round_summary'), 'error:name the build round');
 select t.adv('round: a round not in review gets no feedback', t.proj('build_rounds')||';'||t.rnd(1,'building')||';'||t.rs(1), :'O', 'authenticated', t.fb('round_summary','x',1), 'error:feedback_gate: round 1 is not in review');
 select t.adv('round: a fourth loop on a round is refused', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1)||';'||t.fbrows('round_summary',3,1), :'O', 'authenticated', t.fb('round_summary','x',1), 'error:the 3 feedback loops');
@@ -114,18 +113,16 @@ select t.adv('if the run cannot be queued the feedback is undone', t.proj('plan'
 
 \echo '### remaining_gates feedback columns'
 select t.adv('remaining_gates shows the loops used and the cap', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',2), :'O', 'authenticated',
-  t.rg('r.feedback_used=2 and r.feedback_cap=3 and r.artifact_status=''draft'' and r.state=''missing'''), 'ok');
+  t.rg('r.feedback_used=2 and r.feedback_cap=3 and r.state=''missing'''), 'ok');
 select t.adv('remaining_gates: no feedback yet is 0', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', t.rg('r.feedback_used=0'), 'ok');
-select t.adv('remaining_gates: a rejected newest version is named on its waiting row', t.proj('plan')||';'||t.art('plan',1,'rejected'), :'O', 'authenticated',
-  t.rg('r.state=''waiting'' and r.artifact_id is not null and r.artifact_version=1 and r.artifact_status=''rejected'' and r.feedback_cap=3'), 'ok');
-select t.adv('remaining_gates: a superseded newest version is not named', t.proj('plan')||';'||t.art('plan',1,'superseded'), :'O', 'authenticated',
-  t.rg('r.state=''waiting'' and r.artifact_id is null and r.artifact_status=''superseded'''), 'ok');
+select t.adv('remaining_gates: a rejected newest version waits, unnamed, with its loops', t.proj('plan')||';'||t.art('plan',1,'rejected')||';'||t.fbrows('plan',1), :'O', 'authenticated',
+  t.rg('r.state=''waiting'' and r.artifact_id is null and r.feedback_used=1 and r.feedback_cap=3'), 'ok');
 select t.adv('remaining_gates: the prototype cap is 2', t.proj('prototype')||';'||t.art('prototype'), :'O', 'authenticated', t.rg('r.feedback_cap=2', 2), 'ok');
 select t.adv('remaining_gates: rounds count per round', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1)||';'||t.fbrows('round_summary',2,1)||';'||t.rnd(2,'in_review')||';'||t.rs(2,2), :'O', 'authenticated',
   t.rg('(r.round=1 and r.feedback_used=2 and r.feedback_cap=3) or (r.round=2 and r.feedback_used=0)', 2), 'ok');
 select t.adv('remaining_gates: a round waiting for its summary still shows its loops', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1,1,'rejected')||';'||t.fbrows('round_summary',1,1), :'O', 'authenticated',
-  t.rg('r.round=1 and r.state=''waiting'' and r.feedback_used=1 and r.feedback_cap=3 and r.artifact_id is not null and r.artifact_status=''rejected'''), 'ok');
-select t.adv('round: feedback on a rejected summary of a round in review is allowed', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1,1,'rejected'), :'O', 'authenticated', t.fbr('round_summary',1,1), 'ok');
+  t.rg('r.round=1 and r.state=''waiting'' and r.feedback_used=1 and r.feedback_cap=3 and r.artifact_id is null'), 'ok');
+select t.adv('round: feedback on a rejected summary is refused', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1,1,'rejected'), :'O', 'authenticated', t.fb('round_summary','x',1), 'error:that version is already rejected');
 
 \echo '### review fixes (P2-T19)'
 select t.adv('the owner cannot truncate feedback rows', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',1), :'O', 'authenticated', 'truncate gate_feedback', 'error:permission denied for table gate_feedback');
@@ -134,18 +131,21 @@ select t.adv('the owner cannot truncate approvals', t.proj('plan')||';'||t.art('
 select t.adv('the worker cannot truncate approvals', t.proj('plan')||';'||t.art('plan')||';'||t.appr('plan',1,'soft'), null, 'service_role', 'truncate approvals', 'error:permission denied for table approvals');
 select t.adv('the worker reads feedback rows to give them to the agent', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',2), null, 'service_role',
   'select case when (select count(*) from gate_feedback where project_id='''||:'CP'||''')=2 then 1 else t.fail() end', 'ok');
-select t.adv('round: the owner cannot set feedback_count directly', t.proj('build_rounds')||';'||t.rnd(1,'in_review'), :'O', 'authenticated',
-  'update rounds set feedback_count=1 where project_id='''||:'CP'||'''', 'error:can only change through feedback_gate');
-select t.adv('round: the worker cannot set feedback_count directly', t.proj('build_rounds')||';'||t.rnd(1,'in_review'), null, 'service_role',
-  'update rounds set feedback_count=1 where project_id='''||:'CP'||'''', 'error:can only change through feedback_gate');
-select t.adv('round: a new round cannot start with loops used', t.proj('build_rounds'), :'O', 'authenticated',
-  'insert into rounds(project_id,number,feedback_count) values ('''||:'CP'||''',1,2)', 'error:can only change through feedback_gate');
-select t.adv('round: a new round starts at 0', t.proj('build_rounds'), :'O', 'authenticated',
-  'insert into rounds(project_id,number) values ('''||:'CP'||''',1)', 'ok');
-select t.adv('round: other round fields stay editable', t.proj('build_rounds')||';'||t.rnd(1,'in_review'), :'O', 'authenticated',
-  'update rounds set scope=''{}'' where project_id='''||:'CP'||'''', 'ok');
-select t.adv('round: the count cap still holds on feedback_gate''s path', t.proj('build_rounds')||';'||t.rnd(1,'in_review'), null, current_user,
-  'update rounds set feedback_count=4 where project_id='''||:'CP'||''' and set_config(''app.gate_feedback'',''on'',true) is not null', 'error:feedback_limit');
-select t.adv('round: feedback_gate turns the guard off again afterwards', t.proj('build_rounds')||';'||t.rnd(1,'in_review')||';'||t.rs(1), :'O', 'authenticated',
-  t.fb('round_summary','x',1)||'; update rounds set feedback_count=0 where project_id='''||:'CP'||'''', 'error:can only change through feedback_gate');
 
+\echo '### caps in gate_config (owner decision 2026-10-28)'
+select t.adv('a project row can lower the cap', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',1)||';insert into gate_config(stage,project_id,gate_type,gatekeeper,feedback_cap) values (''plan'','''||:'CP'||''',''soft'',''owner'',1)', :'O', 'authenticated', t.fb('plan'), 'error:the 1 feedback loops');
+select t.adv('a project row can raise the cap', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',3)||';insert into gate_config(stage,project_id,gate_type,gatekeeper,feedback_cap) values (''plan'','''||:'CP'||''',''soft'',''owner'',5)', :'O', 'authenticated', t.fbr('plan',4), 'ok');
+select t.adv('a project row with no cap keeps the default', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',3)||';insert into gate_config(stage,project_id,gate_type,gatekeeper) values (''plan'','''||:'CP'||''',''hard'',''owner'')', :'O', 'authenticated', t.fb('plan'), 'error:the 3 feedback loops');
+select t.adv('another project''s cap does not apply', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',1)||';insert into gate_config(stage,project_id,gate_type,gatekeeper,feedback_cap) values (''plan'',''11111111-1111-1111-1111-111111111111'',''soft'',''owner'',1)', :'O', 'authenticated', t.fbr('plan',2), 'ok');
+select t.adv('another stage''s cap does not apply', t.proj('plan')||';'||t.art('plan')||';'||t.fbrows('plan',1)||';insert into gate_config(stage,project_id,gate_type,gatekeeper,feedback_cap) values (''intake'','''||:'CP'||''',''soft'',''owner'',1)', :'O', 'authenticated', t.fbr('plan',2), 'ok');
+select t.adv('a cap of 0 turns Feedback off for the stage', t.proj('plan')||';'||t.art('plan')||';insert into gate_config(stage,project_id,gate_type,gatekeeper,feedback_cap) values (''plan'','''||:'CP'||''',''soft'',''owner'',0)', :'O', 'authenticated', t.fb('plan'), 'error:stage plan takes no feedback');
+select t.adv('remaining_gates shows a project''s own cap', t.proj('plan')||';'||t.art('plan')||';insert into gate_config(stage,project_id,gate_type,gatekeeper,feedback_cap) values (''plan'','''||:'CP'||''',''soft'',''owner'',5)', :'O', 'authenticated', t.rg('r.feedback_cap=5'), 'ok');
+select t.adv('the owner cannot change a global cap', t.proj('plan'), :'O', 'authenticated', 'update gate_config set feedback_cap=5 where stage=''plan'' and project_id is null', 'error:a global Feedback cap changes only through a migration');
+select t.adv('the owner can change a project row''s cap', t.proj('plan')||';insert into gate_config(stage,project_id,gate_type,gatekeeper,feedback_cap) values (''plan'','''||:'CP'||''',''soft'',''owner'',1)', :'O', 'authenticated',
+  'update gate_config set feedback_cap=2 where stage=''plan'' and project_id='''||:'CP'||'''', 'ok', '(select feedback_cap from gate_config where stage=''plan'' and project_id='''||:'CP'||''')=2');
+select t.adv('the owner can still change a global deadline', t.proj('plan'), :'O', 'authenticated', 'update gate_config set escalate_after_hours=48 where stage=''plan'' and project_id is null', 'ok');
+select t.adv('a cap above 10 is refused', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
+  'insert into gate_config(stage,project_id,gate_type,gatekeeper,feedback_cap) values (''plan'','''||:'CP'||''',''soft'',''owner'',11)', 'error:feedback_cap');
+select t.adv('the seed caps follow spec 03 (first gate row; none on the prototype client row)', t.proj('plan'), :'O', 'authenticated',
+  'select case when (select string_agg(stage||''/''||gate_type||''=''||coalesce(feedback_cap::text,''-''), '','' order by stage, gate_type) from gate_config where project_id is null)
+   = ''intake/soft=3,requirements/client=3,plan/soft=3,prototype/soft=2,prototype/client=-,build_rounds/soft=3,qc_report/soft=2,deploy_prep/hard=3,handover/hard=3'' then 1 else t.fail() end', 'ok');

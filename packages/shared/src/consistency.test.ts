@@ -25,9 +25,12 @@ function enumValues(name: string): string[] {
 }
 
 function gateConfigSeed(): string[] {
-  const m = sql.match(/insert into gate_config \(stage, gate_type, gatekeeper\) values([^;]*);/i);
+  const m = sql.match(
+    /insert into gate_config \(stage, gate_type, gatekeeper, feedback_cap\) values([^;]*);/i,
+  );
   if (!m) throw new Error('gate_config seed not found in migrations');
-  return [...m[1]!.matchAll(/\(\s*'([^']+)',\s*'([^']+)',\s*'([^']+)'\s*\)/g)].map(
+  // The Feedback cap (P2-T19) is not in gates.yaml yet (open proposal); only the gates are compared.
+  return [...m[1]!.matchAll(/\(\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*(?:\d+|null)\s*\)/g)].map(
     (x) => `${x[1]}/${x[2]}/${x[3]}`,
   );
 }

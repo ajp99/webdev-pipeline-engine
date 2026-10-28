@@ -254,14 +254,12 @@ create table rounds (
   branch text,
   pr_number int,
   pr_url text,
-  -- D-133: at most 3 Feedback loops per round, then the owner must Accept or Reject.
-  feedback_count int not null default 0,
   -- D-143, D-146: claim markers listed in the round summary; approving the round clears them.
   claims jsonb not null default '[]'::jsonb,
   claims_cleared_at timestamptz,
   status round_status not null default 'planned',
-  unique (project_id, number),
-  constraint feedback_limit check (feedback_count between 0 and 3)
+  -- D-133: the Feedback loops of a round are its gate_feedback rows (P2-T19); there is no counter column.
+  unique (project_id, number)
 );
 
 create table backlog_items (
@@ -465,6 +463,9 @@ create table gate_config (
   gate_type gate_type not null,
   gatekeeper approver_role not null,
   escalate_after_hours int not null default 24 check (escalate_after_hours > 0),
+  -- P2-T19: Feedback loops allowed in the stage (spec 03), on the stage's first gate row; null on the
+  -- others (the prototype's client row). A project's own row may set its own cap.
+  feedback_cap int check (feedback_cap between 0 and 10),
   -- D-272: the gatekeeper follows the gate type (soft and hard are the owner's, client is the client's).
   constraint gatekeeper_matches_gate check ((gate_type = 'client') = (gatekeeper = 'client'))
 );
@@ -482,16 +483,18 @@ create table skill_uses (
 create index skill_uses_project_idx on skill_uses (project_id);
 
 -- Global gate defaults. Mirrors docs/spec/gates.yaml.
-insert into gate_config (stage, gate_type, gatekeeper) values
-  ('intake',       'soft',   'owner'),
-  ('requirements', 'client', 'client'),
-  ('plan',         'soft',   'owner'),
-  ('prototype',    'soft',   'owner'),
-  ('prototype',    'client', 'client'),
-  ('build_rounds', 'soft',   'owner'),
-  ('qc_report',    'soft',   'owner'),
-  ('deploy_prep',  'hard',   'owner'),
-  ('handover',     'hard',   'owner');
+-- feedback_cap (spec 03): 3 on intake, PRD, plan, deploy prep and handover (D-234); 2 on the prototype
+-- (D-120) and QC; 3 per build round (D-133).
+insert into gate_config (stage, gate_type, gatekeeper, feedback_cap) values
+  ('intake',       'soft',   'owner',  3),
+  ('requirements', 'client', 'client', 3),
+  ('plan',         'soft',   'owner',  3),
+  ('prototype',    'soft',   'owner',  2),
+  ('prototype',    'client', 'client', null),
+  ('build_rounds', 'soft',   'owner',  3),
+  ('qc_report',    'soft',   'owner',  2),
+  ('deploy_prep',  'hard',   'owner',  3),
+  ('handover',     'hard',   'owner',  3);
 
 -- ---------------------------------------------------------------------------
 -- Guards
@@ -549,7 +552,7 @@ create trigger run_logs_default_trace before insert on run_logs
 
 -- Global gate defaults (project_id null) are the pipeline's rules (D-272): through the API nobody can
 -- delete or add one, and no gate row can change anything but its deadline. A project row can be added
--- (a stricter gate for one project) and its deadline changed. Migrations and the SQL editor
+-- (a stricter gate for one project) and its deadline and Feedback cap changed (P2-T19). Migrations and the SQL editor
 -- (current_user is postgres) are not affected.
 create function guard_gate_config() returns trigger
 language plpgsql set search_path = '' as $$
@@ -572,6 +575,9 @@ begin
   if (new.id, new.stage, new.project_id, new.gate_type, new.gatekeeper)
      is distinct from (old.id, old.stage, old.project_id, old.gate_type, old.gatekeeper) then
     raise exception 'a gate row changes only its deadline';
+  end if;
+  if old.project_id is null and new.feedback_cap is distinct from old.feedback_cap then
+    raise exception 'a global Feedback cap changes only through a migration; set it on the project''s own row';
   end if;
   return new;
 end;
@@ -632,23 +638,6 @@ $$;
 create trigger projects_stage_guard
   before update of stage on projects
   for each row execute function guard_stage_change();
-
--- rounds.feedback_count mirrors the round's gate_feedback rows (the cap counts the rows): only feedback_gate()
--- changes it, so the two cannot disagree.
-create function guard_round_feedback_count() returns trigger
-language plpgsql as $$
-begin
-  if coalesce(current_setting('app.gate_feedback', true), '') <> 'on'
-     and ((tg_op = 'INSERT' and new.feedback_count <> 0)
-          or (tg_op = 'UPDATE' and new.feedback_count is distinct from old.feedback_count)) then
-    raise exception 'rounds.feedback_count can only change through feedback_gate()';
-  end if;
-  return new;
-end;
-$$;
-create trigger rounds_feedback_count_guard
-  before insert or update of feedback_count on rounds
-  for each row execute function guard_round_feedback_count();
 
 -- A project moves forward only through this function, only one stage at a time (the order of the
 -- stage enum is the order in docs/spec/stages.yaml), and only while it is active.
@@ -893,9 +882,8 @@ grant execute on function advance_stage(uuid, stage) to authenticated;
 
 -- The artifact a gate action applies to: it must belong to the project, be the newest version of the stage's
 -- gated type (for build rounds, the newest summary of the named round) and still be a draft. Used by
--- accept_gate and reject_gate, so a stale console form cannot act on an old version.
-create function private.current_gate_artifact(p_project uuid, p_artifact uuid, p_round int, p_fn text,
-                                              p_rejected_ok boolean default false)
+-- accept_gate, reject_gate and feedback_gate, so a stale console form cannot act on an old version.
+create function private.current_gate_artifact(p_project uuid, p_artifact uuid, p_round int, p_fn text)
 returns public.artifacts
 language plpgsql stable security definer set search_path = '' as $$
 declare
@@ -930,13 +918,13 @@ begin
   if art.version <> newest then
     raise exception '%: that is not the newest version of the % (reload)', p_fn, art.type;
   end if;
-  if art.status <> 'draft' and not (p_rejected_ok and art.status = 'rejected') then
+  if art.status <> 'draft' then
     raise exception '%: that version is already %', p_fn, art.status;
   end if;
   return art;
 end;
 $$;
-revoke all on function private.current_gate_artifact(uuid, uuid, int, text, boolean)
+revoke all on function private.current_gate_artifact(uuid, uuid, int, text)
   from public, anon, authenticated, service_role;
 
 -- Accept: records the owner's approval of one gate and marks the artifact approved when its gates are all
@@ -1085,20 +1073,18 @@ $$;
 revoke all on function reject_gate(uuid, uuid, int) from public, anon, authenticated, service_role;
 grant execute on function reject_gate(uuid, uuid, int) to authenticated;
 
--- Feedback loops allowed per artifact type (spec 03): 3 on intake review, PRD, plan, deploy prep and
--- handover guide (D-234); 2 on the prototype (D-120) and on QC; 3 per build round (D-133).
-create function private.feedback_cap(p_type public.artifact_type) returns int
-language sql immutable set search_path = '' as $$
-  select case p_type
-    when 'prototype' then 2
-    when 'report'    then 2
-    when 'intake_record' then 3
-    when 'prd' then 3
-    when 'plan' then 3
-    when 'round_summary' then 3
-    when 'deployment_checklist' then 3
-    when 'handover_guide' then 3
-  end
+-- Feedback loops allowed in a stage: a cap on one of the project's own gate rows wins, else the global
+-- default (on the stage's first gate row). No cap anywhere means no Feedback.
+create function private.feedback_cap(p_project uuid, p_stage public.stage) returns int
+language sql stable security definer set search_path = '' as $$
+  select coalesce(
+    (select g.feedback_cap from public.gate_config g
+      where g.stage = p_stage and g.project_id = p_project and g.feedback_cap is not null
+      order by g.gate_type limit 1),
+    (select g.feedback_cap from public.gate_config g
+      where g.stage = p_stage and g.project_id is null and g.feedback_cap is not null
+      order by g.gate_type limit 1),
+    0)
 $$;
 -- Feedback loops used: every Feedback on any version of the type (for build rounds, of that round).
 create function private.feedback_used(p_project uuid, p_type public.artifact_type, p_round int) returns int
@@ -1106,13 +1092,13 @@ language sql stable security definer set search_path = '' as $$
   select count(*)::int from public.gate_feedback f join public.artifacts a on a.id = f.artifact_id
    where f.project_id = p_project and a.type = p_type and f.round is not distinct from p_round
 $$;
-revoke all on function private.feedback_cap(public.artifact_type), private.feedback_used(uuid, public.artifact_type, int)
+revoke all on function private.feedback_cap(uuid, public.stage), private.feedback_used(uuid, public.artifact_type, int)
   from public, anon, authenticated, service_role;
 
--- Feedback: records the owner's notes on the newest version of the stage's artifact (a draft, or a version the
--- owner rejected; spec 03: after Reject the owner uses Feedback or edits by hand). The version stays as it is.
--- Refused once the type's cap is used up; after that only Accept or Reject is left. For build rounds the
--- round must be in review and its feedback_count goes up. When the stage has an agent a run is queued in
+-- Feedback: records the owner's notes on the newest draft of the stage's artifact; the version stays a draft
+-- (Accept and Reject still work). A rejected version gets no Feedback: the owner waits for a new version or
+-- edits by hand. Refused once the stage's cap (gate_config.feedback_cap) is used up; after that only Accept or
+-- Reject is left. For build rounds the round must be in review and the cap counts per round. When the stage has an agent a run is queued in
 -- the same transaction, unless one is queued already (it will read these notes too). Returns the number of
 -- loops used, this one included.
 create function feedback_gate(p_project uuid, p_artifact uuid, p_body text, p_round int default null)
@@ -1137,25 +1123,23 @@ begin
   if btrim(coalesce(p_body, '')) = '' then
     raise exception 'feedback_gate: write the feedback first';
   end if;
-  art := private.current_gate_artifact(p_project, p_artifact, p_round, 'feedback_gate', true);
+  art := private.current_gate_artifact(p_project, p_artifact, p_round, 'feedback_gate');
   if v.stage = 'build_rounds' and not exists (
     select 1 from public.rounds r where r.project_id = p_project and r.number = p_round and r.status = 'in_review'
   ) then
     raise exception 'feedback_gate: round % is not in review', p_round;
   end if;
   used := private.feedback_used(p_project, art.type, p_round);
-  cap := private.feedback_cap(art.type);
+  cap := private.feedback_cap(p_project, v.stage);
+  if cap = 0 then
+    raise exception 'feedback_gate: stage % takes no feedback', v.stage;
+  end if;
   if used >= cap then
     raise exception 'feedback_gate: the % feedback loops on this % are used up; accept or reject it', cap, art.type;
   end if;
 
   insert into public.gate_feedback (project_id, artifact_id, round, body, created_by)
   values (p_project, art.id, p_round, btrim(p_body), auth.uid());
-  if v.stage = 'build_rounds' then
-    perform set_config('app.gate_feedback', 'on', true);
-    update public.rounds set feedback_count = feedback_count + 1 where project_id = p_project and number = p_round;
-    perform set_config('app.gate_feedback', 'off', true);
-  end if;
   if private.stage_has_agent(v.stage)
      and not exists (select 1 from public.stage_runs r where r.project_id = p_project and r.status = 'queued') then
     perform public.enqueue_run(p_project, v.stage);
@@ -1178,7 +1162,7 @@ returns table (
   project_id uuid, stage public.stage, gate_type public.gate_type, gatekeeper public.approver_role,
   round int, artifact_id uuid, artifact_type public.artifact_type, artifact_version int,
   state text, since timestamptz, due_at timestamptz, overdue boolean, ready_to_advance boolean,
-  artifact_status public.artifact_status, feedback_used int, feedback_cap int)
+  feedback_used int, feedback_cap int)
 language plpgsql stable security definer set search_path = '' as $$
 #variable_conflict use_column
 declare
@@ -1214,7 +1198,7 @@ begin
       for rd in select r.number from public.rounds r where r.project_id = pr.id and r.status = 'in_review' order by r.number loop
         n := n + 1;
         fu := private.feedback_used(pr.id, 'round_summary', rd.number);
-        fc := private.feedback_cap('round_summary');
+        fc := private.feedback_cap(pr.id, pr.stage);
         select * into art from public.artifacts a
           where a.project_id = pr.id and a.type = 'round_summary' and a.content ->> 'round' = rd.number::text
           order by a.version desc limit 1;
@@ -1222,34 +1206,29 @@ begin
         if has_art and art.status not in ('superseded', 'rejected') then
           return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, rd.number, art.id, art.type, art.version,
             'missing', art.created_at, art.created_at + make_interval(hours => hrs),
-            now() > art.created_at + make_interval(hours => hrs), ready, art.status, fu, fc;
+            now() > art.created_at + make_interval(hours => hrs), ready, fu, fc;
         else
-          return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, rd.number,
-            case when has_art and art.status = 'rejected' then art.id end, 'round_summary'::public.artifact_type,
-            case when has_art and art.status = 'rejected' then art.version end, 'waiting', null::timestamptz,
-            null::timestamptz, false, ready, case when has_art then art.status end, fu, fc;
+          return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, rd.number, null::uuid,
+            'round_summary'::public.artifact_type, null::int, 'waiting', null::timestamptz, null::timestamptz, false, ready,
+            fu, fc;
         end if;
       end loop;
       if n = 0 then
         return query select pr.id, pr.stage, 'soft'::public.gate_type, gk, null::int, null::uuid,
           'round_summary'::public.artifact_type, null::int, case when ready then 'satisfied' else 'waiting' end,
-          null::timestamptz, null::timestamptz, false, ready, null::public.artifact_status, null::int, null::int;
+          null::timestamptz, null::timestamptz, false, ready, null::int, null::int;
       end if;
     else
       atype := private.stage_artifact(pr.stage);
       fu := private.feedback_used(pr.id, atype, null);
-      fc := private.feedback_cap(atype);
+      fc := private.feedback_cap(pr.id, pr.stage);
       select * into art from public.artifacts a where a.project_id = pr.id and a.type = atype
         order by a.version desc limit 1;
       has_art := found;
       if not has_art or art.status in ('superseded', 'rejected') then
-        -- A rejected newest version is still named, so the owner can send Feedback on it.
         for g in select * from private.effective_gates(pr.id, pr.stage) order by gate_type loop
-          return query select pr.id, pr.stage, g.gate_type, g.gatekeeper, null::int,
-            case when has_art and art.status = 'rejected' then art.id end, atype,
-            case when has_art and art.status = 'rejected' then art.version end,
-            'waiting', null::timestamptz, null::timestamptz, false, false,
-            case when has_art then art.status end, fu, fc;
+          return query select pr.id, pr.stage, g.gate_type, g.gatekeeper, null::int, null::uuid, atype, null::int,
+            'waiting', null::timestamptz, null::timestamptz, false, false, fu, fc;
         end loop;
       else
         s := art.created_at;
@@ -1261,12 +1240,12 @@ begin
           if t is not null then
             s := greatest(s, t);
             return query select pr.id, pr.stage, g.gate_type, g.gatekeeper, null::int, art.id, atype, art.version,
-              'satisfied', s, s + make_interval(hours => g.escalate_after_hours), false, ready, art.status, fu, fc;
+              'satisfied', s, s + make_interval(hours => g.escalate_after_hours), false, ready, fu, fc;
           else
             return query select pr.id, pr.stage, g.gate_type, g.gatekeeper, null::int, art.id, atype, art.version,
               case when pending then 'blocked' else 'missing' end, s,
               s + make_interval(hours => g.escalate_after_hours),
-              (not pending and now() > s + make_interval(hours => g.escalate_after_hours)), ready, art.status, fu, fc;
+              (not pending and now() > s + make_interval(hours => g.escalate_after_hours)), ready, fu, fc;
             pending := true;
           end if;
         end loop;
