@@ -24,7 +24,6 @@ const base: QueueItem = {
   hoursWaiting: 30,
   escalateAfterHours: 24,
   overdue: true,
-  rejected: false,
   canReject: true,
   canFeedback: true,
   feedbackUsed: 1,
@@ -68,23 +67,6 @@ describe('QueueItemCard', () => {
     expect(h).not.toContain('name="body"');
     expect(h).toContain('Feedback used up (3 of 3): accept or reject this version.');
     expect(h).not.toMatch(/<button[^>]* disabled=""[^>]*>Accept/);
-  });
-  it('a rejected version offers only Feedback', () => {
-    const h = html({ rejected: true, actionable: false, canReject: false });
-    expect(h).toMatch(/<button[^>]* disabled=""[^>]*>Accept/);
-    expect(h).toMatch(/<button[^>]* disabled=""[^>]*>Reject/);
-    expect(h).toContain('name="body"');
-    expect(h).toContain('Rejected: send Feedback');
-  });
-  it('a rejected version with the loops used up says to edit by hand', () => {
-    const h = html({
-      rejected: true,
-      actionable: false,
-      canReject: false,
-      canFeedback: false,
-      feedbackUsed: 3,
-    });
-    expect(h).toContain('edit the version by hand');
   });
   it('a build round shows no Feedback form yet', () => {
     const h = html({ round: 1, canFeedback: false, canReject: false });

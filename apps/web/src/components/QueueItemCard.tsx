@@ -20,13 +20,11 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
   const reason =
     item.round !== null
       ? 'Round review arrives in phase 4'
-      : item.rejected
-        ? 'Rejected: send Feedback for a new version, or wait for one'
-        : !item.actionable
-          ? item.gatekeeper === 'client'
-            ? 'Waiting for the client'
-            : 'Waiting for the agent'
-          : undefined;
+      : !item.actionable
+        ? item.gatekeeper === 'client'
+          ? 'Waiting for the client'
+          : 'Waiting for the agent'
+        : undefined;
   return (
     <li className="rounded border border-neutral-200 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -103,10 +101,10 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
                 </button>
               </form>
             </details>
-          ) : item.feedbackUsed >= item.feedbackCap ? (
+          ) : item.canReject && item.feedbackUsed >= item.feedbackCap ? (
             <p className="text-neutral-500">
-              Feedback used up ({item.feedbackUsed} of {item.feedbackCap}):{' '}
-              {item.rejected ? 'edit the version by hand.' : 'accept or reject this version.'}
+              Feedback used up ({item.feedbackUsed} of {item.feedbackCap}): accept or reject this
+              version.
             </p>
           ) : null}
         </div>
