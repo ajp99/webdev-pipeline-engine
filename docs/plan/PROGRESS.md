@@ -216,3 +216,9 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - Evidence: database `run.sh` PASS 574, FAIL 0; full mutation run in the PR (mutations 284 to 321). Shared tests pass (table count 24; the gate seed comparison reads the new column).
 - Independent review (rule 6): no blocker; TRUNCATE on the append-only tables, a worker read check and a `found` trap in `remaining_gates` were fixed. Owner review of PR #42 (2026-10-28): drop `rounds.feedback_count` (and its guard), Feedback on drafts only (so `artifact_status` and the naming of a rejected version in `remaining_gates` are removed), caps moved from a SQL function into `gate_config`.
 - Follow-ups or blockers: spec alignment is the open proposal `2026-10-27-gate-feedback-spec-alignment.md` (revised). The intake re-review asked for by Feedback on intake is built in P2-T06. The console part (Reject and Feedback in the queue) is the next PR.
+
+## 2026-10-28 P2-T19 Gate controls in the console (code done, live check open)
+- What changed: the approval queue shows Reject (calls `reject_gate`) and a Feedback form (calls `feedback_gate`) on a draft at its next gate, with "x of y used". When the stage's loops are used up the form is replaced by "accept or reject this version". Reject and Feedback are not offered on build rounds yet (phase 4) or on a client gate waiting for the client. "Ready to advance" after a client approval was already built in P2-T18.
+- Evidence: shared 86, worker 69 and web 70 tests pass; lint, typecheck, format and `next build` pass. Database side: PR #42.
+- Follow-ups or blockers: the live check is the owner's (Reject a draft; send Feedback until the cap; Accept). Feedback on intake only records the notes and queues nothing until P2-T06 adds the re-review agent. The task stays unticked until then.
+

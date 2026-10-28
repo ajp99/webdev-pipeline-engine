@@ -77,6 +77,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Also (from P2-T04): `accept_gate` calls `enqueue_run` in the same transaction when the approval starts the next stage's work.
 
 - [ ] **P2-T19 Gate controls in the console**  
+  Status note (2026-10-28): database part merged (#42), console part in review; unticked until the owner's live check.
   Acceptance: Reject marks the version rejected, keeps the stage open and starts no run. Feedback works on the soft gates and is capped at 3 loops on intake review, PRD, plan, deployment preparation and handover guide; after the cap only Accept or Reject is shown. The prototype (2), build rounds (3) and QC (2) keep their caps. After a client approval or the last round approval the project shows "Ready to advance" (D-234).
 
 - [ ] **P2-T20 Cancel project (migration, own PR) (cancel only, D-301)**  
