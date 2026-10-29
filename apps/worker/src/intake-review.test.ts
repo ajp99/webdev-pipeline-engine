@@ -150,18 +150,10 @@ describe('assembleReviewInput', () => {
     responses: [
       { round: 1, question_id: 'business_name', answer: 'Acme' },
       { round: 2, question_id: 'business_name', answer: 'Acme Plumbing' },
-      { round: 2, question_id: 'fu2_1', answer: 'Home, About, Contact' },
+      { round: 2, question_id: 'fu2_1', answer: 'Home, About, Contact', question: 'Which pages?' },
+      { round: 2, question_id: 'fu2_2', answer: null, question: 'Which colours?' },
     ],
     uploadKinds: ['logo', 'logo', 'brand_guideline'],
-    artifacts: [
-      {
-        round: 1,
-        followups: [
-          { id: 'fu2_1', text: 'Which pages?' },
-          { id: 'fu2_2', text: 'Which colours?' },
-        ],
-      },
-    ],
     ...over,
   });
 
@@ -176,9 +168,39 @@ describe('assembleReviewInput', () => {
     ]);
   });
 
-  it('skips artifacts with no usable follow-ups', () => {
-    const i = assembleReviewInput(rows({ artifacts: [null, {}, { followups: [{ id: 5 }] }] }));
+  it('includes a question the owner added and leaves out a removed one (its row is gone)', () => {
+    const i = assembleReviewInput(
+      rows({
+        responses: [
+          { round: 2, question_id: 'ow2_1', answer: 'Yes', question: 'Do you have a domain?' },
+          { round: 2, question_id: 'fu2_10', answer: null, question: 'Tenth' },
+          { round: 2, question_id: 'fu2_2', answer: null, question: 'Second' },
+        ],
+      }),
+    );
+    expect(i.history.map((h) => h.id)).toEqual(['fu2_2', 'fu2_10', 'ow2_1']);
+  });
+
+  it('ignores template rows (no question text)', () => {
+    const i = assembleReviewInput(
+      rows({
+        responses: [{ round: 1, question_id: 'business_name', answer: 'Acme', question: null }],
+      }),
+    );
     expect(i.history).toEqual([]);
+  });
+
+  it('carries the notes (capped) and the Feedback, and leaves both out when empty', () => {
+    expect(assembleReviewInput(rows())).not.toHaveProperty('ownerNotes');
+    expect(assembleReviewInput(rows())).not.toHaveProperty('feedback');
+    const i = assembleReviewInput(
+      rows({
+        notes: ['x'.repeat(3000), 'y'.repeat(3000), '  '],
+        feedback: ['ask about the domain', ' '],
+      }),
+    );
+    expect(i.ownerNotes?.join('').length).toBe(4000);
+    expect(i.feedback).toEqual(['ask about the domain']);
   });
 
   it('refuses a template that is not valid', () => {

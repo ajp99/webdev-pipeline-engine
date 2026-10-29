@@ -302,12 +302,12 @@
           "id": "logo",
           "type": "file_upload",
           "label": "Logo",
-          "required": true,
+          "required": false,
           "accept": ["png", "svg", "jpeg", "webp", "pdf"],
           "max_files": 1,
           "max_mb": 5,
           "none_allowed": true,
-          "help": "Upload the logo, or answer that there is none."
+          "help": "Upload the logo, or answer that there is none. A missing logo does not block Submit; the console warns."
         }
       ]
     },

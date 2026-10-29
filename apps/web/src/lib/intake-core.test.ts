@@ -13,7 +13,10 @@ import {
 } from '@wpe/shared';
 import type { FormFields } from './intake-form';
 import {
+  addOwnerQuestion,
   canChangeFiles,
+  followupsFor,
+  removeFollowup,
   reopenRound,
   saveFollowups,
   saveSection,
@@ -21,6 +24,7 @@ import {
   submitRound,
   unlockRound,
   type IntakeStore,
+  type QuestionRow,
 } from './intake-core';
 
 const root = join(fileURLToPath(import.meta.url), '../../../../..');
@@ -73,6 +77,29 @@ class MemStore implements IntakeStore {
       else cur[id] = v;
     }
     this.data.set(round, cur);
+  }
+  questions = new Map<number, QuestionRow[]>();
+  async followupRows(_p: string, round: number) {
+    return this.questions.get(round) ?? [];
+  }
+  async addQuestion(_p: string, round: number, text: string) {
+    const rows = this.questions.get(round) ?? [];
+    const id = `ow${round}_${rows.filter((r) => r.askedBy === 'owner').length + 1}`;
+    this.questions.set(round, [...rows, { id, text, askedBy: 'owner' }]);
+    this.writes++;
+    return id;
+  }
+  async removeQuestion(_p: string, round: number, id: string) {
+    const rows = this.questions.get(round) ?? [];
+    if (!rows.some((r) => r.id === id)) return false;
+    this.questions.set(
+      round,
+      rows.filter((r) => r.id !== id),
+    );
+    const a = { ...(this.data.get(round) ?? {}) };
+    delete a[id];
+    this.data.set(round, a);
+    return true;
   }
   async latestReview() {
     return this.review;
@@ -174,11 +201,12 @@ describe('submitRound', () => {
     expect(store.rounds.get(1)).toBe('open');
   });
 
-  it('is refused when only the logo is missing', async () => {
+  it('is not blocked by a missing logo (a warning only, P2-T15)', async () => {
     await fillAll(store);
     store.data.get(1)!.logo = null;
     const r = await submitRound(store, template, 'p');
-    expect(r.ok).toBe(false);
+    expect(r.ok).toBe(true);
+    expect(store.rounds.get(1)).toBe('submitted');
   });
 
   it('works once every required answer is in, and an uploaded logo counts', async () => {
@@ -319,6 +347,10 @@ describe('follow-up rounds', () => {
     s.data.set(1, { business_name: 'Acme', what_you_do: 'Plumbing', contact_email: 'a@b.co' });
     s.rounds.set(2, 'open');
     s.review = review(1, ['fu2_1', 'fu2_2']);
+    s.questions.set(
+      2,
+      ['fu2_1', 'fu2_2'].map((id) => ({ id, text: `Question ${id}?`, askedBy: 'agent' as const })),
+    );
     return s;
   }
 
@@ -335,14 +367,18 @@ describe('follow-up rounds', () => {
     locked.rounds.set(2, 'submitted');
     expect(await saveFollowups(locked, 'p', f({ fu_fu2_1: 'x' }))).toMatchObject({ ok: false });
     const none = round2();
-    none.review = review(1, []);
+    none.questions.set(2, []);
     expect(await saveFollowups(none, 'p', f({}))).toMatchObject({ ok: false });
     expect(none.writes).toBe(0);
   });
-  it('ignores a review of another round', async () => {
+  it('reads the questions from the rows of the round, with the reason from the review', async () => {
     const s = round2();
-    s.review = review(2, ['fu3_1']);
-    expect(await saveFollowups(s, 'p', f({ fu_fu3_1: 'x' }))).toMatchObject({ ok: false });
+    const list = await followupsFor(s, 'p', 2);
+    expect(list.map((q) => [q.id, q.text, q.reason])).toEqual([
+      ['fu2_1', 'Question fu2_1?', 'r'],
+      ['fu2_2', 'Question fu2_2?', 'r'],
+    ]);
+    expect(await followupsFor(s, 'p', 1)).toEqual([]);
   });
   it('refuses an answer over the length limit', async () => {
     const s = round2();
@@ -371,5 +407,61 @@ describe('follow-up rounds', () => {
     );
     expect(s.data.get(2)).toEqual({ business_name: 'Acme Plumbing' });
     expect((await s.effectiveAnswers()).business_name).toBe('Acme Plumbing');
+  });
+});
+
+describe('owner questions (P2-T06)', () => {
+  function open2() {
+    const s = new MemStore('reviewed');
+    s.rounds.set(2, 'open');
+    s.questions.set(2, [{ id: 'fu2_1', text: 'Which pages?', askedBy: 'agent' }]);
+    return s;
+  }
+
+  it('adds a trimmed question to the open round', async () => {
+    const s = open2();
+    expect(await addOwnerQuestion(s, 'p', '  Do you own a domain?  ')).toMatchObject({ ok: true });
+    expect(s.questions.get(2)!.at(-1)).toEqual({
+      id: 'ow2_1',
+      text: 'Do you own a domain?',
+      askedBy: 'owner',
+    });
+  });
+  it('refuses an empty question, one over 500 characters, and a locked round', async () => {
+    const s = open2();
+    expect(await addOwnerQuestion(s, 'p', '   ')).toMatchObject({ ok: false });
+    expect(await addOwnerQuestion(s, 'p', 'x'.repeat(501))).toMatchObject({
+      ok: false,
+      message: /500/,
+    });
+    s.rounds.set(2, 'submitted');
+    expect(await addOwnerQuestion(s, 'p', 'Why?')).toMatchObject({ ok: false });
+    expect(s.writes).toBe(0);
+  });
+  it('has no cap on the number of owner questions', async () => {
+    const s = open2();
+    for (let i = 0; i < 12; i++) await addOwnerQuestion(s, 'p', `Question ${i}?`);
+    expect(s.questions.get(2)).toHaveLength(13);
+  });
+  it('removes a follow-up with its answer, and refuses an unknown one or a locked round', async () => {
+    const s = open2();
+    s.data.set(2, { fu2_1: 'Home' });
+    expect(await removeFollowup(s, 'p', 'fu2_1')).toMatchObject({ ok: true });
+    expect(s.questions.get(2)).toEqual([]);
+    expect(s.data.get(2)).toEqual({});
+    expect(await removeFollowup(s, 'p', 'fu2_1')).toMatchObject({ ok: false });
+    expect(await removeFollowup(s, 'p', 'business_name')).toMatchObject({ ok: false });
+    const locked = open2();
+    locked.rounds.set(2, 'reviewed');
+    expect(await removeFollowup(locked, 'p', 'fu2_1')).toMatchObject({ ok: false });
+    expect(locked.questions.get(2)).toHaveLength(1);
+  });
+  it('lets an open round 1 hold owner questions that must be answered before submit', async () => {
+    const s = new MemStore();
+    await fillAll(s);
+    await addOwnerQuestion(s, 'p', 'Anything else?');
+    expect(await submitRound(s, template, 'p')).toMatchObject({ ok: false, message: /follow-up/ });
+    await saveFollowups(s, 'p', f({ fu_ow1_1: 'No' }));
+    expect(await submitRound(s, template, 'p')).toMatchObject({ ok: true });
   });
 });

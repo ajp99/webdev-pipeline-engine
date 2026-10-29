@@ -16,6 +16,13 @@ import { parseSection, type FormFields } from './intake-form';
 
 export type RoundRow = { round: number; status: RoundStatus };
 
+/** A follow-up question as a row of the round: the agent's or one the owner added (P2-T06). */
+export type QuestionRow = { id: string; text: string; askedBy: 'agent' | 'owner' };
+export type Followup = QuestionRow & { reason: string };
+
+/** The longest question text the database accepts. */
+export const MAX_QUESTION_CHARS = 500;
+
 export interface IntakeStore {
   /** The latest round of the project, or null when the project has none. */
   latestRound(projectId: string): Promise<RoundRow | null>;
@@ -31,6 +38,12 @@ export interface IntakeStore {
     round: number,
     answers: Record<string, string | null>,
   ): Promise<void>;
+  /** The follow-up question rows of a round, in id order. */
+  followupRows(projectId: string, round: number): Promise<QuestionRow[]>;
+  /** Adds an owner question to the round (id `ow<round>_<n>`); returns the new id. */
+  addQuestion(projectId: string, round: number, text: string): Promise<string>;
+  /** Deletes a follow-up row (its question and answer); false when there was no such row. */
+  removeQuestion(projectId: string, round: number, questionId: string): Promise<boolean>;
   /** The newest review of the agent, or null before the first one. */
   latestReview(projectId: string): Promise<ReviewRecord | null>;
   /** True while a review run is queued, running, waiting or being cancelled. */
@@ -102,15 +115,13 @@ export async function submitRound(
     return fail(
       `Required answers are missing: ${missing.map((m) => `${m.label} (${m.section})`).join('; ')}`,
     );
-  if (round > 1) {
-    const unanswered = (await followupsFor(store, projectId, round)).filter(
-      (q) => !isText(answers[q.id]),
+  const unanswered = (await followupsFor(store, projectId, round)).filter(
+    (q) => !isText(answers[q.id]),
+  );
+  if (unanswered.length > 0)
+    return fail(
+      `Answer every follow-up question first (${unanswered.length} left); write "not known" if you cannot`,
     );
-    if (unanswered.length > 0)
-      return fail(
-        `Answer every follow-up question first (${unanswered.length} left); write "not known" if you cannot`,
-      );
-  }
   const moved = await store.moveRound(projectId, cur.row!.round, 'open', 'submitted');
   return moved
     ? { ok: true, notice: 'Round submitted' }
@@ -119,11 +130,51 @@ export async function submitRound(
 
 const isText = (a: unknown) => typeof a === 'string' && a.trim() !== '';
 
-/** The follow-up questions a round holds: the ones the review of the round before it asked. */
-export async function followupsFor(store: IntakeStore, projectId: string, round: number) {
-  if (round < 2) return [];
+/**
+ * The follow-up questions a round holds: its question rows, which are the agent's follow-ups from the
+ * review of the round before it and the questions the owner added. The reason the agent gave comes from
+ * the saved review.
+ */
+export async function followupsFor(
+  store: IntakeStore,
+  projectId: string,
+  round: number,
+): Promise<Followup[]> {
+  const rows = await store.followupRows(projectId, round);
+  if (rows.length === 0) return [];
   const review = await store.latestReview(projectId);
-  return review && review.round === round - 1 ? review.followups : [];
+  const reasons = new Map((review?.followups ?? []).map((f) => [f.id, f.reason]));
+  return rows.map((r) => ({ ...r, reason: reasons.get(r.id) ?? '' }));
+}
+
+/** The owner adds a question to the open round; the client sees it with the agent's follow-ups. */
+export async function addOwnerQuestion(
+  store: IntakeStore,
+  projectId: string,
+  text: string,
+): Promise<Outcome> {
+  const cur = await currentRound(store, projectId, 'save');
+  if (cur.error) return cur.error;
+  const t = text.trim();
+  if (t === '') return fail('Write the question first');
+  if (t.length > MAX_QUESTION_CHARS)
+    return fail(`A question has at most ${MAX_QUESTION_CHARS} characters`);
+  await store.addQuestion(projectId, cur.row!.round, t);
+  return { ok: true, notice: 'Question added' };
+}
+
+/** The owner removes a follow-up (the agent's or their own) from the open round. A template question stays. */
+export async function removeFollowup(
+  store: IntakeStore,
+  projectId: string,
+  questionId: string,
+): Promise<Outcome> {
+  const cur = await currentRound(store, projectId, 'save');
+  if (cur.error) return cur.error;
+  const gone = await store.removeQuestion(projectId, cur.row!.round, questionId);
+  return gone
+    ? { ok: true, notice: 'Question removed' }
+    : fail('That question is not a follow-up of this round');
 }
 
 export const followupField = (id: string) => `fu_${id}`;

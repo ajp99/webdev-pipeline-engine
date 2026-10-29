@@ -26,27 +26,43 @@ export function supabaseReviewDeps(admin: SupabaseClient<Database>): ReviewDeps 
       const latest = rounds.data[0];
       if (!latest || latest.status !== 'submitted') return null;
 
-      const [responses, uploads, artifacts] = await Promise.all([
+      // Feedback the owner sent since the last review: newer than the newest intake_record (P2-T06).
+      const lastRecord = await admin
+        .from('artifacts')
+        .select('created_at')
+        .eq('project_id', projectId)
+        .eq('type', 'intake_record')
+        .order('version', { ascending: false })
+        .limit(1);
+      if (lastRecord.error) throw new Error(lastRecord.error.message);
+      const since = lastRecord.data?.[0]?.created_at;
+      const feedbackQuery = admin
+        .from('gate_feedback')
+        .select('body')
+        .eq('project_id', projectId)
+        .order('created_at');
+      const [responses, uploads, notes, feedback] = await Promise.all([
         admin
           .from('intake_responses')
-          .select('round, question_id, answer')
+          .select('round, question_id, answer, question')
           .eq('project_id', projectId),
         admin.from('uploads').select('kind').eq('project_id', projectId),
         admin
-          .from('artifacts')
-          .select('content')
+          .from('owner_notes')
+          .select('body')
           .eq('project_id', projectId)
-          .eq('type', 'intake_record')
-          .order('version'),
+          .order('created_at', { ascending: false }),
+        since ? feedbackQuery.gt('created_at', since) : feedbackQuery,
       ]);
-      for (const r of [responses, uploads, artifacts])
+      for (const r of [responses, uploads, notes, feedback])
         if (r.error) throw new Error(r.error.message);
       return assembleReviewInput({
         snapshot: project.data.intake_template_snapshot,
         round: latest.round,
         responses: responses.data ?? [],
         uploadKinds: (uploads.data ?? []).map((u) => u.kind),
-        artifacts: (artifacts.data ?? []).map((a) => a.content),
+        notes: (notes.data ?? []).map((n) => n.body),
+        feedback: (feedback.data ?? []).map((f) => f.body),
       });
     },
 
