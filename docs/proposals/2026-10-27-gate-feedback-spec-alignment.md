@@ -1,6 +1,6 @@
 # Proposal: gate feedback table and Feedback rules in the spec
 
-- **Status:** open
+- **Status:** accepted
 - **Date:** 2026-10-27 (revised 2026-10-28 after the owner's review of PR #42)
 - **Raised by:** agent (P2-T19)
 - **Task or spec reference:** P2-T19; `docs/spec/10-data-model.md`, `docs/spec/03-pipeline-and-gates.md`, `docs/spec/gates.yaml`
@@ -50,4 +50,4 @@ Spec 10, spec 03 and gates.yaml text; the P2-T19 plan line; the consistency test
 
 ## Owner decision
 
-(Left blank for the owner.)
+Accepted. Option A in chat on 2026-10-29: all four edits as proposed. The consistency-test change that compares the caps is code and goes in the next app PR.
