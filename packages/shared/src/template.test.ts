@@ -204,11 +204,11 @@ describe('the generic template (P2-T01, P2-T15)', () => {
     ])
       expect(q(id), id).toBeDefined();
   });
-  it('requires a logo or an explicit "none" answer, with images capped at 5 MB', () => {
+  it('asks for a logo or an explicit "none" answer without blocking Submit, with images capped at 5 MB', () => {
     const logo = q('logo');
     expect(logo?.type).toBe('file_upload');
     if (logo?.type === 'file_upload') {
-      expect(logo.required).toBe(true);
+      expect(logo.required).toBe(false);
       expect(logo.none_allowed).toBe(true);
       expect(logo.max_mb).toBeLessThanOrEqual(5);
     }

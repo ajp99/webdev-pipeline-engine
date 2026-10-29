@@ -93,6 +93,29 @@ export function isAnswered(
 
 export type MissingField = { id: string; label: string; section: string };
 
+/**
+ * Expected but not required (P2-T15): a file question that allows an explicit "none" and is not required,
+ * such as the logo, with neither a file nor the "none" answer. The console shows these as warnings; they
+ * never block Submit.
+ */
+export function unansweredExpected(
+  t: IntakeTemplate,
+  answers: Answers,
+  uploads: UploadCounts = {},
+): MissingField[] {
+  return t.sections.flatMap((s) =>
+    s.questions
+      .filter(
+        (q) =>
+          q.type === 'file_upload' &&
+          q.none_allowed &&
+          !q.required &&
+          !isAnswered(q, answers[q.id], uploads),
+      )
+      .map((q) => ({ id: q.id, label: q.label, section: s.title })),
+  );
+}
+
 /** Required questions without an answer: these block Submit. Everything else is optional. */
 export function missingRequired(
   t: IntakeTemplate,

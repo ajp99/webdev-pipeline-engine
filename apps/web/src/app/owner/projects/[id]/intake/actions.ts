@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import {
+  addOwnerQuestion,
   canChangeFiles,
+  removeFollowup,
   reopenRound,
   saveFollowups,
   saveSection,
@@ -71,6 +73,18 @@ export async function saveFollowupsAction(formData: FormData) {
     getAll: (n) => formData.getAll(n).filter((v): v is string => typeof v === 'string'),
   });
   done(c.projectId, 'followups', outcome);
+}
+
+export async function addQuestionAction(formData: FormData) {
+  const c = await context(formData);
+  const text = String(formData.get('question') ?? '');
+  done(c.projectId, 'followups', await addOwnerQuestion(c.store, c.projectId, text));
+}
+
+export async function removeQuestionAction(formData: FormData) {
+  const c = await context(formData);
+  const questionId = String(formData.get('questionId') ?? '');
+  done(c.projectId, 'followups', await removeFollowup(c.store, c.projectId, questionId));
 }
 
 export async function startReviewAction(formData: FormData) {

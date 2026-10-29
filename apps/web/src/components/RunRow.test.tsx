@@ -28,6 +28,9 @@ const html = (over: Partial<RunRowData> = {}) =>
   );
 
 describe('RunRow', () => {
+  it('links to the run detail page', () => {
+    expect(html()).toContain('href="/owner/runs/r1"');
+  });
   it('shows the project, stage, status, attempts, time and tokens', () => {
     const h = html();
     expect(h).toContain('Acme');

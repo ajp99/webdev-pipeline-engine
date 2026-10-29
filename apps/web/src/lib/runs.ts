@@ -49,3 +49,38 @@ export function durationLabel(
   const m = Math.floor(s / 60);
   return m < 60 ? `${m} min ${s % 60} s` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
+
+/** A run that ended without finishing its work can be run again: a new queued run for the same stage. */
+export function canRetry(status: string): boolean {
+  return status === 'failed' || status === 'stopped' || status === 'cancelled';
+}
+
+export const LOG_PAGE_SIZE = 100;
+
+export type LogWindow = { page: number; pages: number; from: number; to: number };
+
+/**
+ * Which log rows to read for a page (1-based). With no page asked for, the last one, where the newest
+ * lines are. A page outside the range is moved to the nearest page that exists.
+ */
+export function logWindow(total: number, wanted: number | null, size = LOG_PAGE_SIZE): LogWindow {
+  const pages = Math.max(1, Math.ceil(total / size));
+  const raw = wanted === null || !Number.isFinite(wanted) ? pages : Math.trunc(wanted);
+  const page = Math.min(pages, Math.max(1, raw));
+  return { page, pages, from: (page - 1) * size, to: page * size - 1 };
+}
+
+export type TimelineStep = { label: string; at: string };
+
+/** The run's own timestamps in order, for the detail view. */
+export function timeline(run: {
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  status: string;
+}): TimelineStep[] {
+  const steps: TimelineStep[] = [{ label: 'Queued', at: run.queuedAt }];
+  if (run.startedAt) steps.push({ label: 'Started', at: run.startedAt });
+  if (run.finishedAt) steps.push({ label: statusLabel(run.status), at: run.finishedAt });
+  return steps;
+}
