@@ -1,6 +1,6 @@
 # Proposal: follow-up questions are rows of intake_responses
 
-- **Status:** open
+- **Status:** accepted
 - **Date:** 2026-10-28
 - **Raised by:** agent (P2-T06)
 - **Task or spec reference:** P2-T06; `docs/spec/10-data-model.md`, `docs/spec/04-intake.md`
@@ -29,4 +29,4 @@ Spec 10 row text. The code is built this way in the P2-T06 migration PR.
 
 ## Owner decision
 
-(Left blank for the owner.)
+Accepted. Option B in chat on 2026-10-29: the spec 10 row as proposed, plus one sentence at the end of spec 04 step 7: "Removing a follow-up deletes the question and its answer; the saved review keeps what the agent asked."

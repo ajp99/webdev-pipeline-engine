@@ -1,6 +1,6 @@
 # Proposal: align the data model spec with the gate functions (P2-T18)
 
-- **Status:** open
+- **Status:** accepted
 - **Date:** 2026-10-22
 - **Raised by:** agent, while building P2-T18
 - **Task or spec reference:** P2-T18; `docs/spec/10-data-model.md` (artifacts and approvals rows); D-258, D-261
@@ -29,4 +29,4 @@ No other spec file changes.
 
 ## Owner decision
 
-(Left blank for the owner.)
+Accepted. Option B in chat on 2026-10-29: the two spec 10 edits, plus the sentence "`accept_gate` is the only writer of approvals." at the end of the "Gate actions" paragraph in spec 03.
