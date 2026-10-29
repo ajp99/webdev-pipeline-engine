@@ -91,3 +91,67 @@ select t.adv('follow-up ids run from 1 to n without a gap', t.setup(1), null, 's
 select t.adv('follow-up ids may come in any order', t.setup(1), null, 'service_role', t.cir(1, '[' || t.fu(2, 2) || ',' || t.fu(2, 1) || ']'), 'ok');
 select t.adv('a review before the last round is not marked capped', t.setup(2), null, 'service_role', t.cir(2, '[' || t.fu(3, 1) || ']'), 'ok',
   '(select content->''capped'' from artifacts where project_id=''cccccccc-0000-0000-0000-000000000001'' and type=''intake_record'')=''false''::jsonb');
+
+\echo '### follow-up questions are rows (P2-T06)'
+select t.adv('each follow-up becomes a row of the next round with its text and no answer', t.setup(1), null, 'service_role',
+  t.cir(1, '['||t.fu(2,1)||','||t.fu(2,2)||']'), 'ok',
+  '(select count(*) from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'' and round=2 and asked_by=''agent'' and answer is null and question=''Which pages do you need?'' and question_id in (''fu2_1'',''fu2_2''))=2');
+select t.adv('no follow-ups, no rows', t.setup(1), null, 'service_role', t.cir(1), 'ok',
+  '(select count(*) from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'')=0');
+select t.adv('a refused review leaves no question rows', t.setup(1), null, 'service_role', t.cir(1, '['||t.fu(2,1)||','||t.fu(2,1)||']'), 'error:must be unique',
+  '(select count(*) from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'')=0');
+select t.adv('the owner can add a question of their own', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''Who are your competitors?'')', 'ok',
+  '(select count(*) from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'' and asked_by=''owner'')=1');
+select t.adv('the owner can remove a question row', t.setup(1)||';insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''Q?'')', :'O', 'authenticated',
+  'delete from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'' and question_id=''ow1_1''', 'ok',
+  '(select count(*) from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'')=0');
+select t.adv('a user who is not the owner cannot add a question', t.setup(1), :'A', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''Q?'')', 'error:row-level security');
+select t.adv('an owner question needs text', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''  '')', 'error:intake_question_text');
+select t.adv('an owner question without text column is refused', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'')', 'error:intake_question_text');
+select t.adv('a question over 500 characters is refused', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'','''||repeat('x',501)||''')', 'error:intake_question_text');
+select t.adv('a question of exactly 500 characters is kept', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'','''||repeat('x',500)||''')', 'ok');
+select t.adv('a template row has no question text', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''q1'',''template'',''Q?'')', 'error:intake_question_text');
+select t.adv('an owner question id must look like ow<round>_<n>', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''fu1_1'',''owner'',''Q?'')', 'error:intake_question_id');
+select t.adv('an agent question id must look like fu<round>_<n>', t.setup(1), null, current_user,
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''agent'',''Q?'')', 'error:intake_question_id');
+
+\echo '### question rows: identity and edge cases (review of P2-T06)'
+select t.adv('a question id with a leading zero is refused', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow01_1'',''owner'',''Q?'')', 'error:intake_question_id');
+select t.adv('a question number of zero is refused', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_0'',''owner'',''Q?'')', 'error:intake_question_id');
+select t.adv('an owner question id naming another round is refused', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow3_1'',''owner'',''Q?'')', 'error:intake_question_round');
+select t.adv('an owner question in the round its id names is fine', t.setup(2), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',2,''ow2_1'',''owner'',''Q?'')', 'ok');
+select t.adv('the owner cannot write an agent question directly', t.setup(1), :'O', 'authenticated',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',2,''fu2_1'',''agent'',''Q?'')', 'error:written only by complete_intake_review');
+select t.adv('the worker cannot write an agent question directly', t.setup(1), null, 'service_role',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',2,''fu2_1'',''agent'',''Q?'')', 'error:written only by complete_intake_review');
+select t.adv('the owner can answer a follow-up row', t.setup(1)||';'||t.ir(2,'open')||';insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',2,''fu2_1'',''agent'',''Which pages?'')', :'O', 'authenticated',
+  'update intake_responses set answer=''"yes"'' where project_id=''cccccccc-0000-0000-0000-000000000001'' and question_id=''fu2_1''', 'ok',
+  '(select answer from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'' and question_id=''fu2_1'')=''"yes"''::jsonb');
+select t.adv('the owner cannot rewrite a question', t.setup(1)||';'||t.ir(2,'open')||';insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',2,''fu2_1'',''agent'',''Which pages?'')', :'O', 'authenticated',
+  'update intake_responses set question=''changed'' where project_id=''cccccccc-0000-0000-0000-000000000001'' and question_id=''fu2_1''', 'error:only the answer of an intake row can change');
+select t.adv('the owner cannot change who asked', t.setup(1)||';insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''Q?'')', :'O', 'authenticated',
+  'update intake_responses set asked_by=''template'', question=null where project_id=''cccccccc-0000-0000-0000-000000000001'' and question_id=''ow1_1''', 'error:only the answer of an intake row can change');
+select t.adv('the owner cannot move a row to another round', t.setup(2)||';insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''Q?'')', :'O', 'authenticated',
+  'update intake_responses set round=2 where project_id=''cccccccc-0000-0000-0000-000000000001'' and question_id=''ow1_1''', 'error:only the answer of an intake row can change');
+select t.adv('anon cannot add a question', t.setup(1), null, 'anon',
+  'insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''Q?'')', 'error');
+select t.adv('a user who is not the owner cannot remove a question', t.setup(1)||';insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''Q?'')', :'A', 'authenticated',
+  'delete from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001''', 'ok',
+  '(select count(*) from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'')=1');
+select t.adv('a user who is not the owner cannot change a question row', t.setup(1)||';insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',1,''ow1_1'',''owner'',''Q?'')', :'A', 'authenticated',
+  'update intake_responses set answer=''"x"'' where project_id=''cccccccc-0000-0000-0000-000000000001''', 'ok',
+  '(select count(*) from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'' and answer is null)=1');
+select t.adv('the review is still saved when the owner added a question of their own', t.setup(1)||';insert into intake_responses(project_id,round,question_id,asked_by,question) values (''cccccccc-0000-0000-0000-000000000001'',2,''ow2_1'',''owner'',''Q?'')', null, 'service_role', t.cir(1, '['||t.fu(2,1)||']'), 'ok',
+  '(select count(*) from intake_responses where project_id=''cccccccc-0000-0000-0000-000000000001'' and round=2)=2');

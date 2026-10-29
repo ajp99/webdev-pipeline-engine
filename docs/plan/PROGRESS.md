@@ -232,3 +232,10 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - What changed: `next` in `apps/web` upgraded from 16.4.0 to 16.4.1 (`^16.4.1`), the lowest release outside the npm advisory ranges (GHSA-p3m5-59mp-jv5r, GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr, all `>=16.0.0 <=16.4.0`). The lockfile changes only `next` and the `@next/*` packages it pulls in; no other dependency changed and no application code changed.
 - Evidence: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm format:check` and `pnpm --filter @wpe/web build` all pass; the build no longer stops on the security advisory.
 - Follow-ups or blockers: none.
+
+## 2026-10-28 P2-T06 part 1: question rows (migration)
+- What changed: owner decisions in three question rounds. The text of each follow-up question is now a row of `intake_responses` (new `question` column, new `asked_by` value `owner`, checks on the text and the id format), written by `complete_intake_review` when it saves the review, so the owner can add questions and remove follow-ups. The console's follow-up answer save now updates those rows instead of inserting them.
+- Evidence: database `run.sh` PASS 588, FAIL 0; mutations 322 to 326 killed; shared, worker and web tests pass; types regenerated.
+- Independent review (rule 6): no blocker. Fixed after it: a follow-up answer that updates no row (the question was removed) is now an error instead of a silent "Saved"; a question's id must name its own round; an agent question can be written only by `complete_intake_review`; and an intake row can change only its answer. 14 new checks (PASS 601) and mutations 327 to 330; the full mutation run (265 files) all killed.
+- Follow-ups or blockers: for part 2, `followupsFor` must read the question rows (not the saved review), and the review input must show owner-added questions to the model. The intake page (record view, add and remove, notes page, gate controls) and the review prompt reading owner notes and Feedback are part 2 (app PR, after this merges). Spec 10 text is the open proposal `2026-10-28-intake-question-rows.md`.
+
