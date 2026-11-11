@@ -1,19 +1,27 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
+  buildQueue,
   isAnswered,
   missingRequired,
   roundAllows,
   roundStatusLabel,
+  unansweredExpected,
   type Answer,
   type UploadCounts,
 } from '@wpe/shared';
 import { IntakeQuestion } from '@/components/IntakeQuestion';
+import { QueueItemCard } from '@/components/QueueItemCard';
 import { requireRole } from '@/lib/auth';
-import { followupField, followupsFor } from '@/lib/intake-core';
+import { buildHistory } from '@/lib/intake-history';
+import { followupField, followupsFor, MAX_QUESTION_CHARS } from '@/lib/intake-core';
 import { loadProjectTemplate, supabaseIntakeStore } from '@/lib/intake-store';
+import { loadHistoryRows, loadIntakeFeedback, loadReviewFailure } from '@/lib/intake-view';
+import { loadQueueInput } from '@/lib/queue-data';
 import { createClient } from '@/lib/supabase/server';
 import {
+  addQuestionAction,
+  removeQuestionAction,
   reopenRoundAction,
   removeUploadAction,
   saveFollowupsAction,
@@ -53,29 +61,50 @@ export default async function IntakePage({
       </main>
     );
   }
-  const [answers, counts, uploadsResult, review, followups, reviewing, lastRun] = await Promise.all(
-    [
-      store.effectiveAnswers(id),
-      store.uploadCounts(id),
-      supabase
-        .from('uploads')
-        .select('id, kind, storage_path, size_bytes, scan_status')
-        .eq('project_id', id)
-        .order('created_at'),
-      store.latestReview(id),
-      followupsFor(store, id, round.round),
-      store.reviewRunActive(id),
-      store.lastReviewStatus(id),
-    ],
-  );
+  const [
+    answers,
+    counts,
+    uploadsResult,
+    review,
+    followups,
+    reviewing,
+    lastRun,
+    historyRows,
+    feedback,
+    failure,
+    queueInput,
+  ] = await Promise.all([
+    store.effectiveAnswers(id),
+    store.uploadCounts(id),
+    supabase
+      .from('uploads')
+      .select('id, kind, storage_path, size_bytes, scan_status')
+      .eq('project_id', id)
+      .order('created_at'),
+    store.latestReview(id),
+    followupsFor(store, id, round.round),
+    store.reviewRunActive(id),
+    store.lastReviewStatus(id),
+    loadHistoryRows(supabase, id),
+    loadIntakeFeedback(supabase, id),
+    loadReviewFailure(supabase, id),
+    loadQueueInput(supabase),
+  ]);
+  const gate = buildQueue(queueInput).items.find((i) => i.projectId === id && i.stage === 'intake');
+  const history = buildHistory(project.template, historyRows, counts as UploadCounts);
+  // Feedback sent on the newest review has not been read by a review yet.
+  const unread = feedback.notes.filter((n) => n.version === feedback.latestVersion);
   if (uploadsResult.error) throw new Error(uploadsResult.error.message);
   const uploads = uploadsResult.data;
 
   const sections = project.template.sections;
-  const showFollowups = followups.length > 0 && (wanted === 'followups' || wanted === undefined);
-  const current = sections.find((s) => s.id === wanted) ?? sections[0]!;
   const open = roundAllows(round.status, 'save').ok;
+  const hasFollowupPage = followups.length > 0 || open;
+  const showFollowups =
+    hasFollowupPage && (wanted === 'followups' || (wanted === undefined && followups.length > 0));
+  const current = sections.find((s) => s.id === wanted) ?? sections[0]!;
   const missing = missingRequired(project.template, answers, counts as UploadCounts);
+  const expected = unansweredExpected(project.template, answers, counts as UploadCounts);
   const followupsAnswered = followups.filter((q) => {
     const a = answers[q.id];
     return typeof a === 'string' && a.trim() !== '';
@@ -90,6 +119,9 @@ export default async function IntakePage({
         <span className="text-sm text-neutral-600">
           Intake, round {round.round}: <strong>{roundStatusLabel(round.status)}</strong>
         </span>
+        <Link href={`/owner/projects/${id}/notes`} className="ml-auto text-sm underline">
+          Private notes
+        </Link>
       </div>
       {notice ? (
         <p role="status" className="mt-3 rounded bg-green-50 p-3 text-sm text-green-900">
@@ -103,8 +135,7 @@ export default async function IntakePage({
       ) : null}
       {lastRun === 'failed' && round.status === 'submitted' ? (
         <p role="alert" className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">
-          The last review failed. The runner&apos;s log has the reason; press Run review to try
-          again.
+          The last review failed{failure ? `: ${failure}` : ''}. Press Run review to try again.
         </p>
       ) : null}
       {!open ? (
@@ -117,7 +148,7 @@ export default async function IntakePage({
 
       <div className="mt-6 grid gap-6 md:grid-cols-[14rem_1fr]">
         <nav aria-label="Intake sections" className="flex flex-col gap-1 text-sm">
-          {followups.length > 0 ? (
+          {hasFollowupPage ? (
             <Link
               href={`/owner/projects/${id}/intake?section=followups`}
               aria-current={showFollowups ? 'step' : undefined}
@@ -155,39 +186,90 @@ export default async function IntakePage({
             <section>
               <h2 className="text-lg font-semibold">Follow-up questions</h2>
               <p className="text-sm text-neutral-600">
-                The agent reviewed the last round and needs a little more. Earlier answers stay
-                editable in their sections; the newest answer counts.
+                The agent&apos;s follow-ups and the questions you add. Every question here must be
+                answered before the round can be submitted. Earlier answers stay editable in their
+                sections; the newest answer counts.
               </p>
-              <form action={saveFollowupsAction} className="mt-4 flex flex-col gap-5">
-                <input type="hidden" name="projectId" value={id} />
-                {followups.map((q) => (
-                  <div key={q.id} className="flex flex-col gap-1">
-                    <label htmlFor={followupField(q.id)} className="text-sm font-medium">
-                      {q.text}
-                    </label>
-                    {q.reason ? <p className="text-xs text-neutral-500">{q.reason}</p> : null}
-                    <textarea
-                      id={followupField(q.id)}
-                      name={followupField(q.id)}
-                      rows={3}
-                      maxLength={5000}
-                      disabled={!open}
-                      defaultValue={
-                        typeof answers[q.id] === 'string' ? (answers[q.id] as string) : ''
-                      }
-                      className="rounded border border-neutral-300 p-2 text-sm disabled:bg-neutral-50"
-                    />
-                  </div>
-                ))}
-                {open ? (
+              {followups.length === 0 ? (
+                <p className="mt-4 text-sm text-neutral-600">
+                  No follow-up questions in this round.
+                </p>
+              ) : (
+                <form action={saveFollowupsAction} className="mt-4 flex flex-col gap-5">
+                  <input type="hidden" name="projectId" value={id} />
+                  {followups.map((q) => (
+                    <div key={q.id} className="flex flex-col gap-1">
+                      <label htmlFor={followupField(q.id)} className="text-sm font-medium">
+                        {q.text}
+                        {q.askedBy === 'owner' ? (
+                          <span className="ml-2 text-xs font-normal text-neutral-500">
+                            added by you
+                          </span>
+                        ) : null}
+                      </label>
+                      {q.reason ? <p className="text-xs text-neutral-500">{q.reason}</p> : null}
+                      <textarea
+                        id={followupField(q.id)}
+                        name={followupField(q.id)}
+                        rows={3}
+                        maxLength={5000}
+                        disabled={!open}
+                        defaultValue={
+                          typeof answers[q.id] === 'string' ? (answers[q.id] as string) : ''
+                        }
+                        className="rounded border border-neutral-300 p-2 text-sm disabled:bg-neutral-50"
+                      />
+                      {open ? (
+                        <button
+                          type="submit"
+                          form={`remove-${q.id}`}
+                          className="self-start text-xs underline"
+                        >
+                          Remove this question
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  {open ? (
+                    <button
+                      type="submit"
+                      className="self-start rounded bg-neutral-900 px-4 py-2 text-sm text-white"
+                    >
+                      Save answers
+                    </button>
+                  ) : null}
+                </form>
+              )}
+              {open
+                ? followups.map((q) => (
+                    <form key={q.id} id={`remove-${q.id}`} action={removeQuestionAction}>
+                      <input type="hidden" name="projectId" value={id} />
+                      <input type="hidden" name="questionId" value={q.id} />
+                    </form>
+                  ))
+                : null}
+              {open ? (
+                <form action={addQuestionAction} className="mt-6 flex flex-col gap-2">
+                  <input type="hidden" name="projectId" value={id} />
+                  <label htmlFor="new-question" className="text-sm font-medium">
+                    Add a question for the client
+                  </label>
+                  <textarea
+                    id="new-question"
+                    name="question"
+                    required
+                    rows={2}
+                    maxLength={MAX_QUESTION_CHARS}
+                    className="rounded border border-neutral-300 p-2 text-sm"
+                  />
                   <button
                     type="submit"
-                    className="self-start rounded bg-neutral-900 px-4 py-2 text-sm text-white"
+                    className="self-start rounded border border-neutral-400 px-3 py-1.5 text-sm"
                   >
-                    Save answers
+                    Add question
                   </button>
-                ) : null}
-              </form>
+                </form>
+              ) : null}
             </section>
           ) : (
             <section>
@@ -313,6 +395,84 @@ export default async function IntakePage({
             </section>
           ) : null}
 
+          {gate ? (
+            <section aria-label="Gate">
+              <h3 className="font-medium">Intake gate</h3>
+              <ul className="mt-2">
+                <QueueItemCard item={gate} />
+              </ul>
+              {unread.length > 0 ? (
+                <p className="mt-2 text-sm text-neutral-700">
+                  {unread.length} Feedback note{unread.length === 1 ? '' : 's'} waiting for the next
+                  review. Feedback only records the note: unlock the round, change what you need,
+                  submit it again and press Run review.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {feedback.notes.length > 0 ? (
+            <section
+              aria-label="Feedback history"
+              className="rounded border border-neutral-200 p-4"
+            >
+              <h3 className="font-medium">Feedback you sent</h3>
+              <ul className="mt-2 flex flex-col gap-2 text-sm">
+                {feedback.notes.map((n) => (
+                  <li key={n.id}>
+                    <span className="text-xs text-neutral-500">
+                      review v{n.version}, {new Date(n.createdAt).toLocaleString('en-GB')}
+                      {n.version === feedback.latestVersion ? ' (not read yet)' : ''}
+                    </span>
+                    <p className="whitespace-pre-wrap">{n.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          <details className="rounded border border-neutral-200 p-4">
+            <summary className="cursor-pointer font-medium">History: answers by round</summary>
+            {history.map((r) => (
+              <div key={r.round} className="mt-3">
+                <h4 className="text-sm font-semibold">Round {r.round}</h4>
+                {r.items.length === 0 ? (
+                  <p className="text-sm text-neutral-500">No answers in this round.</p>
+                ) : (
+                  <dl className="mt-1 text-sm">
+                    {r.items.map((i) => (
+                      <div key={i.id} className="py-1">
+                        <dt className="text-neutral-600">
+                          {i.label}
+                          {i.kind !== 'template' ? (
+                            <span className="ml-2 text-xs text-neutral-500">
+                              {i.kind === 'owner' ? 'added by you' : 'follow-up'}
+                            </span>
+                          ) : null}
+                        </dt>
+                        <dd className="whitespace-pre-wrap">
+                          {i.answer ?? <span className="text-neutral-400">(no answer)</span>}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+            ))}
+            {uploads.length > 0 ? (
+              <div className="mt-3">
+                <h4 className="text-sm font-semibold">Uploads</h4>
+                <ul className="mt-1 text-sm">
+                  {uploads.map((u) => (
+                    <li key={u.id}>
+                      {u.kind}: {shownName(u.storage_path)} ({mb(u.size_bytes)})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </details>
+
           <section aria-label="Round" className="rounded border border-neutral-200 p-4">
             <h3 className="font-medium">Round {round.round}</h3>
             {round.status === 'open' ? (
@@ -331,6 +491,18 @@ export default async function IntakePage({
                 ) : (
                   <p className="mt-2 text-sm text-neutral-700">All required answers are in.</p>
                 )}
+                {expected.length > 0 ? (
+                  <div role="note" className="mt-2 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                    <p>Not blocking, but worth a look before you submit:</p>
+                    <ul className="list-disc pl-5">
+                      {expected.map((m) => (
+                        <li key={m.id}>
+                          {m.label} ({m.section}): upload a file, or tick that there is none.
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <form action={submitRoundAction} className="mt-3">
                   <input type="hidden" name="projectId" value={id} />
                   <input type="hidden" name="section" value={current.id} />

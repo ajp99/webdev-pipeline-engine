@@ -3,6 +3,7 @@
 // The model call is a plain request with a JSON schema, not an Agent SDK run (D-275).
 import {
   buildReviewPrompt,
+  capNotes,
   effectiveAnswers,
   REVIEW_JSON_SCHEMA,
   reviewReplySchema,
@@ -66,10 +67,13 @@ export function unconfiguredReviewHandler(reason: string): Handler {
 export type ReviewRows = {
   snapshot: unknown;
   round: number;
-  responses: { round: number; question_id: string; answer: unknown }[];
+  /** Every answer row. A follow-up row (agent or owner) also carries its question text (P2-T06). */
+  responses: { round: number; question_id: string; answer: unknown; question?: string | null }[];
   uploadKinds: string[];
-  /** The content of every intake_record artifact so far. */
-  artifacts: unknown[];
+  /** The owner's private notes, newest first. */
+  notes?: string[];
+  /** The owner's Feedback since the last review, oldest first. */
+  feedback?: string[];
 };
 
 export function assembleReviewInput(rows: ReviewRows): ReviewInput {
@@ -78,19 +82,31 @@ export function assembleReviewInput(rows: ReviewRows): ReviewInput {
   const answers = effectiveAnswers(rows.responses);
   const uploads: UploadCounts = {};
   for (const k of rows.uploadKinds) uploads[k] = (uploads[k] ?? 0) + 1;
-  const history: FollowUpHistory[] = [];
-  for (const content of rows.artifacts) {
-    const fu = (content as { followups?: { id?: unknown; text?: unknown }[] } | null)?.followups;
-    if (!Array.isArray(fu)) continue;
-    for (const f of fu) {
-      if (typeof f.id !== 'string' || typeof f.text !== 'string') continue;
-      const a = answers[f.id];
-      history.push({
-        id: f.id,
-        text: f.text,
+  // The follow-up questions are the rows that hold a question text, so a question the owner added counts
+  // and one the owner removed does not (its row is gone). Oldest round first.
+  const history: FollowUpHistory[] = rows.responses
+    .filter((r) => typeof r.question === 'string' && r.question.trim() !== '')
+    .sort(
+      (x, y) =>
+        x.round - y.round || x.question_id.localeCompare(y.question_id, 'en', { numeric: true }),
+    )
+    .map((r) => {
+      const a = answers[r.question_id];
+      return {
+        id: r.question_id,
+        text: r.question as string,
         answer: typeof a === 'string' && a.trim() ? a : null,
-      });
-    }
-  }
-  return { template: check.template, answers, uploads, history, round: rows.round };
+      };
+    });
+  const ownerNotes = capNotes(rows.notes ?? []);
+  const feedback = (rows.feedback ?? []).map((f) => f.trim()).filter((f) => f !== '');
+  return {
+    template: check.template,
+    answers,
+    uploads,
+    history,
+    round: rows.round,
+    ...(ownerNotes.length > 0 ? { ownerNotes } : {}),
+    ...(feedback.length > 0 ? { feedback } : {}),
+  };
 }

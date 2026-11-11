@@ -135,6 +135,59 @@ export function supabaseIntakeStore(supabase: Db): IntakeStore {
       }
     },
 
+    async followupRows(projectId, round) {
+      const { data, error } = await supabase
+        .from('intake_responses')
+        .select('question_id, question, asked_by')
+        .eq('project_id', projectId)
+        .eq('round', round)
+        .neq('asked_by', 'template');
+      if (error) throw new Error(error.message);
+      return data
+        .map((r) => ({
+          id: r.question_id,
+          text: r.question ?? '',
+          askedBy: r.asked_by === 'owner' ? ('owner' as const) : ('agent' as const),
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }));
+    },
+
+    async addQuestion(projectId, round, text) {
+      // The next free number: the highest ow<round>_<n> in the round plus one.
+      const { data, error } = await supabase
+        .from('intake_responses')
+        .select('question_id')
+        .eq('project_id', projectId)
+        .eq('round', round)
+        .eq('asked_by', 'owner');
+      if (error) throw new Error(error.message);
+      const used = data.map((r) => Number(r.question_id.split('_')[1] ?? 0));
+      const id = `ow${round}_${Math.max(0, ...used) + 1}`;
+      const ins = await supabase.from('intake_responses').insert({
+        project_id: projectId,
+        round,
+        question_id: id,
+        question: text,
+        answer: null,
+        asked_by: 'owner',
+      });
+      if (ins.error) throw new Error(ins.error.message);
+      return id;
+    },
+
+    async removeQuestion(projectId, round, questionId) {
+      const { data, error } = await supabase
+        .from('intake_responses')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('round', round)
+        .eq('question_id', questionId)
+        .neq('asked_by', 'template')
+        .select('question_id');
+      if (error) throw new Error(error.message);
+      return data.length > 0;
+    },
+
     async latestReview(projectId) {
       const { data, error } = await supabase
         .from('artifacts')

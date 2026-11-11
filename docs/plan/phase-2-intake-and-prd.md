@@ -61,7 +61,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P2-T14 Phase 2b gate evidence**  
   Acceptance: Record in `PROGRESS.md`: (1) a manual walkthrough with a fictional client (Acme), the owner entering the intake and recording the client's PRD sign-off with an evidence note, from template to signed PRD; (2) an automated end-to-end test (Playwright) of the same flow with model responses stubbed; (3) a cost report from `stage_runs` compared with the estimates in `docs/spec/13-cost.md`.
 
-- [ ] **P2-T15 Design section and style cards**  
+- [x] **P2-T15 Design section and style cards**  
   Acceptance: The generic template's design section asks for: 4 style cards (pick 1 or 2) and layout density; up to 3 reference sites with what the client likes about each; colors and font styles with an optional brand guideline upload; imagery style and things to avoid. It also asks about an existing website (one text question: URL, what to keep, what to change) and requires a logo upload or an explicit answer that there is none. In development the four style cards are fixed and generic (minimal, bold, warm, corporate), with images kept in the repo and shown by the form; agent-proposed directions with rendered sample pages move to go-live (D-319, G30). Site images over 5 MB are rejected at upload.
 
 - [-] **P2-T16 Dashboard basics: privacy page and mobile-first layout (moved to go-live, G15)**  

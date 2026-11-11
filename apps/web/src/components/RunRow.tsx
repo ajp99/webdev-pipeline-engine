@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { cancelRun } from '@/app/owner/runs/actions';
 import { canCancel, durationLabel, statusLabel, type RunRowData } from '../lib/runs';
 
@@ -32,7 +33,10 @@ export function RunRow({ run, now }: { run: RunRowData; now: Date }) {
       <td>{run.attempts}</td>
       <td>{durationLabel(run.startedAt, run.finishedAt, now)}</td>
       <td>{run.tokensUsed}</td>
-      <td>
+      <td className="flex items-center gap-2 py-2">
+        <Link href={`/owner/runs/${run.id}`} className="text-xs underline">
+          Details
+        </Link>
         {canCancel(run.status) ? (
           <form action={cancelRun}>
             <input type="hidden" name="runId" value={run.id} />

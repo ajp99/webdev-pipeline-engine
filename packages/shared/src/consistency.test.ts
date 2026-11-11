@@ -29,9 +29,9 @@ function gateConfigSeed(): string[] {
     /insert into gate_config \(stage, gate_type, gatekeeper, feedback_cap\) values([^;]*);/i,
   );
   if (!m) throw new Error('gate_config seed not found in migrations');
-  // The Feedback cap (P2-T19) is not in gates.yaml yet (open proposal); only the gates are compared.
-  return [...m[1]!.matchAll(/\(\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*(?:\d+|null)\s*\)/g)].map(
-    (x) => `${x[1]}/${x[2]}/${x[3]}`,
+  // Stage, gate type, gatekeeper and the Feedback cap ("-" when the row has none).
+  return [...m[1]!.matchAll(/\(\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*(\d+|null)\s*\)/g)].map(
+    (x) => `${x[1]}/${x[2]}/${x[3]}/${x[4] === 'null' ? '-' : x[4]}`,
   );
 }
 
@@ -48,10 +48,15 @@ describe('stages.yaml and gates.yaml agree with SQL and TypeScript', () => {
     expect([...STAGES]).toEqual(yamlStages);
   });
 
-  it('the gate_config seed rows equal the yaml gates', () => {
+  it('the gate_config seed rows equal the yaml gates, Feedback caps included', () => {
     const expected = gatesYaml.gates.flatMap(
-      (g: { stage: string; approvals: { gate_type: string; gatekeeper: string }[] }) =>
-        g.approvals.map((a) => `${g.stage}/${a.gate_type}/${a.gatekeeper}`),
+      (g: {
+        stage: string;
+        approvals: { gate_type: string; gatekeeper: string; feedback_cap?: number }[];
+      }) =>
+        g.approvals.map(
+          (a) => `${g.stage}/${a.gate_type}/${a.gatekeeper}/${a.feedback_cap ?? '-'}`,
+        ),
     );
     expect(gateConfigSeed()).toEqual(expected);
   });

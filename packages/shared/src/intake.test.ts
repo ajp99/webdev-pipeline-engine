@@ -2,7 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { answerProblem, isAnswered, missingRequired, roundAllows, type Answers } from './intake';
+import {
+  answerProblem,
+  isAnswered,
+  missingRequired,
+  roundAllows,
+  unansweredExpected,
+  type Answers,
+} from './intake';
 import { validateTemplate, type IntakeTemplate, type TemplateQuestion } from './template';
 
 const root = join(fileURLToPath(import.meta.url), '../../../..');
@@ -26,7 +33,6 @@ const REQUIRED = [
   'copy_status',
   'design_style_cards',
   'layout_density',
-  'logo',
 ];
 
 describe('missingRequired', () => {
@@ -35,7 +41,7 @@ describe('missingRequired', () => {
   });
 
   it('names the section, so the console can show where to go', () => {
-    const m = missingRequired(generic, {}).find((x) => x.id === 'logo');
+    const m = missingRequired(generic, {}).find((x) => x.id === 'layout_density');
     expect(m?.section).toBe('Design');
   });
 
@@ -77,6 +83,20 @@ describe('missingRequired', () => {
       logo: { none: true },
     };
     expect(missingRequired(generic, answers)).toEqual([]);
+  });
+});
+
+describe('unansweredExpected (P2-T15)', () => {
+  it('warns about a logo with neither a file nor "none", and does not block Submit', () => {
+    expect(unansweredExpected(generic, {}).map((m) => m.id)).toEqual(['logo']);
+    expect(missingRequired(generic, {}).map((m) => m.id)).not.toContain('logo');
+  });
+  it('is quiet once the logo is uploaded or marked "none"', () => {
+    expect(unansweredExpected(generic, {}, { logo: 1 })).toEqual([]);
+    expect(unansweredExpected(generic, { logo: { none: true } })).toEqual([]);
+  });
+  it('names the section', () => {
+    expect(unansweredExpected(generic, {})[0]?.section).toBe('Design');
   });
 });
 

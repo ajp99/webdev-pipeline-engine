@@ -1,5 +1,6 @@
 import type { Answer, FileAnswer, LinkAnswer, TemplateQuestion } from '@wpe/shared';
 import { field, linkNoteField, linkUrlField, noneField } from '../lib/intake-form';
+import { styleCardFor } from '../lib/style-cards';
 
 const input = 'rounded border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50';
 
@@ -78,17 +79,33 @@ function Control({
           {q.max_selections ? (
             <p className="text-xs text-neutral-600">Pick up to {q.max_selections}.</p>
           ) : null}
-          {q.options.map((o) => (
-            <label key={o.value} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name={field(q.id)}
-                value={o.value}
-                defaultChecked={Array.isArray(value) && (value as string[]).includes(o.value)}
-              />
-              {o.label}
-            </label>
-          ))}
+          {q.options.map((o) => {
+            const card = styleCardFor(q.id, o.value);
+            return (
+              <label
+                key={o.value}
+                className={
+                  card
+                    ? 'flex flex-col gap-1 rounded border border-neutral-300 p-2 text-sm'
+                    : 'flex items-center gap-2 text-sm'
+                }
+              >
+                {card ? (
+                  <img src={card.image} alt="" width={240} height={160} className="h-auto w-60" />
+                ) : null}
+                <span className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name={field(q.id)}
+                    value={o.value}
+                    defaultChecked={Array.isArray(value) && (value as string[]).includes(o.value)}
+                  />
+                  {o.label}
+                </span>
+                {card ? <span className="text-xs text-neutral-600">{card.blurb}</span> : null}
+              </label>
+            );
+          })}
         </div>
       );
     case 'links': {

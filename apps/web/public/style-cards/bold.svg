@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-label="Bold style: strong color blocks and heavy headlines">
+  <rect width="240" height="160" fill="#111827"/>
+  <rect x="0" y="0" width="240" height="22" fill="#facc15"/>
+  <rect x="14" y="8" width="40" height="6" fill="#111827"/>
+  <rect x="150" y="9" width="76" height="4" fill="#111827"/>
+  <rect x="14" y="38" width="150" height="16" fill="#ffffff"/>
+  <rect x="14" y="58" width="112" height="16" fill="#ffffff"/>
+  <rect x="14" y="84" width="96" height="4" fill="#9ca3af"/>
+  <rect x="14" y="94" width="80" height="4" fill="#9ca3af"/>
+  <rect x="14" y="114" width="64" height="22" fill="#ec4899"/>
+  <rect x="164" y="84" width="62" height="62" fill="#22d3ee"/>
+  <polygon points="164,146 226,84 226,146" fill="#facc15"/>
+</svg>
