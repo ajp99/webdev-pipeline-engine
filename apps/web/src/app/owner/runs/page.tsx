@@ -10,7 +10,7 @@ export default async function RunsPage() {
   const { data, error } = await supabase
     .from('stage_runs')
     .select(
-      'id, stage, status, attempts, queued_at, started_at, finished_at, tokens_used, model, projects(name)',
+      'id, stage, status, attempts, queued_at, started_at, finished_at, tokens_used, model, ended_at, projects(name)',
     )
     .order('queued_at', { ascending: false })
     .limit(30);
@@ -26,6 +26,7 @@ export default async function RunsPage() {
     finishedAt: r.finished_at,
     tokensUsed: r.tokens_used,
     model: r.model,
+    endedAt: r.ended_at,
   }));
   const now = new Date();
   return (

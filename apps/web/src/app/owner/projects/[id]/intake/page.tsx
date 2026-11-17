@@ -122,6 +122,9 @@ export default async function IntakePage({
         <Link href={`/owner/projects/${id}/notes`} className="ml-auto text-sm underline">
           Private notes
         </Link>
+        <Link href={`/owner/projects/${id}/cancel`} className="text-sm underline">
+          Cancel project
+        </Link>
       </div>
       {notice ? (
         <p role="status" className="mt-3 rounded bg-green-50 p-3 text-sm text-green-900">
