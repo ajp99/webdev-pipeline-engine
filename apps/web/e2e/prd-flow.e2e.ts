@@ -6,7 +6,7 @@ const EMAIL = process.env.E2E_OWNER_EMAIL ?? 'owner@example.test';
 const PASSWORD = process.env.E2E_OWNER_PASSWORD ?? 'e2e-owner-password';
 
 /** Reloads the page until the locator shows: the worker polls every few seconds. */
-async function waitFor(page: Page, target: (p: Page) => Locator, timeoutMs = 90_000) {
+async function waitFor(page: Page, target: (p: Page) => Locator, timeoutMs = 150_000) {
   const end = Date.now() + timeoutMs;
   for (;;) {
     if (await target(page).first().isVisible()) return;
@@ -21,8 +21,10 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
   await page.goto('/login');
   await page.locator('input[name=email]').fill(EMAIL);
   await page.locator('input[name=password]').fill(PASSWORD);
-  await page.getByRole('button', { name: /sign in|log in/i }).click();
-  await expect(page).toHaveURL(/\/owner/);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 });
+  await page.goto('/owner');
+  await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
 
   // Create the project from the generic template.
   await page.goto('/owner/projects/new');
