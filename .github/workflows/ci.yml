@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.2.0
       - name: Create the CLI config if the repo has none yet
         run: '[ -f supabase/config.toml ] || supabase init'
       - run: supabase start
