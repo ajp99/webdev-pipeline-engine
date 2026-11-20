@@ -1,6 +1,6 @@
 # Proposal: a missing logo is flagged, not blocking
 
-- **Status:** open
+- **Status:** accepted
 - **Date:** 2026-10-29
 - **Raised by:** agent (P2-T15)
 - **Task or spec reference:** P2-T15; `docs/spec/04-intake.md` (step 2), `docs/plan/phase-2-intake-and-prd.md` (P2-T15 acceptance), D-184
@@ -28,4 +28,4 @@ Spec 04 text, the P2-T15 plan line, one new row in `DECISIONS.md`; the generic t
 
 ## Owner decision
 
-(Left blank for the owner.)
+Accepted as written, in chat on 2026-11-20: the spec 04 and P2-T15 plan wording, and a new decision row (D-320, which refines D-184).
