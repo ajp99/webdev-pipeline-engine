@@ -380,3 +380,7 @@ Append one entry per finished task, newest at the bottom. Keep entries short (wh
 - P3-T11: walkthrough by the owner from a signed PRD to an approved prototype with the client's approval recorded; the end-to-end test of the same flow (scripted Planner and Prototype agent; real build, commit, preview and screenshots) fixed in #77; cost report in tokens printed by `scripts/e2e.sh` from `stage_runs`. The Planner eval results are the exception below.
 - Carried (D-331): the Planner eval's first live run, `evals/last-run/planner.json` and the spot check in `evals/calibration.md`; P3-T10 stays unticked and is a Phase 4 gate item. Open proposals at phase end: none (all 20 accepted).
 
+
+## 2026-11-20 Phase 4 migration: pause requests, round merge record, backlog kinds (D-334)
+- What changed: `request_run_approval` (the worker holding a running run records a delete_files or rewrite_history request with the command; the run waits and keeps its slot) and `decide_run_approval` (the owner approves or denies a pending request of a waiting run; the run goes back to running when none is pending); `rounds.merge_commit` and `merged_at` (both or neither, full commit id, only on an approved round, D-332); `backlog_items.kind` (question, assumption, blocker, refused_command), `options` and `run_id` (P4-T04).
+- Evidence: `supabase/tests/pause_suite.sql` (24 checks) and mutations 438 to 451. Run once at the end of Phase 4 (owner, 2026-11-20); the independent review comes before this PR is merged.

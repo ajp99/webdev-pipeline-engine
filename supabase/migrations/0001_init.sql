@@ -296,6 +296,12 @@ create table rounds (
   claims jsonb not null default '[]'::jsonb,
   claims_cleared_at timestamptz,
   status round_status not null default 'planned',
+  -- D-332: until go-live the worker merges an accepted round's branch into staging locally and records the
+  -- merge commit here; a round is merged only once, and only after it is approved.
+  merge_commit text check (merge_commit is null or merge_commit ~ '^[0-9a-f]{40}$'),
+  merged_at timestamptz,
+  constraint round_merge_recorded_whole check ((merge_commit is null) = (merged_at is null)),
+  constraint round_merged_only_when_approved check (merged_at is null or status = 'approved'),
   -- D-133: the Feedback loops of a round are its gate_feedback rows (P2-T19); there is no counter column.
   unique (project_id, number)
 );
@@ -312,6 +318,11 @@ create table backlog_items (
   client_answer text,
   answer_action answer_action,
   status backlog_status not null default 'open',
+  -- P4-T04: what the Builder logged. A blocker stops the round and is flagged to the owner; a refused command
+  -- is the allowlist's refusal with its reason (P4-T02). options: what the agent considered.
+  kind text not null default 'question' check (kind in ('question', 'assumption', 'blocker', 'refused_command')),
+  options text,
+  run_id uuid references stage_runs (id) on delete set null,
   created_at timestamptz not null default now()
 );
 create index backlog_items_project_idx on backlog_items (project_id);
@@ -1606,6 +1617,72 @@ end;
 $$;
 revoke all on function request_run_cancel(uuid) from public, anon, authenticated, service_role;
 grant execute on function request_run_cancel(uuid) to authenticated;
+
+-- Pause requests (P4-T03, D-301): a risky Builder command (deleting a directory or many files, rewriting git
+-- history) pauses the run. The worker that holds the run records the request and the run waits, keeping its
+-- slot (parking is go-live item G16); the watchdog leaves waiting runs alone. The owner approves or denies it,
+-- and the run goes back to running once no request of its is pending. Returns the request's id.
+create function request_run_approval(p_run uuid, p_worker text, p_kind text, p_command text) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  r      public.stage_runs;
+  new_id uuid;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'request_run_approval: not allowed';
+  end if;
+  if p_kind is null or p_kind not in ('delete_files', 'rewrite_history') then
+    raise exception 'request_run_approval: unknown kind %', p_kind;
+  end if;
+  if btrim(coalesce(p_command, '')) = '' or length(p_command) > 2000 then
+    raise exception 'request_run_approval: the command must be 1 to 2000 characters';
+  end if;
+  select * into r from public.stage_runs where id = p_run for update;
+  if not found or r.claimed_by is distinct from p_worker or r.status not in ('running', 'waiting') then
+    raise exception 'request_run_approval: this worker does not hold a running run %', p_run;
+  end if;
+  insert into public.run_approvals (run_id, kind, command) values (p_run, p_kind, p_command) returning run_approvals.id into new_id;
+  update public.stage_runs set status = 'waiting', heartbeat_at = now() where stage_runs.id = p_run;
+  return new_id;
+end;
+$$;
+revoke all on function request_run_approval(uuid, text, text, text) from public, anon, authenticated, service_role;
+grant execute on function request_run_approval(uuid, text, text, text) to service_role;
+
+-- The owner's answer to a pause request. Only a pending request of a run that is still waiting can be decided.
+create function decide_run_approval(p_approval uuid, p_approve boolean) returns public.run_approval_status
+language plpgsql security definer set search_path = '' as $$
+declare
+  a  public.run_approvals;
+  st public.run_approval_status;
+begin
+  if not private.is_owner() then
+    raise exception 'decide_run_approval: not allowed';
+  end if;
+  if p_approve is null then
+    raise exception 'decide_run_approval: approve or deny';
+  end if;
+  select * into a from public.run_approvals where id = p_approval for update;
+  if not found then
+    raise exception 'decide_run_approval: request not found';
+  end if;
+  if a.status <> 'pending' then
+    raise exception 'decide_run_approval: the request is already %', a.status;
+  end if;
+  perform 1 from public.stage_runs where id = a.run_id and status = 'waiting' for update;
+  if not found then
+    raise exception 'decide_run_approval: the run is no longer waiting';
+  end if;
+  st := case when p_approve then 'approved' else 'denied' end;
+  update public.run_approvals set status = st, decided_at = now(), decided_by = auth.uid() where id = a.id;
+  if not exists (select 1 from public.run_approvals where run_id = a.run_id and status = 'pending') then
+    update public.stage_runs set status = 'running' where id = a.run_id and status = 'waiting';
+  end if;
+  return st;
+end;
+$$;
+revoke all on function decide_run_approval(uuid, boolean) from public, anon, authenticated, service_role;
+grant execute on function decide_run_approval(uuid, boolean) to authenticated;
 
 -- End run (P2-T21, D-233): the owner closes a failed or stopped run for good. The run stays as history and
 -- the console offers no Retry for it. Nothing else changes: the stage, the project and other runs are untouched.
