@@ -82,7 +82,6 @@ export default async function ArtifactPage({
             {shots.map((s) => (
               <figure key={s.path}>
                 {/* Signed URL to a private object: next/image would need the storage host configured. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={s.url}
                   alt={`Screenshot of ${s.path
