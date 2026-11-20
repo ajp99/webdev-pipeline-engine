@@ -26,12 +26,13 @@ end $$;
 grant usage on schema t to authenticated, service_role;
 -- Stands in for the grants Supabase makes to every new table. The approvals and gate_feedback tables are
 -- skipped: the migration revokes their write privileges, and this blanket grant (which runs after it) must not undo that.
+-- prd_feedback gets no service_role grant for the same reason: the migration takes it from the worker (D-087).
 do $$
 declare tb text;
 begin
   for tb in select tablename from pg_tables where schemaname = 'public' and tablename not in ('approvals', 'gate_feedback') loop
     execute format('grant select, insert, update, delete on public.%I to authenticated', tb);
-    execute format('grant all on public.%I to service_role', tb);
+    if tb <> 'prd_feedback' then execute format('grant all on public.%I to service_role', tb); end if;
   end loop;
 end $$;
 grant select, update, delete on public.approvals to authenticated;

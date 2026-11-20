@@ -2034,6 +2034,15 @@ begin
     if exists (select 1 from public.artifacts where project_id = p_project and type = 'prd' and version = newest and status = 'approved') then
       raise exception 'save_prd_version: the newest PRD is signed off; advance the stage, then change it through a change request';
     end if;
+    -- An agent run drafts from the version it loaded and supersedes every draft; an owner edit saved meanwhile
+    -- would be buried without an error (gate review of 2026-11-20). enqueue_run takes the same project lock, and a
+    -- run must be queued before it can be claimed, so no run can be claimed between this check and the insert.
+    -- A cancel_requested run cannot write any more (complete_stage_artifact needs a running run), so it does not
+    -- block. (The owner could still insert a stage_runs row directly; that gap is go-live item G25.)
+    if exists (select 1 from public.stage_runs where project_id = p_project and stage = 'requirements'
+                and status in ('queued', 'running', 'waiting')) then
+      raise exception 'save_prd_version: the requirements agent is working on the PRD; wait for its run to finish or cancel it, then edit';
+    end if;
     update public.artifacts set status = 'superseded'
      where project_id = p_project and type = 'prd' and status = 'draft';
     insert into public.artifacts (project_id, type, version, status, content)
@@ -2263,6 +2272,10 @@ create policy owner_read_gate_feedback on gate_feedback
   for select to authenticated using (private.is_owner());
 
 -- Every other table has the owner_all policy only; there is no client policy until go-live (G15).
+
+-- D-087: the client's Request changes notes go to the owner, never to agents. The worker's role bypasses RLS,
+-- so its table privileges go (gate review of 2026-11-20); the console reads them as the owner.
+revoke all on prd_feedback from service_role;
 
 -- ---------------------------------------------------------------------------
 -- Storage: the private bucket for intake uploads (P2-T03, D-075, D-100, D-211)

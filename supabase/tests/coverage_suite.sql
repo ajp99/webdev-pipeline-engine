@@ -21,3 +21,11 @@ select t.none('a non-owner cannot read the run logs', 'insert into stage_runs(id
 select t.none('a non-owner cannot read the pause requests', 'insert into run_approvals(run_id,kind,command) values (''33333333-3333-3333-3333-333333333333'',''delete_files'',''rm -r x'')', '00000000-0000-0000-0000-0000000000a1'::uuid, 'authenticated', 'select * from run_approvals');
 select t.none('a non-owner cannot read the email log', 'insert into email_log(project_id,recipient_role,recipient,event,dedupe_key) values (''11111111-1111-1111-1111-111111111111'',''client'',''r@x'',''prd_ready'',''cov-key'')', '00000000-0000-0000-0000-0000000000a1'::uuid, 'authenticated', 'select * from email_log');
 select t.none('a non-owner cannot read the gate config', 'select 1', '00000000-0000-0000-0000-0000000000a1'::uuid, 'authenticated', 'select * from gate_config');
+
+\echo '### coverage: the worker holds no privilege on the client''s Request changes notes (D-087)'
+select case when not has_table_privilege('service_role', 'public.prd_feedback', 'select')
+             and not has_table_privilege('service_role', 'public.prd_feedback', 'insert')
+             and not has_table_privilege('service_role', 'public.prd_feedback', 'update')
+             and not has_table_privilege('service_role', 'public.prd_feedback', 'delete')
+  then 'PASS      the worker role has no privilege on prd_feedback'
+  else 'FAIL      the worker role has a privilege on prd_feedback (a later grant undid the revoke)' end;
