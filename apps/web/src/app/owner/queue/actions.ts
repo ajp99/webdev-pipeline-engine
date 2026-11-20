@@ -6,6 +6,8 @@ import { requireRole } from '@/lib/auth';
 import { loadQueueInput } from '@/lib/queue-data';
 import { createClient } from '@/lib/supabase/server';
 
+const NOTE_MAX = 2000;
+
 /**
  * Accept: asks the database to record the owner's approval of the project's next gate. accept_gate
  * checks the stage, the version, the order of the gates and the intake rule, marks the artifact, and
@@ -20,11 +22,16 @@ export async function acceptGate(formData: FormData) {
   if (gateType !== 'soft' && gateType !== 'hard' && gateType !== 'client')
     throw new Error('Unknown gate type. Reload the queue.');
 
+  // A client gate is recorded by the owner for the client, with a note naming the channel (D-298); the
+  // database refuses an empty one, and the note has a length limit of its own.
+  const note = String(formData.get('note') ?? '').trim();
+  if (note.length > NOTE_MAX) throw new Error(`The note can be at most ${NOTE_MAX} characters.`);
   const supabase = await createClient();
   const accepted = await supabase.rpc('accept_gate', {
     p_project: projectId,
     p_gate: gateType,
     p_artifact: artifactId,
+    ...(note ? { p_note: note } : {}),
   });
   if (accepted.error) throw new Error(accepted.error.message);
   revalidatePath('/owner', 'layout');

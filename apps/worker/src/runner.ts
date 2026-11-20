@@ -13,10 +13,18 @@ export type RunnerDeps = {
   /** The run's status, or null when this worker no longer holds the run. */
   heartbeat(runId: string, worker: string): Promise<RunStatus | null>;
   finish(runId: string, worker: string, status: FinalStatus, tokens: number): Promise<RunStatus>;
+  /** Appends a line to the run's log (run_logs). Optional: without it lines only go to the worker's console. */
+  log?(run: Run, level: LogLevel, message: string): Promise<void>;
 };
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export type HandlerContext = {
   run: Run;
+  /** This worker's name: the run is claimed by it, and functions that write for the run need it. */
+  worker: string;
+  /** Writes a line to the run's log, shown on the run page. Never throws. */
+  log(level: LogLevel, message: string): void;
   /** Aborted when the run must stop: cancel requested, run lost, or the watchdog fired. */
   signal: AbortSignal;
   /** Call on every sign of life (streamed output, tool call, file write, command output). */
@@ -58,6 +66,19 @@ export async function executeRun(
   const ac = new AbortController();
   let reason: 'cancel' | 'lost' | 'watchdog' | null = null;
   let lastProgress = Date.now();
+  // Log writes in flight: the run is reported finished only after they land, so the reason is there when the status flips.
+  const pending = new Set<Promise<void>>();
+  // Lines go to the worker's console and, when the database is reachable, to run_logs (what the console shows).
+  const logLine = (level: LogLevel, text: string) => {
+    cfg.log(`run ${run.id}: ${text}`);
+    const sent = deps.log?.(run, level, text.slice(0, 4000));
+    if (sent) {
+      const done: Promise<void> = sent
+        .catch((e) => cfg.log(`run ${run.id}: could not write the log: ${message(e)}`))
+        .finally(() => pending.delete(done));
+      pending.add(done);
+    }
+  };
   const abort = (r: 'cancel' | 'lost' | 'watchdog') => {
     if (reason) return;
     reason = r;
@@ -88,7 +109,13 @@ export async function executeRun(
   const work: Promise<{ tokens?: number } | void> = (async () => {
     const handler = select(run);
     if (!handler) throw new Error(`no handler for stage ${run.stage}`);
-    return handler({ run, signal: ac.signal, progress: () => (lastProgress = Date.now()) });
+    return handler({
+      run,
+      worker: cfg.worker,
+      log: (level, text) => logLine(level, text),
+      signal: ac.signal,
+      progress: () => (lastProgress = Date.now()),
+    });
   })();
   const settled = work.then(
     (r) => ({ ok: true as const, tokens: (r && r.tokens) || 0 }),
@@ -117,9 +144,10 @@ export async function executeRun(
     tokens = result.tokens;
   } else {
     status = 'failed';
-    if (result !== 'gave-up' && !result.ok)
-      cfg.log(`run ${run.id}: failed: ${message(result.error)}`);
+    if (result !== 'gave-up' && !result.ok) logLine('error', message(result.error));
+    else logLine('error', 'the handler did not stop in time after the run was told to stop');
   }
+  await Promise.allSettled([...pending]);
   try {
     const final = await deps.finish(run.id, cfg.worker, status, tokens);
     cfg.log(`run ${run.id}: reported ${status}${final !== status ? `, now ${final}` : ''}`);

@@ -50,7 +50,13 @@ function deps(i: ReviewInput | null = input()) {
   };
   return { d, completed };
 }
-const ctx = (signal = new AbortController().signal) => ({ run, signal, progress: vi.fn() });
+const ctx = (signal = new AbortController().signal) => ({
+  run,
+  worker: 'w1',
+  log: vi.fn(),
+  signal,
+  progress: vi.fn(),
+});
 
 describe('intakeReviewHandler', () => {
   it('asks the model, then completes the review with numbered follow-ups, and reports the tokens', async () => {

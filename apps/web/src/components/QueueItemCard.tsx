@@ -2,6 +2,7 @@ import type { QueueItem } from '@wpe/shared';
 import { acceptGate, rejectGate, sendFeedback } from '@/app/owner/queue/actions';
 
 const FEEDBACK_MAX = 10_000;
+const NOTE_MAX = 2000;
 
 const TYPE_STYLE: Record<string, string> = {
   soft: 'bg-sky-100 text-sky-800',
@@ -21,9 +22,7 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
     item.round !== null
       ? 'Round review arrives in phase 4'
       : !item.actionable
-        ? item.gatekeeper === 'client'
-          ? 'Waiting for the client'
-          : 'Waiting for the agent'
+        ? 'Waiting for the agent'
         : undefined;
   return (
     <li className="rounded border border-neutral-200 p-4">
@@ -46,10 +45,26 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
         </span>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <form action={acceptGate}>
+        <form action={acceptGate} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="projectId" value={item.projectId} />
           <input type="hidden" name="artifactId" value={item.artifactId ?? ''} />
           <input type="hidden" name="gateType" value={item.gateType} />
+          {item.needsNote ? (
+            <div className="flex w-full flex-col gap-1">
+              <label htmlFor={`note-${item.key}`} className="text-sm text-neutral-600">
+                Client sign-off: how and when the client approved (required evidence note)
+              </label>
+              <textarea
+                id={`note-${item.key}`}
+                name="note"
+                required
+                maxLength={NOTE_MAX}
+                rows={2}
+                placeholder="e.g. Email from the client on 21 Nov: 'PRD approved'"
+                className="rounded border border-neutral-300 p-2 text-sm"
+              />
+            </div>
+          ) : null}
           <button
             type="submit"
             disabled={!canAccept}
@@ -70,6 +85,14 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
             Reject
           </button>
         </form>
+        {item.artifactId ? (
+          <a
+            href={`/owner/projects/${item.projectId}/artifacts/${item.artifactId}`}
+            className="text-sm underline"
+          >
+            View {item.artifactType.replace('_', ' ')}
+          </a>
+        ) : null}
         {reason ? <span className="text-sm text-neutral-500">{reason}</span> : null}
       </div>
       {item.round === null && item.feedbackCap > 0 ? (
