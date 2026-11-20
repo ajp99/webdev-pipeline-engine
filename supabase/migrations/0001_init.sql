@@ -746,10 +746,11 @@ language sql immutable set search_path = '' as $$
   end
 $$;
 -- The stages that have a runnable agent: accept_gate queues a run only when it moves a project into one of
--- them. None yet; the task that adds an agent adds its stage here (requirements with P2-T07).
+-- them. The walking skeleton (P2-T23) has a stub for each of requirements, plan and prototype; the real
+-- agents replace the stubs with P2-T07 and later. build_rounds is run from the console (no auto-queue).
 create function private.stage_has_agent(p_stage public.stage) returns boolean
 language sql immutable set search_path = '' as $$
-  select p_stage = any (array[]::public.stage[])
+  select p_stage = any (array['requirements', 'plan', 'prototype']::public.stage[])
 $$;
 -- The gates of a stage as they apply to one project: the global defaults, with the project's own row
 -- winning for a gate type (D-272).
@@ -1747,6 +1748,80 @@ end;
 $$;
 revoke all on function complete_intake_review(uuid, int, text, jsonb, jsonb, text) from public, anon, authenticated, service_role;
 grant execute on function complete_intake_review(uuid, int, text, jsonb, jsonb, text) to service_role;
+
+-- A stage run's output artifact (P2-T23): the one way the worker writes a prd, plan or prototype draft.
+-- The run must be this project's running run for the project's current stage, and the type must belong to
+-- that stage. It writes the next immutable version as a draft and marks the older drafts superseded, so
+-- the owner's Accept or Feedback always sees the newest version. It is refused when the newest version of
+-- that type is already approved (a late run must not push an approved version out of the gates), and the
+-- run must be claimed by the calling worker (as in heartbeat_run and finish_run). The content is an object
+-- under 100000 characters and carries the model name under "model".
+create function complete_stage_artifact(
+  p_project uuid, p_run uuid, p_worker text, p_type public.artifact_type, p_content jsonb, p_model text
+) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  proj public.projects%rowtype;
+  run  public.stage_runs%rowtype;
+  art  uuid;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'complete_stage_artifact: not allowed';
+  end if;
+  select * into proj from public.projects where id = p_project for update;
+  if not found then
+    raise exception 'complete_stage_artifact: project not found';
+  end if;
+  if proj.status <> 'active' then
+    raise exception 'complete_stage_artifact: the project must be active';
+  end if;
+  select * into run from public.stage_runs where id = p_run for update;
+  if not found or run.project_id <> p_project then
+    raise exception 'complete_stage_artifact: run not found for this project';
+  end if;
+  if p_worker is null or run.claimed_by is distinct from p_worker then
+    raise exception 'complete_stage_artifact: the run is not claimed by this worker';
+  end if;
+  if run.status <> 'running' or run.stage is distinct from proj.stage then
+    raise exception 'complete_stage_artifact: the run must be running in the project''s current stage';
+  end if;
+  if p_type not in ('prd', 'plan', 'prototype') or private.artifact_stage(p_type) is distinct from proj.stage then
+    raise exception 'complete_stage_artifact: a % artifact cannot be written in the % stage', p_type, proj.stage;
+  end if;
+  if p_content is null or jsonb_typeof(p_content) <> 'object' or p_content = '{}'::jsonb then
+    raise exception 'complete_stage_artifact: the content must be a non-empty object';
+  end if;
+  if p_content ? 'model' then
+    raise exception 'complete_stage_artifact: the content cannot set model; pass it as an argument';
+  end if;
+  if length(p_content::text) > 100000 then
+    raise exception 'complete_stage_artifact: the content is over 100000 characters';
+  end if;
+  if p_model is null or btrim(p_model) = '' or length(p_model) > 100 then
+    raise exception 'complete_stage_artifact: the model name is missing or too long';
+  end if;
+
+  if exists (
+    select 1 from public.artifacts a
+     where a.project_id = p_project and a.type = p_type and a.status = 'approved'
+       and a.version = (select max(b.version) from public.artifacts b where b.project_id = p_project and b.type = p_type)
+  ) then
+    raise exception 'complete_stage_artifact: the newest % is already approved; a new version needs Feedback or a change request', p_type;
+  end if;
+  update public.artifacts set status = 'superseded'
+   where project_id = p_project and type = p_type and status = 'draft';
+  insert into public.artifacts (project_id, type, version, status, content)
+  values (
+    p_project, p_type,
+    coalesce((select max(version) from public.artifacts where project_id = p_project and type = p_type), 0) + 1,
+    'draft', p_content || jsonb_build_object('model', p_model)
+  )
+  returning id into art;
+  return art;
+end;
+$$;
+revoke all on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text) from public, anon, authenticated, service_role;
+grant execute on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- Row-level security

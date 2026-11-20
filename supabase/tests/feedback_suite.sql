@@ -104,7 +104,9 @@ select t.adv('round: the third loop on a round is allowed', t.proj('build_rounds
 select t.adv('round: loops on another round do not count', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1,1,'approved')||';'||t.fbrows('round_summary',3,1)||';'||t.rnd(2,'in_review')||';'||t.rs(2,2), :'O', 'authenticated', t.fbr('round_summary',1,2), 'ok');
 
 \echo '### runs'
-select t.adv('without an agent for the stage feedback queues no run', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', t.fb('plan'), 'ok', t.runs(0));
+create function t.agent_off() returns text language sql as
+$$ select 'create or replace function private.stage_has_agent(p_stage public.stage) returns boolean language sql immutable set search_path = '''' as $f$ select false $f$' $$;
+select t.adv('without an agent for the stage feedback queues no run', t.proj('plan')||';'||t.art('plan')||';'||t.agent_off(), :'O', 'authenticated', t.fb('plan'), 'ok', t.runs(0));
 select t.adv('with an agent for the stage feedback queues a run for the stage', t.proj('plan')||';'||t.art('plan')||';'||t.agent_on(), :'O', 'authenticated', t.fb('plan'), 'ok',
   t.runs(1)||' and (select stage::text from stage_runs where project_id='''||:'CP'||''')=''plan''');
 select t.adv('a run already queued is not doubled', t.proj('plan')||';'||t.art('plan')||';'||t.agent_on()||';insert into stage_runs(project_id,stage) values ('''||:'CP'||''',''plan'')', :'O', 'authenticated', t.fb('plan'), 'ok', t.runs(1)||' and '||t.fbcount(1));

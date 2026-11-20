@@ -1090,6 +1090,17 @@ export type Database = {
         };
         Returns: string;
       };
+      complete_stage_artifact: {
+        Args: {
+          p_content: Json;
+          p_model: string;
+          p_project: string;
+          p_run: string;
+          p_type: Database['public']['Enums']['artifact_type'];
+          p_worker: string;
+        };
+        Returns: string;
+      };
       end_run: { Args: { p_run: string }; Returns: undefined };
       enqueue_run: {
         Args: { p_project: string; p_stage: Database['public']['Enums']['stage'] };
