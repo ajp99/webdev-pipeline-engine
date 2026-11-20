@@ -37,7 +37,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P2-T06 Owner intake review and notes**  
   Acceptance: The owner sees the full intake record and gap list. The owner can edit client answers (an edit overwrites the answer, with no history), send a round back to the agent for another review, add or remove questions, keep private notes (owner-only table) that agents read, and accept intake (soft gate). Reject marks the version and starts no run; Feedback is capped at 3 loops, after which only Accept or Reject is available (D-234).
 
-- [ ] **P2-T07 Requirements agent produces the PRD**  
+- [x] **P2-T07 Requirements agent produces the PRD**  
   Acceptance: A plain API call with JSON-schema structured output (D-275). Produces the `prd` artifact (client-visible) as schema-validated JSON with a fixed list of sections, each a markdown string, rendered for the client and the editor, with the privacy policy and cookie notice in the page list and the contact form spam protection choice; no round plan. Also produces an owner-only `prd_notes` artifact with the gap and conflict list. Reads the owner's private notes and never quotes them in anything the client sees.
 
 - [ ] **P2-T08 PRD editor with version diff**  

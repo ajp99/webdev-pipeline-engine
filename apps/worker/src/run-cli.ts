@@ -15,6 +15,8 @@ import { defaultSelector } from './handlers';
 import { intakeReviewHandler, unconfiguredReviewHandler } from './intake-review';
 import { supabaseReviewDeps } from './intake-review-supabase';
 import { modelFromEnv } from './model';
+import { requirementsHandler } from './requirements';
+import { supabaseRequirementsDeps } from './requirements-supabase';
 import { DEFAULTS, startRunner } from './runner';
 import { supabaseRunnerDeps } from './runner-supabase';
 import { stubStageHandler } from './stage-stubs';
@@ -41,22 +43,26 @@ const fixedPoll = process.env.WORKER_POLL_SECONDS
   ? positive('WORKER_POLL_SECONDS', 15) * 1000
   : null;
 const worker = `${hostname()}-${process.pid}`;
-// The intake review needs a model (MODEL_PROVIDER in .env, D-316). Without one the worker still runs;
-// an intake run then fails with the reason, shown in the console's queue.
+// The intake review and the requirements agent need a model (MODEL_PROVIDER in .env, D-316). Without one
+// the worker still runs; such a run then fails with the reason, shown in the console's queue.
 let review;
+let requirements;
 try {
   const model = modelFromEnv(process.env);
   review = intakeReviewHandler(supabaseReviewDeps(admin), model);
-  console.log(`Intake review uses ${model.name}.`);
+  requirements = requirementsHandler(supabaseRequirementsDeps(admin), model);
+  console.log(`Intake review and requirements use ${model.name}.`);
 } catch (e) {
   const reason = e instanceof Error ? e.message : String(e);
-  console.log(`Intake review is off: ${reason}`);
+  console.log(`Intake review and requirements are off: ${reason}`);
   review = unconfiguredReviewHandler(reason);
+  requirements = unconfiguredReviewHandler(reason);
 }
 // The walking skeleton (P2-T23): stub stage agents, and the Builder on this computer with your Claude Code
 // login (no API key; sign in once with `claude`). The preview is a local dev server.
 const stubDeps = supabaseStubDeps(admin);
 const skeleton = {
+  requirements,
   stubs: stubStageHandler(stubDeps),
   builder: builderHandler({
     loadApproved: stubDeps.loadApproved,
