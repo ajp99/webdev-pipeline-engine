@@ -69,8 +69,9 @@ create type upload_scan_status as enum ('pending', 'clean', 'infected');
 -- ---------------------------------------------------------------------------
 -- Owner identity (D-040)
 -- ---------------------------------------------------------------------------
--- The owner is recognized by membership in this table, not by a JWT claim. Rows are added with
--- the service role only; revoking access is a delete. A second owner would be a second row.
+-- The owner is recognized by membership in this table, not by a JWT claim. Rows are added by the
+-- service role or by an owner (the owner policy covers this table like the others); revoking access
+-- is a delete. A second owner would be a second row.
 create table owners (
   id uuid primary key references auth.users (id) on delete cascade,
   created_at timestamptz not null default now()
@@ -137,7 +138,8 @@ create table project_internal (
   round_plan jsonb,
   -- D-237: why the owner cancelled the project; required by the cancel function (P2-T20).
   cancel_reason text,
-  constraint cancel_reason_not_blank check (cancel_reason is null or length(btrim(cancel_reason)) > 0)
+  constraint cancel_reason_not_blank check (cancel_reason is null or cancel_reason !~ '^\s*$'),
+  constraint cancel_reason_length check (cancel_reason is null or length(cancel_reason) <= 2000)
 );
 
 create function private.create_project_internal() returns trigger
@@ -391,8 +393,11 @@ create table stage_runs (
   trace_id uuid not null default gen_random_uuid(),
   model text,
   prompt_hash text,
+  -- P2-T21, D-233: the owner ended a failed or stopped run (end_run); it stays as history, with no Retry.
+  ended_at timestamptz,
   -- D-082: one automatic retry, so at most 2 attempts.
   constraint attempts_limit check (attempts <= 2),
+  constraint run_ended_only_when_over check (ended_at is null or status in ('failed', 'stopped')),
   constraint model_not_blank check (model is null or length(btrim(model)) > 0),
   constraint prompt_hash_is_sha256 check (prompt_hash is null or prompt_hash ~ '^[0-9a-f]{64}$'),
   unique (id, trace_id)
@@ -1552,6 +1557,80 @@ end;
 $$;
 revoke all on function request_run_cancel(uuid) from public, anon, authenticated, service_role;
 grant execute on function request_run_cancel(uuid) to authenticated;
+
+-- End run (P2-T21, D-233): the owner closes a failed or stopped run for good. The run stays as history and
+-- the console offers no Retry for it. Nothing else changes: the stage, the project and other runs are untouched.
+create function end_run(p_run uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  r public.stage_runs%rowtype;
+begin
+  if not private.is_owner() then
+    raise exception 'end_run: not allowed';
+  end if;
+  select * into r from public.stage_runs where id = p_run for update;
+  if not found then
+    raise exception 'end_run: run not found';
+  end if;
+  if r.status not in ('failed', 'stopped') then
+    raise exception 'end_run: only a failed or stopped run can be ended, this one is %', r.status;
+  end if;
+  if r.ended_at is not null then
+    raise exception 'end_run: the run is already ended';
+  end if;
+  update public.stage_runs set ended_at = now() where id = r.id;
+end;
+$$;
+revoke all on function end_run(uuid) from public, anon, authenticated, service_role;
+grant execute on function end_run(uuid) to authenticated;
+
+-- Cancel project (P2-T20, D-237, D-301, D-303): the owner cancels an active or paused project at any stage
+-- before handover, with a reason (the console asks for the project's name as a typed confirmation). The stage
+-- stays where it was and all data is kept. Queued runs become cancelled at once; running and waiting runs
+-- become cancel_requested, which the worker sees at its next heartbeat and stops. Then the project is closed
+-- as cancelled through the one close function. There is no retention date until go-live (G17). Owner only.
+create function cancel_project(p_project uuid, p_reason text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  v   public.projects%rowtype;
+  -- Trimmed of spaces, tabs and line breaks, so a reason of only white space is empty.
+  why text := regexp_replace(coalesce(p_reason, ''), '^\s+|\s+$', '', 'g');
+begin
+  if not private.is_owner() then
+    raise exception 'cancel_project: not allowed';
+  end if;
+  if why = '' then
+    raise exception 'cancel_project: write the reason first';
+  end if;
+  if length(why) > 2000 then
+    raise exception 'cancel_project: the reason has at most 2000 characters';
+  end if;
+  select * into v from public.projects where id = p_project for update;
+  if not found then
+    raise exception 'cancel_project: project not found';
+  end if;
+  if v.status = 'closed' then
+    raise exception 'cancel_project: the project is already closed';
+  end if;
+  if v.stage in ('handover', 'closed') then
+    raise exception 'cancel_project: the project is at handover; it ends through the handover gate';
+  end if;
+  update public.project_internal set cancel_reason = why where project_id = p_project;
+  if not found then
+    raise exception 'cancel_project: the project has no internal row';
+  end if;
+  -- One statement, so a run that a worker re-queues at the same moment is seen again by its row recheck
+  -- and cannot stay queued on a closed project.
+  update public.stage_runs
+     set status = case when status = 'queued' then 'cancelled'::public.run_status
+                       else 'cancel_requested'::public.run_status end,
+         finished_at = case when status = 'queued' then now() else finished_at end
+   where project_id = p_project and status in ('queued', 'running', 'waiting');
+  perform private.close_project(p_project, 'cancelled');
+end;
+$$;
+revoke all on function cancel_project(uuid, text) from public, anon, authenticated, service_role;
+grant execute on function cancel_project(uuid, text) to authenticated;
 
 -- The intake agent's review of a submitted round (P2-T05, D-077, D-079, D-006, D-275). The worker calls it
 -- once, with the model's checked reply, and in one transaction it writes the review as the next immutable

@@ -4,6 +4,7 @@ import { AutoRefresh } from '@/components/AutoRefresh';
 import { requireRole } from '@/lib/auth';
 import {
   canCancel,
+  canEnd,
   canRetry,
   durationLabel,
   isActive,
@@ -12,7 +13,7 @@ import {
   timeline,
 } from '@/lib/runs';
 import { createClient } from '@/lib/supabase/server';
-import { cancelRun, retryRun } from '../actions';
+import { cancelRun, endRun, retryRun } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,7 @@ export default async function RunDetail({
   const run = await supabase
     .from('stage_runs')
     .select(
-      'id, stage, status, attempts, queued_at, started_at, finished_at, tokens_used, model, trace_id, project_id, projects(name, stage, status)',
+      'id, stage, status, attempts, queued_at, started_at, finished_at, ended_at, tokens_used, model, trace_id, project_id, projects(name, stage, status)',
     )
     .eq('id', id)
     .maybeSingle();
@@ -76,6 +77,7 @@ export default async function RunDetail({
     queuedAt: r.queued_at,
     startedAt: r.started_at,
     finishedAt: r.finished_at,
+    endedAt: r.ended_at,
     status: r.status,
   });
   const project = r.projects;
@@ -92,7 +94,9 @@ export default async function RunDetail({
       </p>
       <h1 className="mt-2 text-xl font-semibold">
         {project?.name ?? '(unknown project)'}: {r.stage.replace('_', ' ')}{' '}
-        <span className="text-base font-normal text-neutral-600">{statusLabel(r.status)}</span>
+        <span className="text-base font-normal text-neutral-600">
+          {statusLabel(r.status, r.ended_at)}
+        </span>
         {r.model === 'stub' ? <span className="ml-2 text-xs text-neutral-500">(stub)</span> : null}
       </h1>
       {notice ? (
@@ -117,7 +121,7 @@ export default async function RunDetail({
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        {canRetry(r.status) ? (
+        {canRetry(r.status, r.ended_at) ? (
           <form action={retryRun}>
             <input type="hidden" name="runId" value={r.id} />
             <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-sm text-white">
@@ -133,7 +137,15 @@ export default async function RunDetail({
             </button>
           </form>
         ) : null}
-        {canRetry(r.status) ? (
+        {canEnd(r.status, r.ended_at) ? (
+          <form action={endRun}>
+            <input type="hidden" name="runId" value={r.id} />
+            <button type="submit" className="rounded border border-neutral-400 px-4 py-2 text-sm">
+              End run
+            </button>
+          </form>
+        ) : null}
+        {canRetry(r.status, r.ended_at) ? (
           <span className="text-sm text-neutral-600">
             {later
               ? `The project is now in ${project.stage.replace('_', ' ')}, so this stage cannot be run again.`

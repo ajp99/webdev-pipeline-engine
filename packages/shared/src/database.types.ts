@@ -929,6 +929,7 @@ export type Database = {
         Row: {
           attempts: number;
           claimed_by: string | null;
+          ended_at: string | null;
           finished_at: string | null;
           heartbeat_at: string | null;
           id: string;
@@ -946,6 +947,7 @@ export type Database = {
         Insert: {
           attempts?: number;
           claimed_by?: string | null;
+          ended_at?: string | null;
           finished_at?: string | null;
           heartbeat_at?: string | null;
           id?: string;
@@ -962,6 +964,7 @@ export type Database = {
         Update: {
           attempts?: number;
           claimed_by?: string | null;
+          ended_at?: string | null;
           finished_at?: string | null;
           heartbeat_at?: string | null;
           id?: string;
@@ -1049,11 +1052,13 @@ export type Database = {
         Args: { p_next: Database['public']['Enums']['stage']; p_project: string };
         Returns: undefined;
       };
+      cancel_project: { Args: { p_project: string; p_reason: string }; Returns: undefined };
       claim_run: {
         Args: { p_worker: string };
         Returns: {
           attempts: number;
           claimed_by: string | null;
+          ended_at: string | null;
           finished_at: string | null;
           heartbeat_at: string | null;
           id: string;
@@ -1085,6 +1090,7 @@ export type Database = {
         };
         Returns: string;
       };
+      end_run: { Args: { p_run: string }; Returns: undefined };
       enqueue_run: {
         Args: { p_project: string; p_stage: Database['public']['Enums']['stage'] };
         Returns: string;

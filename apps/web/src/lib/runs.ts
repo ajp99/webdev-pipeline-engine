@@ -10,6 +10,8 @@ export type RunRowData = {
   finishedAt: string | null;
   tokensUsed: number;
   model: string | null;
+  /** When the owner ended a failed or stopped run (End run); null otherwise. */
+  endedAt?: string | null;
 };
 
 export const ACTIVE_STATUSES = ['running', 'waiting', 'cancel_requested'] as const;
@@ -33,8 +35,9 @@ const LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
   stopped: 'Stopped (no activity)',
 };
-export function statusLabel(status: string): string {
-  return LABELS[status] ?? status;
+export function statusLabel(status: string, endedAt: string | null = null): string {
+  const label = LABELS[status] ?? status;
+  return endedAt ? `${label}, ended` : label;
 }
 
 export function durationLabel(
@@ -50,9 +53,18 @@ export function durationLabel(
   return m < 60 ? `${m} min ${s % 60} s` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
-/** A run that ended without finishing its work can be run again: a new queued run for the same stage. */
-export function canRetry(status: string): boolean {
+/**
+ * A run that stopped without finishing its work can be run again: a new queued run for the same stage.
+ * Not once the owner has ended it (End run).
+ */
+export function canRetry(status: string, endedAt: string | null = null): boolean {
+  if (endedAt) return false;
   return status === 'failed' || status === 'stopped' || status === 'cancelled';
+}
+
+/** End run closes a failed or stopped run for good (the database refuses the rest). */
+export function canEnd(status: string, endedAt: string | null = null): boolean {
+  return !endedAt && (status === 'failed' || status === 'stopped');
 }
 
 export const LOG_PAGE_SIZE = 100;
@@ -77,10 +89,12 @@ export function timeline(run: {
   queuedAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  endedAt?: string | null;
   status: string;
 }): TimelineStep[] {
   const steps: TimelineStep[] = [{ label: 'Queued', at: run.queuedAt }];
   if (run.startedAt) steps.push({ label: 'Started', at: run.startedAt });
   if (run.finishedAt) steps.push({ label: statusLabel(run.status), at: run.finishedAt });
+  if (run.endedAt) steps.push({ label: 'Ended by you', at: run.endedAt });
   return steps;
 }

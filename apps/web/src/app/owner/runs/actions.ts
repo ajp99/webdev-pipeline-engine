@@ -32,7 +32,7 @@ export async function retryRun(formData: FormData) {
   const supabase = await createClient();
   const run = await supabase
     .from('stage_runs')
-    .select('project_id, stage, status')
+    .select('project_id, stage, status, ended_at')
     .eq('id', runId)
     .maybeSingle();
   if (run.error) throw new Error(run.error.message);
@@ -41,6 +41,7 @@ export async function retryRun(formData: FormData) {
     redirect(`/owner/runs/${id}?${key}=${encodeURIComponent(text)}`);
   };
   if (!run.data) return back('error', 'That run no longer exists.');
+  if (run.data.ended_at) return back('error', 'You ended this run, so it cannot be retried.');
   if (!canRetry(run.data.status))
     return back('error', 'Only a failed, stopped or cancelled run can be retried.');
   const queued = await supabase.rpc('enqueue_run', {
@@ -49,4 +50,17 @@ export async function retryRun(formData: FormData) {
   });
   if (queued.error) return back('error', queued.error.message);
   return back('notice', 'Retry queued. The runner picks it up.', queued.data);
+}
+
+/** End run: close a failed or stopped run for good. It stays as history and gets no Retry (D-233). */
+export async function endRun(formData: FormData) {
+  const runId = String(formData.get('runId') ?? '');
+  await requireRole('owner', `/owner/runs/${runId}`);
+  const supabase = await createClient();
+  const ended = await supabase.rpc('end_run', { p_run: runId });
+  revalidatePath('/owner', 'layout');
+  const msg = ended.error
+    ? `error=${encodeURIComponent(ended.error.message)}`
+    : `notice=${encodeURIComponent('Run ended. It stays in the list as history.')}`;
+  redirect(`/owner/runs/${runId}?${msg}`);
 }

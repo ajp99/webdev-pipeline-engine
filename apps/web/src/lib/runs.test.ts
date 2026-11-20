@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canCancel,
+  canEnd,
   canRetry,
   durationLabel,
   isActive,
@@ -80,5 +81,35 @@ describe('timeline', () => {
       { label: 'Started', at: 'b' },
       { label: 'Failed', at: 'c' },
     ]);
+  });
+});
+
+describe('End run (P2-T21)', () => {
+  it('can end a failed or stopped run that is not ended yet', () => {
+    expect(canEnd('failed')).toBe(true);
+    expect(canEnd('stopped')).toBe(true);
+    expect(canEnd('failed', '2026-11-17T10:00:00Z')).toBe(false);
+  });
+  it('cannot end a run that succeeded, was cancelled or is still going', () => {
+    for (const s of ['queued', 'running', 'waiting', 'cancel_requested', 'succeeded', 'cancelled'])
+      expect(canEnd(s)).toBe(false);
+  });
+  it('offers no Retry once the run is ended', () => {
+    expect(canRetry('failed', '2026-11-17T10:00:00Z')).toBe(false);
+    expect(canRetry('stopped', '2026-11-17T10:00:00Z')).toBe(false);
+    expect(canRetry('failed', null)).toBe(true);
+  });
+  it('says so in the label and the timeline', () => {
+    expect(statusLabel('failed', '2026-11-17T10:00:00Z')).toBe('Failed, ended');
+    expect(statusLabel('failed')).toBe('Failed');
+    expect(
+      timeline({
+        queuedAt: 'a',
+        startedAt: 'b',
+        finishedAt: 'c',
+        endedAt: 'd',
+        status: 'failed',
+      }).at(-1),
+    ).toEqual({ label: 'Ended by you', at: 'd' });
   });
 });

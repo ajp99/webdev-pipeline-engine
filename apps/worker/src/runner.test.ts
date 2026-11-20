@@ -23,6 +23,7 @@ const run = (over: Partial<Run> = {}): Run => ({
   tokens_used: 0,
   started_at: null,
   finished_at: null,
+  ended_at: null,
   trace_id: 't1',
   model: null,
   prompt_hash: null,

@@ -38,4 +38,3 @@ Development is dev-only until go-live (D-263): a local Supabase, no hosted proje
 ## Open questions
 
 - The exact point of the pilot, decided when the walking skeleton is reviewed (task P2-T23).
-- Small drift still open: the comment on `owners` says rows are added with the service role only, but the owner policy can write them (a migration comment, fix in the next migration PR).

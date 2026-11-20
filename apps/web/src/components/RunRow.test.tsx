@@ -28,6 +28,9 @@ const html = (over: Partial<RunRowData> = {}) =>
   );
 
 describe('RunRow', () => {
+  it('shows that an ended run is ended', () => {
+    expect(html({ status: 'failed', endedAt: '2026-10-21T12:05:00Z' })).toContain('Failed, ended');
+  });
   it('links to the run detail page', () => {
     expect(html()).toContain('href="/owner/runs/r1"');
   });

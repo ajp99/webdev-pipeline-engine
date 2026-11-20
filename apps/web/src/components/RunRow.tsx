@@ -27,7 +27,7 @@ export function RunRow({ run, now }: { run: RunRowData; now: Date }) {
         <span
           className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[run.status] ?? ''}`}
         >
-          {statusLabel(run.status)}
+          {statusLabel(run.status, run.endedAt ?? null)}
         </span>
       </td>
       <td>{run.attempts}</td>
