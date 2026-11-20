@@ -132,10 +132,15 @@ jobs:
       - run: pnpm build
       - name: Lighthouse on the built site
         run: |
-          MAIL_TRANSPORT=stub pnpm start -p 3000 > /tmp/starter.log 2>&1 &
+          MAIL_TRANSPORT=stub MAIL_TRANSPORT_ALLOW_STUB=1 pnpm start -p 3000 > /tmp/starter.log 2>&1 &
           for _ in $(seq 1 30); do curl -fs http://localhost:3000/ >/dev/null && break; sleep 1; done
+          # Three runs per page and the median per category: single runs on shared runners are noisy.
           for path in / /about; do
-            npx -y lighthouse@12 "http://localhost:3000$path" --quiet --chrome-flags="--headless=new --no-sandbox" \
-              --output=json --output-path=/tmp/lh.json
-            node scripts/lighthouse-check.mjs /tmp/lh.json 0.8
+            name=$(echo "$path" | tr -c 'a-z\n' '_')
+            for i in 1 2 3; do
+              npx -y lighthouse@12 "http://localhost:3000$path" --quiet --chrome-flags="--headless=new --no-sandbox" \
+                --output=json --output-path="/tmp/lh$name$i.json"
+            done
+            echo "Lighthouse $path"
+            node scripts/lighthouse-check.mjs 0.8 /tmp/lh"$name"{1,2,3}.json
           done
