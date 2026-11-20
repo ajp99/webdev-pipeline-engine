@@ -84,6 +84,12 @@ export default async function StagePage({
         <Link href="/owner/queue" className="text-sm underline">
           Approval queue
         </Link>
+        <Link href={`/owner/projects/${id}/prd`} className="text-sm underline">
+          PRD
+        </Link>
+        <Link href={`/owner/projects/${id}/changes`} className="text-sm underline">
+          Change requests
+        </Link>
       </div>
       {notice ? <p className="mt-3 rounded bg-emerald-50 p-3 text-sm">{notice}</p> : null}
       {error ? <p className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
