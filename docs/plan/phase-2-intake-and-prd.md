@@ -90,7 +90,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P2-T23 Walking skeleton (end of 2a)**  
   Acceptance (D-290): one fictional client goes through template, intake, a stub PRD and a single-page build with a preview, using the real worker, the Builder on the host (D-310) and the database; the Agent SDK session resume is tried here and used only if it works (D-280). The owner reviews it and decides when the pilot moves earlier than the end of Phase 5. Recorded in `PROGRESS.md`.
 
-- [ ] **P2-T24 Approval metrics in the console**  
+- [x] **P2-T24 Approval metrics in the console**  
   Acceptance (D-293): the console shows time to decision per gate and Feedback loops per artifact, computed from existing timestamps, with a test on fixture data.
 
 ## Gate
