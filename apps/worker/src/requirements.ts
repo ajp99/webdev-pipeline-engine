@@ -12,6 +12,7 @@ import {
 } from '@wpe/shared';
 import type { Handler } from './runner';
 import { generateChecked, type ModelClient } from './model';
+import { promptHash } from './prompt-hash';
 
 export interface RequirementsDeps {
   /** What the agent reads, or null when there is nothing to draft (the stage moved on). */
@@ -24,6 +25,7 @@ export interface RequirementsDeps {
     content: PrdContent;
     notes: PrdNotes;
     model: string;
+    promptHash?: string;
   }): Promise<void>;
 }
 
@@ -51,6 +53,7 @@ export function requirementsHandler(deps: RequirementsDeps, model: ModelClient):
       content: value.content,
       notes: value.notes,
       model: model.name,
+      promptHash: promptHash(system, REQUIREMENTS_JSON_SCHEMA),
     });
     log(
       'info',

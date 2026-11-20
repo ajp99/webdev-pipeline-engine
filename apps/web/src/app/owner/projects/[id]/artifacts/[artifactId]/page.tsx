@@ -25,6 +25,25 @@ export default async function ArtifactPage({
   if (!art.data) notFound();
   const a = art.data;
   const sections = artifactSections(a.content);
+  // P3-T12: the reference-site screenshots the Planner run took, shown with the plan (private, short-lived links).
+  let shots: { path: string; url: string }[] = [];
+  if (a.type === 'plan') {
+    const rows = await supabase
+      .from('uploads')
+      .select('storage_path')
+      .eq('project_id', id)
+      .eq('kind', 'reference_screenshot')
+      .order('storage_path');
+    if (rows.error) throw new Error(rows.error.message);
+    const paths = (rows.data ?? []).map((r) => r.storage_path);
+    if (paths.length) {
+      const signed = await supabase.storage.from('intake-uploads').createSignedUrls(paths, 600);
+      if (signed.error) throw new Error(signed.error.message);
+      shots = (signed.data ?? []).flatMap((s) =>
+        s.signedUrl && s.path ? [{ path: s.path, url: s.signedUrl }] : [],
+      );
+    }
+  }
   const model = (a.content as { model?: unknown } | null)?.model;
   return (
     <main className="mx-auto max-w-3xl p-6">
@@ -56,6 +75,31 @@ export default async function ArtifactPage({
           {JSON.stringify(a.content, null, 2)}
         </pre>
       )}
+      {shots.length ? (
+        <section className="mt-8">
+          <h2 className="font-medium">Reference sites the client listed</h2>
+          <div className="mt-2 grid gap-4 sm:grid-cols-2">
+            {shots.map((s) => (
+              <figure key={s.path}>
+                {/* Signed URL to a private object: next/image would need the storage host configured. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={s.url}
+                  alt={`Screenshot of ${s.path
+                    .split('-')
+                    .slice(1)
+                    .join('-')
+                    .replace(/\.jpg$/, '')}`}
+                  className="w-full rounded border"
+                />
+                <figcaption className="mt-1 text-xs text-neutral-500">
+                  {s.path.split('/').pop()}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

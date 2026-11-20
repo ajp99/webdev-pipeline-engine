@@ -34,7 +34,7 @@ export function defaultSelector(
   /** The intake review (P2-T05); without it an intake run fails with the reason. */
   review?: Handler,
   /** The stage handlers: the requirements agent (P2-T07), the stub stages (P2-T23) and the Builder. */
-  skeleton: { requirements?: Handler; stubs?: Handler; builder?: Handler } = {},
+  skeleton: { requirements?: Handler; planner?: Handler; stubs?: Handler; builder?: Handler } = {},
 ): HandlerSelector {
   // About 60 seconds by default, so there is time to press Cancel in the console.
   const stub = stubHandler({
@@ -45,7 +45,8 @@ export function defaultSelector(
     if (run.model === 'stub') return stub;
     if (run.stage === 'intake') return review;
     if (run.stage === 'requirements') return skeleton.requirements ?? skeleton.stubs;
-    if (run.stage === 'plan' || run.stage === 'prototype') return skeleton.stubs;
+    if (run.stage === 'plan') return skeleton.planner ?? skeleton.stubs;
+    if (run.stage === 'prototype') return skeleton.stubs;
     if (run.stage === 'build_rounds') return skeleton.builder;
     return undefined;
   };

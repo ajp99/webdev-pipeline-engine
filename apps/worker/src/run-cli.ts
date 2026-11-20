@@ -18,6 +18,11 @@ import { supabaseReviewDeps } from './intake-review-supabase';
 import { modelFromEnv } from './model';
 import { requirementsHandler } from './requirements';
 import { supabaseRequirementsDeps } from './requirements-supabase';
+import { plannerHandler } from './planner';
+import { supabasePlannerDeps } from './planner-supabase';
+import { takeShots } from './reference-shots';
+import { playwrightBrowser } from './reference-shots-browser';
+import { storeShots } from './reference-shots-supabase';
 import { scanSkills, syncRegistry, withSkillSync } from './skills';
 import { supabaseRegistryDeps } from './skills-supabase';
 import { DEFAULTS, startRunner } from './runner';
@@ -50,22 +55,41 @@ const worker = `${hostname()}-${process.pid}`;
 // the worker still runs; such a run then fails with the reason, shown in the console's queue.
 let review;
 let requirements;
+let planner;
 try {
   const model = modelFromEnv(process.env);
   review = intakeReviewHandler(supabaseReviewDeps(admin), model);
   requirements = requirementsHandler(supabaseRequirementsDeps(admin), model);
+  planner = plannerHandler(
+    {
+      ...supabasePlannerDeps(admin, () => ({
+        skills: scanSkills(skillsRoot),
+        library: () => supabaseRegistryDeps(admin).listLibrary(),
+      })),
+      // P3-T12: fresh reference-site screenshots for the owner before each plan.
+      async captureReferences(projectId, urls) {
+        const shots = await takeShots(urls, await playwrightBrowser());
+        const stored = await storeShots(admin, projectId, shots);
+        const refused = shots.flatMap((s) => (s.ok ? [] : [`${s.url} (${s.reason})`]));
+        return `reference screenshots: ${stored.length} stored${refused.length ? `; refused ${refused.join(', ')}` : ''}`;
+      },
+    },
+    model,
+  );
   console.log(`Intake review and requirements use ${model.name}.`);
 } catch (e) {
   const reason = e instanceof Error ? e.message : String(e);
   console.log(`Intake review and requirements are off: ${reason}`);
   review = unconfiguredReviewHandler(reason);
   requirements = unconfiguredReviewHandler(`the requirements agent is off: ${reason}`);
+  planner = unconfiguredReviewHandler(`the Planner is off: ${reason}`);
 }
 // The walking skeleton (P2-T23): stub stage agents, and the Builder on this computer with your Claude Code
 // login (no API key; sign in once with `claude`). The preview is a local dev server.
 const stubDeps = supabaseStubDeps(admin);
 const skeleton = {
   requirements,
+  planner,
   stubs: stubStageHandler(stubDeps),
   builder: builderHandler({
     loadApproved: stubDeps.loadApproved,
