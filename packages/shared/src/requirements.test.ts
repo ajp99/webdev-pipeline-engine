@@ -35,6 +35,7 @@ const input = (over: Partial<RequirementsInput> = {}): RequirementsInput => ({
   review: { summary: 'Mostly complete.', gaps: ['No budget'] },
   ownerNotes: ['The client is slow to pay invoices so keep the scope very small please'],
   previous: null,
+  ownerFeedback: [],
   ...over,
 });
 
@@ -82,10 +83,19 @@ describe('buildRequirementsPrompt', () => {
     expect(system).toContain('Revise it');
     expect(user).toContain('<previous_prd>');
   });
+  it('passes the owner Feedback as data and asks the revision to apply it', () => {
+    const { system, user } = buildRequirementsPrompt(
+      input({ ownerFeedback: ['Add a Saturday hours line'] }),
+    );
+    expect(system).toContain('Apply it');
+    expect(user).toContain('<owner_feedback>');
+    expect(user).toContain('Add a Saturday hours line');
+  });
   it('leaves out empty blocks', () => {
     const { user } = buildRequirementsPrompt(input({ ownerNotes: [], review: null }));
     expect(user).not.toContain('<owner_notes>');
     expect(user).not.toContain('<intake_review>');
+    expect(user).not.toContain('<owner_feedback>');
   });
 });
 

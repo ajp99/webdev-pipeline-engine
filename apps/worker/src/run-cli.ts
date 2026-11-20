@@ -56,7 +56,7 @@ try {
   const reason = e instanceof Error ? e.message : String(e);
   console.log(`Intake review and requirements are off: ${reason}`);
   review = unconfiguredReviewHandler(reason);
-  requirements = unconfiguredReviewHandler(reason);
+  requirements = unconfiguredReviewHandler(`the requirements agent is off: ${reason}`);
 }
 // The walking skeleton (P2-T23): stub stage agents, and the Builder on this computer with your Claude Code
 // login (no API key; sign in once with `claude`). The preview is a local dev server.

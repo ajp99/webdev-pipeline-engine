@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { feedbackLoops, gateTimings } from '@wpe/shared';
 import { requireRole } from '@/lib/auth';
+import { fetchAll } from '@/lib/fetch-all';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -11,26 +12,34 @@ export default async function MetricsPage() {
   await requireRole('owner', '/owner/metrics');
   const supabase = await createClient();
   const [projects, artifacts, approvals, feedback, clientFeedback] = await Promise.all([
-    supabase.from('projects').select('id, name'),
-    supabase.from('artifacts').select('id, project_id, type, version, created_at'),
-    supabase.from('approvals').select('artifact_id, gate_type, role, at'),
-    supabase.from('gate_feedback').select('artifact_id'),
-    supabase.from('prd_feedback').select('artifact_id'),
+    fetchAll((f, t) => supabase.from('projects').select('id, name').order('id').range(f, t)),
+    fetchAll((f, t) =>
+      supabase
+        .from('artifacts')
+        .select('id, project_id, type, version, created_at')
+        .order('id')
+        .range(f, t),
+    ),
+    fetchAll((f, t) =>
+      supabase.from('approvals').select('artifact_id, gate_type, role, at').order('id').range(f, t),
+    ),
+    fetchAll((f, t) =>
+      supabase.from('gate_feedback').select('artifact_id').order('id').range(f, t),
+    ),
+    fetchAll((f, t) => supabase.from('prd_feedback').select('artifact_id').order('id').range(f, t)),
   ]);
-  for (const r of [projects, artifacts, approvals, feedback, clientFeedback])
-    if (r.error) throw new Error(r.error.message);
-  const timings = gateTimings(artifacts.data ?? [], approvals.data ?? []);
-  const loops = feedbackLoops(artifacts.data ?? [], [
-    ...(feedback.data ?? []).map((f) => ({
+  const timings = gateTimings(artifacts, approvals);
+  const loops = feedbackLoops(artifacts, [
+    ...feedback.map((f) => ({
       artifact_id: f.artifact_id,
       source: 'feedback' as const,
     })),
-    ...(clientFeedback.data ?? []).map((f) => ({
+    ...clientFeedback.map((f) => ({
       artifact_id: f.artifact_id,
       source: 'client' as const,
     })),
   ]);
-  const name = new Map((projects.data ?? []).map((p) => [p.id, p.name]));
+  const name = new Map(projects.map((p) => [p.id, p.name]));
 
   return (
     <main className="mx-auto max-w-4xl p-6">
