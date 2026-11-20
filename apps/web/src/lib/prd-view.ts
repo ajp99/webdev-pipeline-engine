@@ -79,7 +79,8 @@ export function versionList(rows: PrdVersionRow[], signed: number | null) {
 
 /** The summary the editor starts with: the changed sections, for the owner to turn into a sentence (D-324). */
 export function defaultSummary(before: PrdContent | null, after: PrdContent): string {
-  if (!before) return 'First version written by the owner.';
+  // The first version: the owner writes the summary (it goes to the client), nothing is prefilled.
+  if (!before) return '';
   const changed: string[] = changedSections(before, after).map(
     (k) => PRD_SECTIONS.find((s) => s.key === k)!.title,
   );
