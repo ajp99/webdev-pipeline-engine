@@ -31,10 +31,10 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
   Acceptance (D-302): `run(stage, project)` returns a result and the next gate. An approval enqueues the next `stage_runs` row. The runner polls every 15 to 30 seconds and claims a run through one database function that uses `FOR UPDATE SKIP LOCKED`, skips any project that already has a running or waiting run, and marks the run running in the same statement; the partial unique index stays as the backstop. The runner refreshes `heartbeat_at`, and a stale heartbeat (10 minutes) re-queues the run, or marks it `cancelled` when it was `cancel_requested` (D-305). `WORKER_MAX_PARALLEL_PROJECTS` defaults to 1. A failed run is retried once automatically (at most 2 attempts), then fails to the owner's queue. One no-progress watchdog of 20 minutes stops a run that shows no sign of life (streamed output, tool call, file write, commit or command output line); per-stage tiers return when real runs show the need (G16). A stub run (a fake stage with a trivial task on the host) goes through claim, heartbeat, cancel and a stub result before P2-T03 starts.
   Status note (2026-10-21): the queue functions, runner, stub run and Cancel are built. The owner chose one `enqueue_run` function; calling it from an approval is part of `accept_gate` in P2-T18, and the next gate comes from the gate function there. The live stub run on the owner's machine is open.
 
-- [ ] **P2-T05 Intake agent batch review**  
+- [x] **P2-T05 Intake agent batch review**  
   Acceptance: A plain API call with JSON-schema structured output, not an Agent SDK run (D-275). After the owner submits a round, the agent (Haiku 4.5 to start; in development Gemini Flash on the free tier, D-316) reviews the whole round in one batch and lists at most 8 targeted follow-up questions, then marks the round reviewed (locked). The owner relays the questions to the client and enters the answers as the next round (D-304). Cap of 3 follow-up rounds; after that it flags remaining gaps to the owner. It produces a gap list for the owner. Runs under the watchdog in P2-T04.
 
-- [ ] **P2-T06 Owner intake review and notes**  
+- [x] **P2-T06 Owner intake review and notes**  
   Acceptance: The owner sees the full intake record and gap list. The owner can edit client answers (an edit overwrites the answer, with no history), send a round back to the agent for another review, add or remove questions, keep private notes (owner-only table) that agents read, and accept intake (soft gate). Reject marks the version and starts no run; Feedback is capped at 3 loops, after which only Accept or Reject is available (D-234).
 
 - [ ] **P2-T07 Requirements agent produces the PRD**  
@@ -78,10 +78,10 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P2-T19 Gate controls in the console**  
   Acceptance: Reject marks the version rejected, keeps the stage open and starts no run. Feedback works at every gate stage, on drafts, and is capped at 3 loops on intake review, PRD, plan, deployment preparation and handover guide; after the cap only Accept or Reject is shown. The prototype (2), build rounds (3) and QC (2) keep their caps. After a client approval or the last round approval the project shows "Ready to advance" (D-234).
 
-- [ ] **P2-T20 Cancel project (migration, own PR) (cancel only, D-301)**  
+- [x] **P2-T20 Cancel project (migration, own PR) (cancel only, D-301)**  
   Acceptance: A database function cancels a project from any stage before handover (`close_reason = cancelled`). `cancel_project(project, reason)` refuses an empty reason (stored in `project_internal.cancel_reason`), leaves the stage where it was, marks queued runs `cancelled` and sets running runs to `cancel_requested`; the worker checks the status between turns, aborts the run, and marks it `cancelled`. There is no commands table, no retention timer and no `retention_until` in this phase (D-303, G17). The console has a Cancel button with a typed confirmation. Cancelling stops the project's runs and keeps its data (D-237).
 
-- [ ] **P2-T21 Run controls in the console (retry and cancel only, D-301)**  
+- [x] **P2-T21 Run controls in the console (retry and cancel only, D-301)**  
   Acceptance: Retry creates a new queued run for the same project and stage with fresh attempts and keeps the old run as history. Cancel stops the run through the `cancel_requested` flag of P2-T20 and keeps the working folder, the branch and any open pull request. A failed or stopped run opens a detail view with the reason and timeline and the last log lines, with Rerun from scratch and End run (D-233). Pause, Resume, parked runs and the commands table (D-249) are deferred (G16).
 
 - [ ] **P2-T22 Phase 2a gate evidence**  
