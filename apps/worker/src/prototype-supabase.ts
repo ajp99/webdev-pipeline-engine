@@ -38,7 +38,10 @@ export function assemblePrototypeInput(rows: PrototypeRows): PrototypeInput | nu
   if (!prd) throw new Error('there is no approved PRD to build the prototype from');
   if (planProblem(rows.plan) !== null)
     throw new Error('there is no approved plan to build the prototype from');
-  const { model: _drop, ...plan } = rows.plan as Plan & { model?: string };
+  // The stored plan may carry the model's name; the agent gets the plan itself.
+  const plan = Object.fromEntries(
+    Object.entries(rows.plan as Record<string, unknown>).filter(([k]) => k !== 'model'),
+  ) as Plan;
   const summary = (rows.newest?.content as { summary?: unknown } | null)?.summary;
   return {
     prd: {
