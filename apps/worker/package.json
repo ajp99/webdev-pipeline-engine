@@ -13,7 +13,8 @@
     "enqueue-stub": "tsx --env-file=.env src/enqueue-stub-cli.ts",
     "cost-report": "tsx --env-file=.env src/cost-report-cli.ts",
     "reference-shots": "tsx --env-file=.env src/reference-shots-cli.ts",
-    "eval:planner": "tsx --env-file=.env src/eval-planner-cli.ts"
+    "eval:planner": "tsx --env-file=.env src/eval-planner-cli.ts",
+    "provision": "tsx --env-file=.env src/provision-cli.ts"
   },
   "type": "module",
   "dependencies": {
