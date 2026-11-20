@@ -93,6 +93,9 @@ importers:
       '@wpe/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      playwright:
+        specifier: ^1.65.1
+        version: 1.65.1
     devDependencies:
       '@types/node':
         specifier: ^26.6.4
