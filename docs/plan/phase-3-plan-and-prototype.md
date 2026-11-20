@@ -20,22 +20,22 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P3-T02 Master starter**  
   Acceptance: One master Next.js + Tailwind starter in `templates/master-starter/` with: a library of section components (hero, features, testimonials, FAQ, call to action, contact); MDX for pages and posts and JSON for settings and navigation, with schema checks at build that give plain-language errors; a blog; a contact form route that sends over SMTP (generic SMTP, Google Workspace or Gmail app password, Microsoft 365 OAuth 2.0) with a stubbed transport for tests, a honeypot, a time check and a best-effort rate limit on every form, a failure screen showing the phone number and plain contact links, and optional extras (auto-reply, consent checkbox, attachments, Turnstile) added only when the PRD asks; privacy policy and cookie notice templates; SEO basics including Open Graph tags and JSON-LD (Organization or LocalBusiness) generated from the settings JSON; fonts from the Google Fonts catalog downloaded at build time and served from the site's own domain (`next/font`); subtle motion with reduced-motion preferences respected, no dark mode, mobile-first layouts and no analytics unless the PRD asks; a `<Claim>` marker component that renders normally; placeholder images with descriptive alt text, clearly marked. Lighthouse 80+ on the starter. Dependabot or Renovate opens weekly update pull requests on the starter (D-286).
 
-- [ ] **P3-T03 Planner agent**  
+- [x] **P3-T03 Planner agent**  
   Acceptance: Starts only after the fixtures and expected-output checks of P3-T10 exist (D-244). Produces the plan artifact: structured fields (rounds with scope, skills, dependencies, token budget) plus a markdown rationale per section, edited as text by the owner. Proposes the round count by the rule of thumb (5 pages or fewer and no blog is 2 rounds, otherwise 4; the owner can override), flags hard rounds for Opus 5.5, and proposes the token budget; the owner confirms these when approving the plan (soft gate). The plan includes a design brief section (palette, fonts, layout approach, references) built from the intake's design section and the reference-site screenshots. A plain API call with JSON-schema structured output (D-275); the model ID is pinned and `prompt_hash` is recorded (D-283).
 
 - [ ] **P3-T04 Prototype agent**  
   Acceptance: Builds one design of the main page from the plan, the intake design section, the brand inputs and the starter, with real copy drafted from the intake (every factual claim in a `<Claim>` marker). Commits it to the `staging` branch of the project's local git repository (until go-live, D-328; the push to GitHub with a short-lived App token is go-live item G33). The worker builds the site and serves it locally, then takes full-page desktop and mobile screenshots with Playwright (the owner installs the browser on their machine). No agent self-check; no live preview goes to the client.
 
-- [ ] **P3-T05 Two-step prototype approval (client step owner-recorded, D-298)**  
+- [x] **P3-T05 Two-step prototype approval (client step owner-recorded, D-298)**  
   Acceptance: The owner approves first (soft gate), after reviewing the screenshots and the local preview (the Vercel preview is go-live item G33, D-328). The owner then sends the screenshots to the client outside the pipeline and records the client's reply: Approve, or Request changes with a required note (client gate: role `client`, the owner as giver, a required `evidence_note`). Two approval records, the client's not earlier than the owner's.
 
-- [ ] **P3-T06 Prototype feedback**  
+- [x] **P3-T06 Prototype feedback**  
   Acceptance: One free-text feedback box per revision, stored as a prototype note. Notes reach the owner as raw text with the actions forward to the agent, convert to a change request, or dismiss.
 
-- [ ] **P3-T07 Revision cap**  
+- [x] **P3-T07 Revision cap**  
   Acceptance: At most 2 revision cycles. A cycle starts each time the owner sends feedback to the agent for a new prototype version; the first version does not count. After that, further changes need the owner's decision.
 
-- [ ] **P3-T08 Skill use marks**  
+- [x] **P3-T08 Skill use marks**  
   Acceptance: At stage approval the owner can optionally mark each skill used as good or bad; marks are stored in `skill_uses`; unmarked uses do not count.
 
 - [ ] **P3-T09 Project provisioning script (owner-run)**  
