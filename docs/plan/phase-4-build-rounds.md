@@ -1,10 +1,12 @@
 # Phase 4: Build rounds
 
-**Status:** not started
+**Status:** in progress
 
 **Goal:** The Builder with a command allowlist, rounds as pull requests into `staging`, the question backlog and ask-client flow, claim markers, the re-plan after each round, and token tracking (the GitHub webhook was dropped, D-279).
 
 **Gate (owner accepts this phase when):** A full round runs with its backlog triaged.
+
+**Until go-live (D-332, D-333):** rounds are local `round-N` branches in the project's git repository, reviewed in the console and merged into `staging` by the worker after Accept; no pull request, GitHub token or Vercel preview (G33). The Builder runs on the owner's Claude Code login. Order: D-334.
 
 **Spec to read:** [07-build-rounds.md](../spec/07-build-rounds.md), [06-agents-skills-tools.md](../spec/06-agents-skills-tools.md), [12-security.md](../spec/12-security.md), [11-owner-console-and-client-dashboard.md](../spec/11-owner-console-and-client-dashboard.md)
 
