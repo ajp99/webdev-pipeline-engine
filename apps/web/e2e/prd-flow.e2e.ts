@@ -28,7 +28,8 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
 
   // Create the project from the generic template.
   await page.goto('/owner/projects/new');
-  await page.locator('input[name=name]').fill(`Acme Dental ${Date.now()}`);
+  const projectName = `Acme Dental ${Date.now()}`;
+  await page.locator('input[name=name]').fill(projectName);
   await page.getByRole('button', { name: 'Create project' }).click();
   await expect(page).toHaveURL(/\/owner\/projects\/[0-9a-f-]+\/intake/);
   const intakeUrl = page.url().split('?')[0]!;
@@ -98,4 +99,31 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
   await expect(page.getByText('Sign-off recorded.')).toBeVisible();
   await expect(page.getByRole('heading', { name: /^v1\.0/ })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+
+  // After the sign-off: Advance (the owner's step), then a change request through to its PRD version v1.1.
+  await page.goto('/owner/queue');
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: projectName })
+    .getByRole('button', { name: 'Advance to plan' })
+    .click();
+  await page.goto(`${projectUrl}/changes`);
+  await page.locator('textarea[name=description]').fill('Add a gallery page with practice photos.');
+  await page.locator('input[name=pages]').fill('Gallery');
+  await page.getByRole('button', { name: 'Record' }).click();
+  await expect(page.getByText('Change request recorded.')).toBeVisible();
+  await page.locator('textarea[name=impactNote]').fill('One more page; about half a day.');
+  await page.locator('select[name=decision]').selectOption('accept_current_round');
+  await page.getByRole('button', { name: 'Decide' }).click();
+  await expect(page.getByText('Accepted. Now write the PRD version for it.')).toBeVisible();
+  await page.getByRole('link', { name: 'Write the PRD version for this change' }).click();
+  await page
+    .locator('[name=section_site_map]')
+    .fill('- Home\n- Gallery\n- Contact\n- Privacy policy\n- Cookie notice');
+  await expect(page.locator('[name=change_summary]')).toHaveValue('Changed: Site map and pages.');
+  await page.locator('[name=change_summary]').fill('Added a Gallery page, as agreed.');
+  await page.getByRole('button', { name: 'Save as a new version' }).click();
+  await expect(page.getByText('Saved as a new version.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^v1\.1/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Send v1.1 to the client' })).toBeVisible();
 });

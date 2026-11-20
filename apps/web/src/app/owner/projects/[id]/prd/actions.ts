@@ -11,27 +11,28 @@ const FEEDBACK_MAX = 4000;
 
 function back(projectId: string, key: 'error' | 'notice', text: string, page = 'prd'): never {
   revalidatePath('/owner', 'layout');
-  redirect(`/owner/projects/${projectId}/${page}?${key}=${encodeURIComponent(text)}`);
+  redirect(
+    `/owner/projects/${encodeURIComponent(projectId)}/${page}?${key}=${encodeURIComponent(text)}`,
+  );
 }
 
 /**
  * Save: a new PRD version written by the owner (P2-T08, D-324). save_prd_version checks the base version (no
- * overwriting a newer one), the shape, the stage and, after the sign-off, the accepted change request.
+ * overwriting a newer one), the shape, the stage and, after the sign-off, the accepted change request. A refusal
+ * comes back to the editor as an error, so the owner's edits stay on the page; success goes to the PRD page.
  */
-export async function savePrd(formData: FormData) {
+export async function savePrd(
+  _prev: { error?: string },
+  formData: FormData,
+): Promise<{ error?: string }> {
   const projectId = String(formData.get('projectId') ?? '');
-  await requireRole('owner', `/owner/projects/${projectId}/prd`);
+  await requireRole('owner', `/owner/projects/${encodeURIComponent(projectId)}/prd`);
   const values = Object.fromEntries([...formData.entries()].map(([k, v]) => [k, String(v)]));
   const base = Number(values.baseVersion);
   const cr = values.changeRequestId || null;
   const form = prdFromForm(values);
-  const editPage = `prd/edit${cr ? `?cr=${cr}&` : '?'}`;
-  if (!form.ok) {
-    revalidatePath('/owner', 'layout');
-    redirect(`/owner/projects/${projectId}/${editPage}error=${encodeURIComponent(form.error)}`);
-  }
-  if (!Number.isInteger(base) || base < 0)
-    return back(projectId, 'error', 'Reload the editor and try again.');
+  if (!form.ok) return { error: form.error };
+  if (!Number.isInteger(base) || base < 0) return { error: 'Reload the editor and try again.' };
   const supabase = await createClient();
   const saved = await supabase.rpc('save_prd_version', {
     p_project: projectId,
@@ -39,7 +40,7 @@ export async function savePrd(formData: FormData) {
     p_content: form.content,
     ...(cr ? { p_change_request: cr } : {}),
   });
-  if (saved.error) return back(projectId, 'error', saved.error.message);
+  if (saved.error) return { error: saved.error.message };
   return back(projectId, 'notice', 'Saved as a new version.');
 }
 

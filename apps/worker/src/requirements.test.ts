@@ -6,6 +6,11 @@ import { prdNotesProblem, prdProblem, validateTemplate, type RequirementsInput }
 import { defaultSelector } from './handlers';
 import { fakeModel } from './model';
 import { requirementsHandler, type RequirementsDeps } from './requirements';
+import {
+  assembleRequirementsInput,
+  supabaseRequirementsDeps,
+  type RequirementsRows,
+} from './requirements-supabase';
 import type { HandlerContext, Run } from './runner';
 
 const root = join(fileURLToPath(import.meta.url), '../../../..');
@@ -33,6 +38,7 @@ const input = (over: Partial<RequirementsInput> = {}): RequirementsInput => ({
   review: { summary: 'Complete enough.', gaps: [] },
   ownerNotes: ['The client pays late so keep the first build to five pages at most'],
   previous: null,
+  ownerFeedback: [],
   ...over,
 });
 
@@ -142,5 +148,71 @@ describe('the requirements stage in the selector', () => {
     expect(defaultSelector({}, undefined, { stubs })(run)).toBe(stubs);
     const plan = { ...run, stage: 'plan' } as Run;
     expect(defaultSelector({}, undefined, { requirements, stubs })(plan)).toBe(stubs);
+  });
+});
+
+describe('the requirements loader', () => {
+  const prdContent = { ...JSON.parse(reply()), model: 'stub' };
+  delete prdContent.gaps;
+  delete prdContent.conflicts;
+  const rows = (over: Partial<RequirementsRows> = {}): RequirementsRows => ({
+    project: {
+      name: 'Acme',
+      status: 'active',
+      stage: 'requirements',
+      intake_template_snapshot: template,
+    },
+    responses: [{ round: 1, question_id: 'business_name', answer: 'Acme Dental' }],
+    uploadKinds: [],
+    notes: ['newest note', 'older note'],
+    review: { round: 1, summary: 'Fine.', gaps: [{ issue: 'No photos' }], followups: [] },
+    newestPrd: { id: 'prd2', content: prdContent },
+    feedback: [
+      { artifact_id: 'prd1', body: 'Already applied' },
+      { artifact_id: 'prd2', body: '  Add Saturday hours  ' },
+    ],
+    ...over,
+  });
+
+  it('reads the intake, the review, the notes, the newest PRD without its model, and only its Feedback', () => {
+    const r = assembleRequirementsInput(rows())!;
+    expect(r.intake.answers).toEqual({ business_name: 'Acme Dental' });
+    expect(r.review).toEqual({ summary: 'Fine.', gaps: ['No photos'] });
+    expect(r.ownerNotes).toEqual(['newest note', 'older note']);
+    expect(r.previous).not.toHaveProperty('model');
+    expect(r.previous!.sections.site_map).toContain('Privacy policy');
+    expect(r.ownerFeedback).toEqual(['Add Saturday hours']);
+  });
+  it('is the first draft when there is no PRD yet, and nothing to do off the stage', () => {
+    expect(assembleRequirementsInput(rows({ newestPrd: null }))!.previous).toBeNull();
+    expect(assembleRequirementsInput(rows({ newestPrd: null }))!.ownerFeedback).toEqual([]);
+    expect(assembleRequirementsInput(rows({ project: null }))).toBeNull();
+    const plan = rows();
+    plan.project!.stage = 'plan';
+    expect(assembleRequirementsInput(plan)).toBeNull();
+  });
+  it('refuses a newest PRD that is not in the PRD shape', () => {
+    expect(() =>
+      assembleRequirementsInput(rows({ newestPrd: { id: 'x', content: { stub: true } } })),
+    ).toThrow(/not in the PRD shape/);
+  });
+  it("never reads the client's Request changes notes (prd_feedback)", async () => {
+    const tables: string[] = [];
+    // A stand-in for the Supabase client: every query chain resolves to empty data.
+    const chain: unknown = new Proxy(() => {}, {
+      get: (_t, prop) =>
+        prop === 'then'
+          ? (ok: (v: unknown) => void) =>
+              ok({ data: tables.length === 1 ? { ...rows().project } : [], error: null })
+          : () => chain,
+      apply: () => chain,
+    });
+    const admin = {
+      from: (t: string) => (tables.push(t), chain),
+      rpc: async () => ({ error: null }),
+    };
+    await supabaseRequirementsDeps(admin as never).load('p1');
+    expect(tables).toContain('gate_feedback');
+    expect(tables).not.toContain('prd_feedback');
   });
 });

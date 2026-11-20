@@ -205,6 +205,22 @@ export default async function PrdPage({
               </form>
             </section>
           ) : null}
+
+          {!awaitingClient && newest.change_request_id ? (
+            <section className="mt-8 rounded border p-4">
+              <h2 className="font-medium">Send {newest.label} to the client</h2>
+              <p className="mt-1 text-sm text-neutral-600">
+                This version comes from an accepted change request and needs no new sign-off. Copy
+                it with its summary into your email or message.
+              </p>
+              <textarea
+                readOnly
+                rows={8}
+                className="mt-2 w-full rounded border p-2 font-mono text-xs"
+                defaultValue={`${prd.change_summary ? `What changed: ${prd.change_summary}\n\n` : ''}${prdMarkdown(prd)}`}
+              />
+            </section>
+          ) : null}
         </>
       )}
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The end-to-end test of the 2b flow (P2-T14). Needs a running local Supabase (`supabase start` and
-# `supabase db reset`). It writes throwaway .env files for the worker and the console, creates the owner login,
+# `supabase db reset`). It passes the settings to the processes it starts (no .env file is written), creates the owner login,
 # loads the generic template, starts the built console and a worker on the scripted model (WPE_E2E=1, no key,
 # no network), runs Playwright, and stops both. Fictional data only; never point it at a real project.
 set -euo pipefail
@@ -15,30 +15,23 @@ service="${SB_SERVICE_ROLE_KEY:-${SB_SECRET_KEY:-}}"
 
 export E2E_OWNER_EMAIL=owner@example.test
 export E2E_OWNER_PASSWORD=e2e-owner-password
-cat > apps/worker/.env <<ENV
-SUPABASE_URL=$url
-SUPABASE_SERVICE_ROLE_KEY=$service
-MODEL_PROVIDER=scripted
-MODEL_NAME=e2e
-WPE_E2E=1
-WORKER_POLL_SECONDS=2
-OWNER_EMAIL=$E2E_OWNER_EMAIL
-OWNER_PASSWORD=$E2E_OWNER_PASSWORD
-ENV
-cat > apps/web/.env.local <<ENV
-NEXT_PUBLIC_SUPABASE_URL=$url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon
-ENV
-
-pnpm --filter @wpe/worker bootstrap-owner
-pnpm --filter @wpe/worker load-template
+# The settings go to the processes started here only, never into apps/worker/.env or apps/web/.env.local:
+# a real worker must never pick up the scripted model (gate review of 2026-11-20).
+export SUPABASE_URL="$url" SUPABASE_SERVICE_ROLE_KEY="$service"
+export MODEL_PROVIDER=scripted MODEL_NAME=e2e WPE_E2E=1 WORKER_POLL_SECONDS=2
+export OWNER_EMAIL="$E2E_OWNER_EMAIL" OWNER_PASSWORD="$E2E_OWNER_PASSWORD"
+export NEXT_PUBLIC_SUPABASE_URL="$url" NEXT_PUBLIC_SUPABASE_ANON_KEY="$anon"
+# Variables set here win over any apps/web/.env.local (Next.js) or apps/worker/.env (not loaded here).
+worker() { (cd apps/worker && pnpm exec tsx "src/$1"); }
+worker bootstrap-owner-cli.ts
+worker load-template-cli.ts
 pnpm --filter @wpe/web build
 
 pids=()
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; }
 trap cleanup EXIT
 (cd apps/web && exec pnpm exec next start -p 3000) > /tmp/e2e-web.log 2>&1 & pids+=($!)
-pnpm --filter @wpe/worker start > /tmp/e2e-worker.log 2>&1 & pids+=($!)
+(cd apps/worker && exec pnpm exec tsx src/run-cli.ts) > /tmp/e2e-worker.log 2>&1 & pids+=($!)
 for _ in $(seq 1 60); do curl -fs http://localhost:3000/login >/dev/null && break; sleep 1; done
 
 status=0
@@ -48,5 +41,5 @@ if [ "$status" -ne 0 ]; then
   echo "--- web log (tail) ---"; tail -n 40 /tmp/e2e-web.log
 fi
 echo "--- cost report (scripted model, tokens are not real) ---"
-pnpm --filter @wpe/worker cost-report || true
+worker cost-report-cli.ts || true
 exit "$status"

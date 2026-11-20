@@ -79,7 +79,7 @@ describe('defaultSummary', () => {
       'Changed: Brand inputs; Contact form spam protection.',
     );
     expect(defaultSummary(prd(), prd())).toBe('');
-    expect(defaultSummary(null, prd())).toContain('First version');
+    expect(defaultSummary(null, prd())).toBe('');
   });
 });
 
