@@ -1111,6 +1111,7 @@ export type Database = {
           p_model: string;
           p_notes?: Json;
           p_project: string;
+          p_prompt_hash?: string;
           p_run: string;
           p_type: Database['public']['Enums']['artifact_type'];
           p_worker: string;
