@@ -1803,10 +1803,12 @@ grant execute on function complete_intake_review(uuid, int, text, jsonb, jsonb, 
 -- the owner's Accept or Feedback always sees the newest version. It is refused when the newest version of
 -- that type is already approved (a late run must not push an approved version out of the gates), and the
 -- run must be claimed by the calling worker (as in heartbeat_run and finish_run). The content is an object
--- under 100000 characters and carries the model name under "model".
+-- under 100000 characters and carries the model name under "model". It also records the model and the prompt
+-- template's SHA-256 on the run (D-283); they describe the attempt that wrote the artifact, so a run requeued
+-- after a later failure still shows what produced its artifact.
 create function complete_stage_artifact(
   p_project uuid, p_run uuid, p_worker text, p_type public.artifact_type, p_content jsonb, p_model text,
-  p_notes jsonb default null
+  p_notes jsonb default null, p_prompt_hash text default null
 ) returns uuid
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -1850,6 +1852,14 @@ begin
   if p_model is null or btrim(p_model) = '' or length(p_model) > 100 then
     raise exception 'complete_stage_artifact: the model name is missing or too long';
   end if;
+  -- 'stub' on a run marks a stub run for the worker's handler choice; a real artifact never claims it.
+  if p_model = 'stub' then
+    raise exception 'complete_stage_artifact: the model name stub is reserved for stub runs';
+  end if;
+  -- D-283: the run records the pinned model and, for a model call, the SHA-256 of its prompt template.
+  if p_prompt_hash is not null and p_prompt_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'complete_stage_artifact: the prompt hash must be a SHA-256 in hex';
+  end if;
   -- D-325: a PRD has the fixed shape, a summary once there is an earlier version, and its owner-only notes.
   if p_type = 'prd' then
     problem := private.prd_content_problem(p_content);
@@ -1887,6 +1897,7 @@ begin
     'draft', p_content || jsonb_build_object('model', p_model)
   )
   returning id into art;
+  update public.stage_runs set model = p_model, prompt_hash = p_prompt_hash where id = p_run;
   if p_type = 'prd' then
     update public.artifacts set status = 'superseded'
      where project_id = p_project and type = 'prd_notes' and status = 'draft';
@@ -1900,8 +1911,8 @@ begin
   return art;
 end;
 $$;
-revoke all on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text, jsonb) from public, anon, authenticated, service_role;
-grant execute on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text, jsonb) to service_role;
+revoke all on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text, jsonb, text) from public, anon, authenticated, service_role;
+grant execute on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text, jsonb, text) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- The PRD, its owner-only notes and change requests (Phase 2b, D-324 to D-327)
