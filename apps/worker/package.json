@@ -10,7 +10,8 @@
     "seed-demo": "tsx --env-file=.env src/seed-demo-cli.ts",
     "load-template": "tsx --env-file=.env src/load-template-cli.ts",
     "start": "tsx --env-file=.env src/run-cli.ts",
-    "enqueue-stub": "tsx --env-file=.env src/enqueue-stub-cli.ts"
+    "enqueue-stub": "tsx --env-file=.env src/enqueue-stub-cli.ts",
+    "cost-report": "tsx --env-file=.env src/cost-report-cli.ts"
   },
   "type": "module",
   "dependencies": {
