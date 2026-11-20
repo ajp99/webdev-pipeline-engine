@@ -14,6 +14,9 @@ export default async function ProjectList() {
     <main className="mx-auto max-w-4xl p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Projects</h1>
+        <Link href="/owner/metrics" className="ml-auto mr-3 text-sm underline">
+          Approval metrics
+        </Link>
         <Link
           href="/owner/projects/new"
           className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white"

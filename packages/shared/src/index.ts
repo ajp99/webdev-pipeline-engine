@@ -16,3 +16,4 @@ export * from './intake';
 export * from './intake-review';
 export * from './prd';
 export * from './requirements';
+export * from './metrics';
