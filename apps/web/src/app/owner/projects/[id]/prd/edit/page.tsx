@@ -50,6 +50,16 @@ export default async function EditPrdPage({
     .limit(1);
   if (newest.error) throw new Error(newest.error.message);
   const row = newest.data?.[0];
+  // While the requirements agent drafts, the database refuses an owner save (it would be superseded).
+  const active = await supabase
+    .from('stage_runs')
+    .select('id')
+    .eq('project_id', id)
+    .eq('stage', 'requirements')
+    .in('status', ['queued', 'running', 'waiting'])
+    .limit(1);
+  if (active.error) throw new Error(active.error.message);
+  const agentBusy = (active.data ?? []).length > 0;
   const previous = row ? asPrd(row.content) : null;
   let request: { id: string; description: string } | null = null;
   if (cr) {
@@ -79,7 +89,13 @@ export default async function EditPrdPage({
           For the accepted change request: {request.description}
         </p>
       ) : null}
-      {!editable ? (
+      {agentBusy ? (
+        <p role="status" className="mt-3 rounded bg-amber-50 p-3 text-sm">
+          The requirements agent is drafting the PRD. Wait for its run to finish (or cancel it on
+          the stage page), then reload this page to edit its version.
+        </p>
+      ) : null}
+      {agentBusy ? null : !editable ? (
         <p className="mt-6 text-sm text-neutral-600">
           The PRD can be edited in the requirements stage, or after the sign-off for an accepted
           change request.
