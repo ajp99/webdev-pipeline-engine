@@ -2035,10 +2035,12 @@ begin
       raise exception 'save_prd_version: the newest PRD is signed off; advance the stage, then change it through a change request';
     end if;
     -- An agent run drafts from the version it loaded and supersedes every draft; an owner edit saved meanwhile
-    -- would be buried without an error (gate review of 2026-11-20). The stage_runs row is locked with the
-    -- project above, so a run cannot be claimed and start drafting from an older version in between.
+    -- would be buried without an error (gate review of 2026-11-20). enqueue_run takes the same project lock, and a
+    -- run must be queued before it can be claimed, so no run can be claimed between this check and the insert.
+    -- A cancel_requested run cannot write any more (complete_stage_artifact needs a running run), so it does not
+    -- block. (The owner could still insert a stage_runs row directly; that gap is go-live item G25.)
     if exists (select 1 from public.stage_runs where project_id = p_project and stage = 'requirements'
-                and status in ('queued', 'running', 'waiting', 'cancel_requested')) then
+                and status in ('queued', 'running', 'waiting')) then
       raise exception 'save_prd_version: the requirements agent is working on the PRD; wait for its run to finish or cancel it, then edit';
     end if;
     update public.artifacts set status = 'superseded'

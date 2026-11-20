@@ -196,3 +196,6 @@ select t.adv('the worker cannot read the client''s Request changes notes', t.pro
   'select count(*) from prd_feedback', 'error:permission denied');
 select t.adv('the worker cannot write them either', t.proj('requirements')||';'||t.prdv(1), null, 'service_role',
   format('insert into prd_feedback(project_id,artifact_id,body,created_by) select %L,id,''x'',%L from artifacts where project_id=%L', 'cccccccc-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000a0', 'cccccccc-0000-0000-0000-000000000001'), 'error:permission denied');
+select t.adv('a run already asked to cancel does not block the owner (it can no longer write)', t.proj('requirements')||';'||t.prdv(1)
+  ||';insert into stage_runs(project_id,stage,status,attempts,claimed_by,heartbeat_at,started_at) values (''cccccccc-0000-0000-0000-000000000001'',''requirements'',''cancel_requested'',1,''w1'',now(),now())', :'O', 'authenticated',
+  t.save(1, t.prdj('x')), 'ok');
