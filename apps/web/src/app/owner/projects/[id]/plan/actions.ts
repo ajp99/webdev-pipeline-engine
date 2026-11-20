@@ -51,16 +51,14 @@ export async function savePlan(
     return { error: 'The newest plan is accepted; it can no longer be edited.' };
   if ((active.data ?? []).length)
     return { error: 'The Planner is drafting; wait for its run to finish, then edit.' };
-  const saved = await supabase
-    .from('artifacts')
-    .insert({
-      project_id: projectId,
-      type: 'plan',
-      version: base + 1,
-      status: 'draft',
-      content: form.plan,
-      created_by: user.userId,
-    });
+  const saved = await supabase.from('artifacts').insert({
+    project_id: projectId,
+    type: 'plan',
+    version: base + 1,
+    status: 'draft',
+    content: form.plan,
+    created_by: user.userId,
+  });
   if (saved.error) return { error: saved.error.message };
   revalidatePath('/owner', 'layout');
   redirect(
