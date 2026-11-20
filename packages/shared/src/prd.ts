@@ -88,10 +88,10 @@ export function prdNotesProblem(c: unknown): string | null {
         isObject(it) &&
         Object.keys(it).every((x) => x === 'issue' || x === 'resolution') &&
         typeof it.issue === 'string' &&
-        it.issue.trim() !== '' &&
-        it.issue.length <= PRD_NOTE_MAX &&
+        hasText(it.issue) &&
+        chars(it.issue) <= PRD_NOTE_MAX &&
         (!('resolution' in it) ||
-          (typeof it.resolution === 'string' && it.resolution.length <= PRD_NOTE_MAX));
+          (typeof it.resolution === 'string' && chars(it.resolution) <= PRD_NOTE_MAX));
       if (!ok)
         return `each of the ${k} needs an issue (at most ${PRD_NOTE_MAX} characters) and may have a resolution`;
     }
