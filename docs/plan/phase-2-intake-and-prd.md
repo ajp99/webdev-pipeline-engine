@@ -1,6 +1,6 @@
 # Phase 2: Intake and PRD
 
-**Status:** not started
+**Status:** 2a done (2026-11-20); 2b in progress
 
 **Goal:** Intake templates, owner-entered intake with locked rounds, agent follow-ups, the stage runner, and the PRD with the client's sign-off recorded by the owner. Client login, client email, invites, uploads from clients and industry-template generation are deferred to go-live (D-298, G15, G18).
 
@@ -84,10 +84,10 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P2-T21 Run controls in the console (retry and cancel only, D-301)**  
   Acceptance: Retry creates a new queued run for the same project and stage with fresh attempts and keeps the old run as history. Cancel stops the run through the `cancel_requested` flag of P2-T20 and keeps the working folder, the branch and any open pull request. A failed or stopped run opens a detail view with the reason and timeline and the last log lines, with Rerun from scratch and End run (D-233). Pause, Resume, parked runs and the commands table (D-249) are deferred (G16).
 
-- [ ] **P2-T22 Phase 2a gate evidence**  
+- [x] **P2-T22 Phase 2a gate evidence**  
   Acceptance: Record in `PROGRESS.md` (D-304): a walkthrough with a fictional client (Acme), the owner entering the intake, from template to an accepted intake through the real stage runner and intake agent on the local Supabase; an automated test of the same flow with model responses stubbed; a watchdog test (a hung run is stopped); a cancel test (a running run reaches `cancelled`); a cost report from `stage_runs`; and an independent review of the part by a fresh agent and then the owner. For part 2a also the walking skeleton of P2-T23.
 
-- [ ] **P2-T23 Walking skeleton (end of 2a)**  
+- [x] **P2-T23 Walking skeleton (end of 2a)**  
   Acceptance (D-290): one fictional client goes through template, intake, a stub PRD and a single-page build with a preview, using the real worker, the Builder on the host (D-310) and the database; the Agent SDK session resume is tried here and used only if it works (D-280). The owner reviews it and decides when the pilot moves earlier than the end of Phase 5. Recorded in `PROGRESS.md`.
 
 - [ ] **P2-T24 Approval metrics in the console**  
