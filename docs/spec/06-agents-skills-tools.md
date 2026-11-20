@@ -1,5 +1,7 @@
 # Agents, skills and tools
 
+> **Dev-only scope (D-328, D-329; proposal 2026-11-20-phase-3-local-scope):** until go-live the Prototype agent runs like the Builder (D-310), on the owner's machine with the owner's Claude Code login, in a local git repository with no GitHub or Vercel token; the eval judge (Opus 5.5) also runs on that login, with no API key.
+
 > Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
 Eight agent roles cover the pipeline; each has a fixed input, output artifact, and model tier. The model tiers are a starting point to tune after the first pilot project. Model IDs are pinned, and every run records its `model` and a `prompt_hash` (D-283). Single-shot roles (Intake, Requirements, Planner, Reporter) are plain API calls with JSON-schema structured output; the Agent SDK is for the Builder, the Prototype agent and QC fixes (D-275).

@@ -1,5 +1,7 @@
 # Deployment and handover
 
+> **Dev-only scope (D-328, D-329; proposal 2026-11-20-phase-3-local-scope):** until go-live the Prototype agent works in a local git repository with a local preview and screenshots, the provisioning script runs in dry-run against fake GitHub and Vercel clients (G33), and the eval judge runs on the owner's Claude Code login.
+
 > Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
 The site is hosted under the owner's accounts during the project, then ownership moves to the client at handover. Vercel's free plan is non-commercial as far as the spec author knows (unverified), so the owner's Vercel account moves to a paid plan from the first real client; the pilot on the owner's own site may stay on the free plan.

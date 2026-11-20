@@ -36,6 +36,7 @@ Development is dev-only until go-live (D-263): a local Supabase, no hosted proje
 | [ ] | G30 | Style samples | Build the agent-proposed style directions and the standalone sample pages rendered to images that the form shows, replacing the four fixed cards of development (D-182, D-189, D-319). Needs a page generator and a headless browser on the owner's machine. |
 | [ ] | G31 | Run identity for the intake review | `complete_intake_review` checks the project, the stage and the round but not which run or worker is writing, so a stray worker could write a review for a submitted round (noted in the P2-T05 review). Tie the review to the claimed run, as `complete_stage_artifact` is (worker name, running run), before real clients. |
 | [ ] | G32 | Agent-written change summary for owner edits | Until go-live the owner writes the change summary of a PRD version saved in the console (D-324). | Have the worker write the summary of each owner-saved version, as spec 05 describes, and show it to the client with the version. Client policies (G15) must also keep the owner-only `prd_notes` artifact hidden. |
+| [ ] | G33 | GitHub and Vercel for client sites | The prototype and builds live in a local git repository with a local preview; the provisioning script runs in dry-run against fakes (D-328). | Create the GitHub App and the Vercel account; run the provisioning script for real; push prototypes and rounds to `staging` with short-lived App tokens; review previews on Vercel. |
 
 ## Open questions
 

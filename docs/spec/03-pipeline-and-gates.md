@@ -1,6 +1,6 @@
 # Pipeline phases and gates
 
-> **Dev-only scope (D-297 to D-304; proposal 2026-10-19-phase-2a-rebaseline):** until go-live there is no client login. The owner enters intake and records client-gate approvals with a required evidence note. A `client` gate is approved by the owner on the client's behalf: the approval keeps role `client`, its giver is an owner, and a non-empty `evidence_note` names the channel. The client-facing design below is the go-live design (G15).
+> **Dev-only scope (D-297 to D-304; proposal 2026-10-19-phase-2a-rebaseline):** until go-live there is no client login. The owner enters intake and records client-gate approvals with a required evidence note. A `client` gate is approved by the owner on the client's behalf: the approval keeps role `client`, its giver is an owner, and a non-empty `evidence_note` names the channel. The client-facing design below is the go-live design (G15). Until go-live the prototype is built in a local git repository and reviewed from local screenshots and a local preview, not on GitHub or Vercel (D-328); the provisioning script runs in dry-run only (G33).
 
 > Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
