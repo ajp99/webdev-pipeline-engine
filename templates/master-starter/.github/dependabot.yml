@@ -1,0 +1,11 @@
+# Weekly dependency update pull requests for the site (P3-T02, D-286). The owner reviews and merges them.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]

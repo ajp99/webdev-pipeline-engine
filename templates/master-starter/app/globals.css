@@ -1,1 +1,126 @@
 @import 'tailwindcss';
+
+/* Theme (P3-T02): the skill starter-customization/apply-brand sets these from the design brief. Every text
+   colour on its background reaches WCAG AA. No dark mode unless the PRD asks. */
+:root {
+  --color-primary: #1d4ed8;
+  --color-on-primary: #ffffff;
+  --color-ink: #111827;
+  --color-muted: #4b5563;
+  --color-surface: #f3f4f6;
+  --color-line: #e5e7eb;
+  --color-error: #b91c1c;
+  --color-background: #ffffff;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+a {
+  color: var(--color-primary);
+  text-underline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 50;
+  background: var(--color-background);
+  padding: 0.5rem 1rem;
+}
+
+.btn {
+  border-radius: 0.5rem;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.btn:disabled {
+  opacity: 0.6;
+}
+.btn-inverse {
+  border-radius: 0.5rem;
+  background: var(--color-on-primary);
+  color: var(--color-primary);
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.field {
+  margin-top: 0.25rem;
+  width: 100%;
+  border: 1px solid var(--color-muted);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+/* The honeypot field: off-screen, not display:none (some bots skip hidden fields). */
+.hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.prose-site h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.prose-site h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 2rem;
+}
+.prose-site h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+}
+.prose-site p,
+.prose-site ul,
+.prose-site ol {
+  margin-top: 1rem;
+}
+.prose-site ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.prose-site ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+
+/* Subtle motion, off for people who ask for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .fade-in {
+    animation: fade-in 0.4s ease-out both;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
