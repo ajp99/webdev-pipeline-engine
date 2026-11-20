@@ -55,6 +55,7 @@ export type Database = {
           change_request_id: string | null;
           content: NonNullable<Json>;
           created_at: string;
+          created_by: string | null;
           id: string;
           project_id: string;
           status: Database['public']['Enums']['artifact_status'];
@@ -66,6 +67,7 @@ export type Database = {
           change_request_id?: string | null;
           content?: NonNullable<Json>;
           created_at?: string;
+          created_by?: string | null;
           id?: string;
           project_id: string;
           status?: Database['public']['Enums']['artifact_status'];
@@ -76,6 +78,7 @@ export type Database = {
           change_request_id?: string | null;
           content?: NonNullable<Json>;
           created_at?: string;
+          created_by?: string | null;
           id?: string;
           project_id?: string;
           status?: Database['public']['Enums']['artifact_status'];
@@ -155,8 +158,12 @@ export type Database = {
       };
       change_requests: {
         Row: {
+          affected_features: string[];
+          affected_pages: string[];
           created_at: string;
           created_by: string | null;
+          decided_at: string | null;
+          decided_by: string | null;
           decision: Database['public']['Enums']['change_decision'] | null;
           description: string;
           id: string;
@@ -167,8 +174,12 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          affected_features?: string[];
+          affected_pages?: string[];
           created_at?: string;
           created_by?: string | null;
+          decided_at?: string | null;
+          decided_by?: string | null;
           decision?: Database['public']['Enums']['change_decision'] | null;
           description: string;
           id?: string;
@@ -178,8 +189,12 @@ export type Database = {
           submitted_by?: Database['public']['Enums']['approver_role'];
         };
         Update: {
+          affected_features?: string[];
+          affected_pages?: string[];
           created_at?: string;
           created_by?: string | null;
+          decided_at?: string | null;
+          decided_by?: string | null;
           decision?: Database['public']['Enums']['change_decision'] | null;
           description?: string;
           id?: string;
@@ -1094,12 +1109,21 @@ export type Database = {
         Args: {
           p_content: Json;
           p_model: string;
+          p_notes?: Json;
           p_project: string;
           p_run: string;
           p_type: Database['public']['Enums']['artifact_type'];
           p_worker: string;
         };
         Returns: string;
+      };
+      decide_change_request: {
+        Args: {
+          p_decision: Database['public']['Enums']['change_decision'];
+          p_impact_note: string;
+          p_request: string;
+        };
+        Returns: undefined;
       };
       end_run: { Args: { p_run: string }; Returns: undefined };
       enqueue_run: {
@@ -1151,6 +1175,15 @@ export type Database = {
         Args: { p_run: string };
         Returns: Database['public']['Enums']['run_status'];
       };
+      save_prd_version: {
+        Args: {
+          p_base_version: number;
+          p_change_request?: string;
+          p_content: Json;
+          p_project: string;
+        };
+        Returns: string;
+      };
     };
     Enums: {
       answer_action: 'next_round' | 'immediate_fix';
@@ -1159,6 +1192,7 @@ export type Database = {
       artifact_type:
         | 'intake_record'
         | 'prd'
+        | 'prd_notes'
         | 'plan'
         | 'skill_set'
         | 'round_scope'
@@ -1323,6 +1357,7 @@ export const Constants = {
       artifact_type: [
         'intake_record',
         'prd',
+        'prd_notes',
         'plan',
         'skill_set',
         'round_scope',

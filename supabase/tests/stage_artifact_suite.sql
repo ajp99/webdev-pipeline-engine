@@ -5,8 +5,11 @@
 \set P '''cccccccc-0000-0000-0000-000000000001'''
 
 -- The call: run n writes an artifact of type typ with the given content (json text) for the scratch project.
-create function t.csa(n int, typ text default 'plan', content text default '{"body": "x"}', model text default 'stub') returns text language sql as
-$$ select format('select complete_stage_artifact(%L::uuid, %s, %L, %L, %L::jsonb, %L)', 'cccccccc-0000-0000-0000-000000000001', t.rid(n), 'w1', typ, content, model) $$;
+create function t.csa(n int, typ text default 'plan', content text default '{"body": "x"}', model text default 'stub', notes text default null) returns text language sql as
+$$ select format('select complete_stage_artifact(%L::uuid, %s, %L, %L, %L::jsonb, %L, %L::jsonb)', 'cccccccc-0000-0000-0000-000000000001', t.rid(n), 'w1', typ, content, model, notes) $$;
+-- A valid PRD (D-325) and empty notes, for the requirements stage.
+create function t.prd_json() returns text language sql as
+$$ select '{"sections":{"business":"b","site_map":"Home; Privacy policy; Cookie notice","features":"Contact form","content":"c","brand":"b","non_functional":"Lighthouse 80+"},"spam_protection":"honeypot","change_summary":""}' $$;
 -- A running run 1 in the plan stage.
 create function t.running() returns text language sql as
 $$ select t.proj('plan')||';'||t.sr(1,'running',1,'1 minute','1 hour','w1') $$;
@@ -25,8 +28,8 @@ select t.adv('an older approved version does not block a write when a newer draf
 select t.adv('a run claimed by another worker cannot write', t.running(), null, 'service_role', replace(t.csa(1), '''w1''', '''w2'''), 'error:not claimed by this worker');
 select t.adv('a missing worker name is refused', t.running(), null, 'service_role', 'select complete_stage_artifact('||:'P'||'::uuid, '||t.rid(1)||', null, ''plan'', ''{"a":1}'', ''m'')', 'error:not claimed by this worker');
 select t.adv('the owner session cannot call it', t.running(), :'O', 'authenticated', t.csa(1), 'error');
-select t.adv('it refuses the owner session even if the grant were widened', t.running()||';grant execute on function complete_stage_artifact(uuid,uuid,text,public.artifact_type,jsonb,text) to authenticated', :'O', 'authenticated', t.csa(1), 'error:not allowed');
-select t.adv('it refuses a non-owner even if the grant were widened', t.running()||';grant execute on function complete_stage_artifact(uuid,uuid,text,public.artifact_type,jsonb,text) to authenticated', :'A', 'authenticated', t.csa(1), 'error:not allowed');
+select t.adv('it refuses the owner session even if the grant were widened', t.running()||';grant execute on function complete_stage_artifact(uuid,uuid,text,public.artifact_type,jsonb,text,jsonb) to authenticated', :'O', 'authenticated', t.csa(1), 'error:not allowed');
+select t.adv('it refuses a non-owner even if the grant were widened', t.running()||';grant execute on function complete_stage_artifact(uuid,uuid,text,public.artifact_type,jsonb,text,jsonb) to authenticated', :'A', 'authenticated', t.csa(1), 'error:not allowed');
 select t.adv('anon cannot call it', t.running(), null, 'anon', t.csa(1), 'error');
 select t.adv('an unknown project is refused', 'select 1', null, 'service_role', 'select complete_stage_artifact(''eeeeeeee-0000-0000-0000-000000000001'', '||t.rid(1)||', ''w1'', ''plan'', ''{"a":1}'', ''m'')', 'error:project not found');
 select t.adv('a paused project is refused', t.proj('plan','paused')||';'||t.sr(1,'running',1,'1 minute','1 hour','w1'), null, 'service_role', t.csa(1), 'error:must be active');
@@ -49,7 +52,7 @@ select t.adv('a missing model name is refused', t.running(), null, 'service_role
 select t.adv('a model name over 100 characters is refused', t.running(), null, 'service_role', t.csa(1, 'plan', '{"body": "x"}', repeat('m', 101)), 'error:model name');
 select t.adv('a refused write changes nothing', t.running()||';'||t.art('plan'), null, 'service_role', t.csa(1, 'plan', '{}'), 'error:non-empty object',
   t.plans()||'=1 and (select status::text from artifacts where project_id='||:'P'||' and type=''plan'')=''draft''');
-select t.adv('the prd and prototype types work in their stages too', t.proj('requirements')||';insert into stage_runs(id,project_id,stage,status,attempts,heartbeat_at,claimed_by,started_at) values ('||t.rid(1)||','||:'P'||',''requirements'',''running'',1,now(),''w1'',now())', null, 'service_role', t.csa(1, 'prd'), 'ok',
+select t.adv('the prd and prototype types work in their stages too', t.proj('requirements')||';insert into stage_runs(id,project_id,stage,status,attempts,heartbeat_at,claimed_by,started_at) values ('||t.rid(1)||','||:'P'||',''requirements'',''running'',1,now(),''w1'',now())', null, 'service_role', t.csa(1, 'prd', t.prd_json(), 'stub', '{"gaps":[],"conflicts":[]}'), 'ok',
   '(select count(*) from artifacts where project_id='||:'P'||' and type=''prd'')=1');
 
 \echo '### stage artifact: which stages queue a run on entry'

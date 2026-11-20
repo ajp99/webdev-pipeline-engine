@@ -50,8 +50,8 @@ do $$ begin perform set_config('app.stage_advance','on',true); update projects s
 
 \echo '### stage handover: change requests and release notes'
 do $$ begin perform set_config('app.stage_advance','on',true); update projects set stage='handover' where id='11111111-1111-1111-1111-111111111111'; end $$;
-select t.run('owner records a mini-round decision and status', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update change_requests set decision=''accept_mini_round'', status=''accepted'' where project_id=''11111111-1111-1111-1111-111111111111''', 'ok:1');
-select t.run('owner marks a request deployed', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update change_requests set status=''deployed'' where project_id=''11111111-1111-1111-1111-111111111111''', 'ok:1');
+select t.run('owner cannot set a decision and status directly; decide_change_request does (D-326)', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update change_requests set decision=''accept_mini_round'', status=''accepted'' where project_id=''11111111-1111-1111-1111-111111111111''', 'error');
+select t.run('owner cannot mark a request deployed directly', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update change_requests set status=''deployed'' where project_id=''11111111-1111-1111-1111-111111111111''', 'error');
 select t.run('owner ties a mini-round to a request', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'insert into rounds(project_id,number,branch,change_request_id) select project_id,2,''cr-1'',id from change_requests where project_id=''11111111-1111-1111-1111-111111111111'' limit 1', 'ok:1');
 select t.run('status outside the enum rejected', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update change_requests set status=''shipped'' where project_id=''11111111-1111-1111-1111-111111111111''', 'error');
 select t.run('owner cannot write a release-note approval directly; approvals go through accept_gate', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'insert into approvals(artifact_id,approved_by,role,gate_type) values (''aaaaaaa1-0000-0000-0000-000000000006'',''00000000-0000-0000-0000-0000000000a0'',''owner'',''hard'')', 'error');
@@ -98,7 +98,7 @@ union all select case when (select array_agg(e.enumlabel::text order by e.enumso
     ('change_status', array['received','accepted','deferred','declined','deployed']),
     ('change_decision', array['accept_current_round','accept_mini_round','defer','decline']),
     ('run_status', array['queued','running','waiting','cancel_requested','succeeded','failed','cancelled','stopped']),
-    ('artifact_type', array['intake_record','prd','plan','skill_set','round_scope','prototype','round_preview','round_summary','backlog','qc_results','report','deployment_checklist','handover_guide','release_note']),
+    ('artifact_type', array['intake_record','prd','prd_notes','plan','skill_set','round_scope','prototype','round_preview','round_summary','backlog','qc_results','report','deployment_checklist','handover_guide','release_note']),
     ('comment_kind', array['prototype','final_screenshots']),
     ('answer_action', array['next_round','immediate_fix']),
     ('run_approval_status', array['pending','approved','denied'])

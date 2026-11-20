@@ -1,7 +1,14 @@
 // Stub stage agents for the walking skeleton (P2-T23). The requirements, plan and prototype stages each
 // write a short deterministic artifact built from the one before, with no model call, so the stage path,
 // the gates and the console can be proven end to end. The real agents (P2-T07 and later) replace these.
-import { intakeData, type ReviewInput } from '@wpe/shared';
+import {
+  asPrd,
+  intakeData,
+  PRD_SECTIONS,
+  type PrdContent,
+  type PrdNotes,
+  type ReviewInput,
+} from '@wpe/shared';
 import type { Handler } from './runner';
 
 export type StubType = 'prd' | 'plan' | 'prototype';
@@ -20,13 +27,14 @@ export interface StubDeps {
   loadIntake(projectId: string): Promise<{ projectName: string; input: ReviewInput } | null>;
   /** The newest approved artifact of a type, or null when none is approved. */
   loadApproved(projectId: string, type: 'prd' | 'plan'): Promise<unknown | null>;
-  /** complete_stage_artifact: writes the next draft version for this run. */
+  /** complete_stage_artifact: writes the next draft version for this run (a PRD also writes its notes). */
   write(a: {
     project: string;
     run: string;
     worker: string;
     type: StubType;
-    content: StubContent;
+    content: StubContent | PrdContent;
+    notes?: PrdNotes;
   }): Promise<void>;
 }
 
@@ -34,17 +42,13 @@ const MAX_CONTENT_CHARS = 95_000;
 const MAX_ANSWER_CHARS = 2000;
 const cut = (s: string) => (s.length > MAX_ANSWER_CHARS ? `${s.slice(0, MAX_ANSWER_CHARS)}…` : s);
 
-/** One section per intake section, each answered question as "question: answer". Unanswered ones are left out. */
-export function buildStubPrd(projectName: string, input: ReviewInput): StubContent {
+/**
+ * A PRD in the stored shape (D-325) built from the intake with no model: the answered questions go into the
+ * content inventory, the site map is the one page plus the two required notices. Deterministic.
+ */
+export function buildStubPrd(projectName: string, input: ReviewInput): PrdContent {
   const data = intakeData(input);
-  const sections: Section[] = [
-    {
-      title: 'Overview (stub)',
-      markdown:
-        `Product requirements for ${projectName}, built from the intake answers by a stub, ` +
-        `not by the requirements agent. Industry: ${data.industry}.`,
-    },
-  ];
+  const answers: string[] = [];
   for (const s of data.sections) {
     const lines = s.questions
       .filter((q) => q.answer !== null)
@@ -52,13 +56,28 @@ export function buildStubPrd(projectName: string, input: ReviewInput): StubConte
         const a = Array.isArray(q.answer) ? q.answer.join(', ') : String(q.answer);
         return `- ${q.question}: ${cut(a)}`;
       });
-    if (lines.length > 0) sections.push({ title: s.title, markdown: lines.join('\n') });
+    if (lines.length > 0) answers.push(`### ${s.title}\n\n${lines.join('\n')}`);
   }
   for (const h of data.follow_up_history.filter((f) => f.answer)) {
-    sections.push({ title: `Follow-up ${h.id}`, markdown: `- ${h.question}: ${cut(h.answer!)}` });
+    answers.push(`### Follow-up ${h.id}\n\n- ${h.question}: ${cut(h.answer!)}`);
   }
-  return { stub: true, sections };
+  return {
+    sections: {
+      business:
+        `Product requirements for ${projectName}, built from the intake answers by a stub, ` +
+        `not by the requirements agent. Industry: ${data.industry}.`,
+      site_map: '- Home (/)\n- Privacy policy\n- Cookie notice',
+      features: '- Contact form (Must)',
+      content: answers.length > 0 ? answers.join('\n\n') : 'No intake answers yet.',
+      brand: 'Taken from the intake (stub).',
+      non_functional: 'Lighthouse 80+, basic SEO, responsive, accessibility basics.',
+    },
+    spam_protection: 'honeypot',
+    change_summary: 'Stub draft built from the intake.',
+  };
 }
+
+export const STUB_PRD_NOTES: PrdNotes = { gaps: [], conflicts: [] };
 
 function sectionsOf(content: unknown): Section[] {
   const list = (content as { sections?: unknown } | null)?.sections;
@@ -74,8 +93,8 @@ function sectionsOf(content: unknown): Section[] {
 
 /** A one-page plan that lists the approved PRD's sections as the page's content. */
 export function buildStubPlan(prd: unknown): StubContent {
-  const titles = sectionsOf(prd).map((s) => s.title);
-  if (titles.length === 0) throw new Error('the approved PRD has no sections to plan from');
+  if (!asPrd(prd)) throw new Error('the approved PRD has no sections to plan from');
+  const titles = PRD_SECTIONS.map((s) => s.title);
   return {
     stub: true,
     sections: [
@@ -111,7 +130,7 @@ export function stubStageHandler(deps: StubDeps): Handler {
     const type = STUB_FOR_STAGE[run.stage];
     if (!type) throw new Error(`no stub for stage ${run.stage}`);
     progress();
-    let content: StubContent;
+    let content: StubContent | PrdContent;
     if (type === 'prd') {
       const intake = await deps.loadIntake(run.project_id);
       if (!intake) throw new Error('the project has no intake to build the PRD from');
@@ -130,8 +149,15 @@ export function stubStageHandler(deps: StubDeps): Handler {
       throw new Error('the intake is too long for a stub PRD (over the 100000 character limit)');
     // A cancel that arrived while this ran wins: nothing is written.
     if (signal.aborted) throw new Error('stopped');
-    await deps.write({ project: run.project_id, run: run.id, worker, type, content });
-    log('info', `wrote a stub ${type} (${content.sections.length} sections)`);
+    await deps.write({
+      project: run.project_id,
+      run: run.id,
+      worker,
+      type,
+      content,
+      ...(type === 'prd' ? { notes: STUB_PRD_NOTES } : {}),
+    });
+    log('info', `wrote a stub ${type} (${Object.keys(content.sections).length} sections)`);
     progress();
     return { tokens: 0 };
   };

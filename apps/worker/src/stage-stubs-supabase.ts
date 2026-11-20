@@ -63,6 +63,7 @@ export function supabaseStubDeps(admin: SupabaseClient<Database>): StubDeps {
         p_type: a.type,
         p_content: a.content as unknown as Json,
         p_model: 'stub:template',
+        ...(a.notes ? { p_notes: a.notes as unknown as Json } : {}),
       });
       if (error) throw new Error(`complete_stage_artifact: ${error.message}`);
     },

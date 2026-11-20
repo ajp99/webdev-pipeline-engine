@@ -109,9 +109,14 @@ describe('the TypeScript stage-to-artifact mapping agrees with the database (P1-
     expect(Object.fromEntries(pairs('stage_artifact', 'p_stage'))).toEqual(STAGE_ARTIFACT);
   });
 
-  it('private.artifact_stage() is the reverse, plus round_summary in build_rounds', () => {
-    const reverse = Object.fromEntries(pairs('artifact_stage', 'p_type').map(([t, st]) => [st, t]));
+  it('private.artifact_stage() is the reverse, plus round_summary in build_rounds and the owner-only prd_notes', () => {
+    const all = pairs('artifact_stage', 'p_type');
+    const reverse = Object.fromEntries(
+      all.filter(([t]) => t !== 'prd_notes').map(([t, st]) => [st, t]),
+    );
     expect(reverse).toEqual({ ...STAGE_ARTIFACT, build_rounds: ROUND_ARTIFACT });
+    // D-325: the PRD's notes are written and version-blocked with the PRD, but never gate the stage.
+    expect(all.filter(([t]) => t === 'prd_notes')).toEqual([['prd_notes', 'requirements']]);
   });
 });
 

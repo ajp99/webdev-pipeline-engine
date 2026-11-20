@@ -1,0 +1,2 @@
+-- mutation: a change request can be decided by an update
+select m.patch_fn($q$guard_change_request()$q$, $q$is distinct from (old.status, old.decision, old.decided_at, old.decided_by, old.project_id, old.created_by, old.created_at, old.submitted_by) then$q$, $q$is distinct from (new.status, new.decision, new.decided_at, new.decided_by, new.project_id, new.created_by, new.created_at, new.submitted_by) then$q$);
