@@ -1,6 +1,6 @@
 # Phase 3: Plan and prototype
 
-**Status:** not started
+**Status:** in progress
 
 **Goal:** The skills library, the master starter, the Planner, the provisioning script, the eval harness, and one prototype design shown to the client as screenshots, with owner approval and the client's approval recorded by the owner (D-298).
 
@@ -17,7 +17,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P3-T01 Skills library structure and registry sync**  
   Acceptance: `skills/` folders and a documented SKILL.md format. An agent drafts the first skills for the areas in `skills/README.md` from the starter and spec, and the owner reviews them. A script scans `skills/` and updates `skills_registry`, at worker start and before each run. The Planner selects skills per project and the worker loads only those into the run. Skills are versioned plain files; the promotion lifecycle stays deferred until at least 2 projects have good marks (D-282).
 
-- [ ] **P3-T02 Master starter**  
+- [x] **P3-T02 Master starter**  
   Acceptance: One master Next.js + Tailwind starter in `templates/master-starter/` with: a library of section components (hero, features, testimonials, FAQ, call to action, contact); MDX for pages and posts and JSON for settings and navigation, with schema checks at build that give plain-language errors; a blog; a contact form route that sends over SMTP (generic SMTP, Google Workspace or Gmail app password, Microsoft 365 OAuth 2.0) with a stubbed transport for tests, a honeypot, a time check and a best-effort rate limit on every form, a failure screen showing the phone number and plain contact links, and optional extras (auto-reply, consent checkbox, attachments, Turnstile) added only when the PRD asks; privacy policy and cookie notice templates; SEO basics including Open Graph tags and JSON-LD (Organization or LocalBusiness) generated from the settings JSON; fonts from the Google Fonts catalog downloaded at build time and served from the site's own domain (`next/font`); subtle motion with reduced-motion preferences respected, no dark mode, mobile-first layouts and no analytics unless the PRD asks; a `<Claim>` marker component that renders normally; placeholder images with descriptive alt text, clearly marked. Lighthouse 80+ on the starter. Dependabot or Renovate opens weekly update pull requests on the starter (D-286).
 
 - [ ] **P3-T03 Planner agent**  
@@ -47,7 +47,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P3-T11 Phase 3 gate evidence**  
   Acceptance: Record in `PROGRESS.md`: a manual walkthrough from a signed PRD to an approved prototype with a fictional client, the owner recording the client's approval; an automated end-to-end test of the same flow with model responses stubbed; a cost report in tokens from `stage_runs`; and the Planner eval results on the 3 fixtures.
 
-- [ ] **P3-T12 Reference-site screenshot tool**  
+- [x] **P3-T12 Reference-site screenshot tool**  
   Acceptance: A controlled tool opens only the URLs the client listed as reference sites (up to 3) and takes screenshots for the agent and the owner. It accepts public web addresses only (no localhost, private network ranges or cloud metadata addresses), has a short timeout, returns screenshots rather than page text, and stores them privately so they are deleted with the project's other data. Tests cover refused addresses and the timeout. This is the narrow exception to the command allowlist (D-188).
 
 ## Gate
