@@ -51,6 +51,19 @@ export async function savePlan(
     return { error: 'The newest plan is accepted; it can no longer be edited.' };
   if ((active.data ?? []).length)
     return { error: 'The Planner is drafting; wait for its run to finish, then edit.' };
+  // A typo in a skill id would only fail later, in the prototype or build run: check them against the library now.
+  const chosen = [...new Set(form.plan.rounds.flatMap((r) => r.skills))];
+  if (chosen.length) {
+    const lib = await supabase
+      .from('skills_registry')
+      .select('name')
+      .eq('scope', 'library')
+      .in('name', chosen);
+    if (lib.error) throw new Error(lib.error.message);
+    const known = new Set((lib.data ?? []).map((r) => r.name));
+    const unknown = chosen.filter((c) => !known.has(c));
+    if (unknown.length) return { error: `Not in the skills library: ${unknown.join(', ')}.` };
+  }
   const saved = await supabase.from('artifacts').insert({
     project_id: projectId,
     type: 'plan',

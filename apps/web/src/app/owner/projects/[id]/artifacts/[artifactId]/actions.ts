@@ -95,6 +95,21 @@ export async function actOnNote(formData: FormData) {
     return back(projectId, artifactId, 'error', 'That note is not on this version.');
   if (note.data.owner_disposition)
     return back(projectId, artifactId, 'error', 'That note has already been handled.');
+  // Claim the note first, and only while it is still unhandled, so a second press cannot forward it again and
+  // use a second revision; if the step itself then fails, the claim is undone.
+  const claimed = await supabase
+    .from('comments')
+    .update({ owner_disposition: DISPOSITION[action] })
+    .eq('id', commentId)
+    .is('owner_disposition', null)
+    .select('id');
+  if (claimed.error) throw new Error(claimed.error.message);
+  if ((claimed.data ?? []).length === 0)
+    return back(projectId, artifactId, 'error', 'That note has already been handled.');
+  const undo = async (message: string) => {
+    await supabase.from('comments').update({ owner_disposition: null }).eq('id', commentId);
+    return back(projectId, artifactId, 'error', message);
+  };
   if (action === 'forward') {
     // A Feedback loop: the database checks the cap (2 for the prototype, P3-T07) and queues the agent's revision.
     const fb = await supabase.rpc('feedback_gate', {
@@ -102,18 +117,13 @@ export async function actOnNote(formData: FormData) {
       p_artifact: artifactId,
       p_body: note.data.body,
     });
-    if (fb.error) return back(projectId, artifactId, 'error', fb.error.message);
+    if (fb.error) return undo(fb.error.message);
   } else if (action === 'change_request') {
     const cr = await supabase
       .from('change_requests')
       .insert({ project_id: projectId, description: note.data.body });
-    if (cr.error) return back(projectId, artifactId, 'error', cr.error.message);
+    if (cr.error) return undo(cr.error.message);
   }
-  const done = await supabase
-    .from('comments')
-    .update({ owner_disposition: DISPOSITION[action] })
-    .eq('id', commentId);
-  if (done.error) throw new Error(done.error.message);
   return back(
     projectId,
     artifactId,

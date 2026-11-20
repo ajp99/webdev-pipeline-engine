@@ -41,16 +41,54 @@ export function isPublicIp(ip: string): boolean {
     });
   }
   if (kind === 6) {
-    const a = ip.toLowerCase();
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
-    if (mapped) return isPublicIp(mapped[1]!);
-    if (a === '::' || a === '::1') return false;
-    // Unique local fc00::/7, link-local fe80::/10, multicast ff00::/8, documentation 2001:db8::/32.
-    if (/^f[cd]/.test(a) || /^fe[89ab]/.test(a) || a.startsWith('ff') || a.startsWith('2001:db8'))
-      return false;
+    const b = ipv6Bytes(ip);
+    if (!b) return false;
+    const v4 = (o: number) => `${b[o]}.${b[o + 1]}.${b[o + 2]}.${b[o + 3]}`;
+    const zero = (from: number, to: number) => b.slice(from, to).every((x) => x === 0);
+    // Forms that carry an IPv4 address are judged by that address (the URL parser writes ::ffff:127.0.0.1 as
+    // ::ffff:7f00:1, so the check works on bytes, not on text): mapped ::ffff:0:0/96, compatible ::/96 (which
+    // includes :: and ::1), NAT64 64:ff9b::/96 and 6to4 2002::/16.
+    if (zero(0, 10) && b[10] === 0xff && b[11] === 0xff) return isPublicIp(v4(12));
+    if (zero(0, 12)) return isPublicIp(v4(12));
+    if (b[0] === 0x00 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b && zero(4, 12))
+      return isPublicIp(v4(12));
+    if (b[0] === 0x20 && b[1] === 0x02) return isPublicIp(v4(2));
+    if ((b[0]! & 0xfe) === 0xfc) return false; // unique local fc00::/7
+    if (b[0] === 0xfe && (b[1]! & 0xc0) >= 0x80) return false; // link-local fe80::/10, site-local fec0::/10
+    if (b[0] === 0xff) return false; // multicast
+    if (b[0] === 0x20 && b[1] === 0x01 && b[2] === 0x0d && b[3] === 0xb8) return false; // documentation
+    if (b[0] === 0x20 && b[1] === 0x01 && b[2] === 0x00 && b[3] === 0x00) return false; // Teredo (hides an IPv4)
+    if (b[0] === 0x01 && zero(1, 8)) return false; // discard-only 100::/64
     return true;
   }
   return false;
+}
+
+/** An IPv6 address as 16 bytes (with a dotted IPv4 tail allowed), or null when it is not one. */
+export function ipv6Bytes(ip: string): number[] | null {
+  let a = ip.toLowerCase().replace(/%.*$/, '');
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+  if (dotted) {
+    if (isIP(dotted[1]!) !== 4) return null;
+    const o = dotted[1]!.split('.').map(Number);
+    a =
+      a.slice(0, -dotted[1]!.length) +
+      `${((o[0]! << 8) | o[1]!).toString(16)}:${((o[2]! << 8) | o[3]!).toString(16)}`;
+  }
+  const halves = a.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - head.length - tail.length;
+  if ((halves.length === 1 && missing !== 0) || missing < 0) return null;
+  const groups = [...head, ...Array(halves.length === 2 ? missing : 0).fill('0'), ...tail];
+  const out: number[] = [];
+  for (const g of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+    const n = parseInt(g, 16);
+    out.push(n >> 8, n & 0xff);
+  }
+  return out.length === 16 ? out : null;
 }
 
 export type Resolver = (host: string) => Promise<string[]>;
@@ -91,6 +129,28 @@ export async function checkUrl(
   if (addresses.length === 0 || !addresses.every(isPublicIp))
     return { ok: false, reason: 'not a public address' };
   return { ok: true, url };
+}
+
+/**
+ * For one response: may the browser receive it? A redirect is allowed only when its Location (resolved against
+ * the request) passes the same check, because the browser's request interception sees only the first URL of a
+ * redirect chain (gate review): every hop is fetched here and checked before the browser may follow it.
+ */
+export async function responseAllowed(
+  requestUrl: string,
+  status: number,
+  location: string | undefined,
+  allow: (url: string) => Promise<boolean>,
+): Promise<boolean> {
+  if (status < 300 || status >= 400) return true;
+  if (!location) return false;
+  let next: string;
+  try {
+    next = new URL(location, requestUrl).href;
+  } catch {
+    return false;
+  }
+  return allow(next);
 }
 
 /** The part of a browser the tool uses (Playwright's chromium in the worker; a fake in tests). */

@@ -1,7 +1,8 @@
-// What the Builder agent may touch (P2-T23). The prompt asks it to stay on the page; this code enforces it,
-// because the PRD it reads is client text. Reads stay inside the project directory (never the env files or
-// the preview records); writes go only under app/ (the page, its styles and layout), so the build and the
-// dev server, which this worker runs as the owner, never execute code the agent wrote (D-310, G19).
+// What an agent may touch (P2-T23, P3-T04). The prompt asks it to stay in its files; this code enforces it,
+// because what it reads is client text. Reads stay inside the project directory (never the env files or the
+// preview records); writes go only to the files its policy names. Those files are code the worker then builds
+// and serves as the owner (the Builder's app/ files; the Prototype agent's section components, fonts, CSS and
+// MDX), with HOME set: an accepted risk only while every client is fictional (D-310, go-live item G19).
 import { basename, join, relative, resolve, sep } from 'node:path';
 
 export type ToolVerdict = { allow: true } | { allow: false; reason: string };

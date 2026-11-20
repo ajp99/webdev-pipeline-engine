@@ -1,5 +1,5 @@
 import { settings } from '@/lib/settings-static';
-import { handleContact, rateLimiter } from '@/lib/contact';
+import { clientIp, handleContact, rateLimiter } from '@/lib/contact';
 import { transportFromEnv } from '@/lib/mail';
 
 const allow = rateLimiter();
@@ -16,7 +16,7 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
 
 export async function POST(req: Request) {
   if (!settings.contactForm.enabled) return Response.json({ ok: false }, { status: 404 });
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const ip = clientIp(req.headers);
   let raw: unknown;
   try {
     raw = await req.json();

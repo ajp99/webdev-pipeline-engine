@@ -47,55 +47,68 @@ type Ctx = {
   log: (line: string) => void;
 };
 
-/** The client's repository and Vercel project are named from the project: lower case, hyphens, at most 60. */
-export function slugFor(projectName: string): string {
+/**
+ * The client's repository and Vercel project are named from the project plus the first 8 characters of its id,
+ * so two projects with the same name never share them: lower case, hyphens.
+ */
+export function slugFor(projectName: string, projectId: string): string {
   const s = projectName
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
+    .slice(0, 50)
     .replace(/-+$/g, '');
-  if (!s) throw new Error('the project name gives no usable repository name');
-  return `site-${s}`;
+  const id = projectId
+    .toLowerCase()
+    .replace(/[^0-9a-f]/g, '')
+    .slice(0, 8);
+  if (!s || id.length < 8)
+    throw new Error('the project name or id gives no usable repository name');
+  return `site-${s}-${id}`;
 }
 
-async function steps(
-  c: Ctx,
-  repo: RepoRef,
-  project: { github_repo: string | null; vercel_project_id: string | null },
-): Promise<Step[]> {
+type Project = { name: string; github_repo: string | null; vercel_project_id: string | null };
+
+/**
+ * What is done. A repository or Vercel project counts as this project's only when its id is recorded on the
+ * project (each is recorded right after it is created); one with the same name that is not recorded stops the
+ * script instead of being taken over (gate review).
+ */
+async function steps(c: Ctx, repo: RepoRef, project: Project): Promise<Step[]> {
+  const full = `${repo.owner}/${repo.name}`;
   const exists = await c.github.repoExists(repo);
+  if (exists && project.github_repo !== full)
+    throw new Error(
+      `a repository ${full} exists but is not recorded for this project: check it by hand`,
+    );
   const vercelId = await c.vercel.findProject(repo.name);
+  if (vercelId && project.vercel_project_id !== vercelId)
+    throw new Error(
+      `a Vercel project ${repo.name} exists but is not recorded for this project: check it by hand`,
+    );
+  const mine = exists && project.github_repo === full;
   return [
-    { id: 'repo', label: `create the private repository ${repo.owner}/${repo.name}`, done: exists },
+    { id: 'repo', label: `create the private repository ${full} and record it`, done: mine },
     {
       id: 'starter',
       label: 'push the master starter to main and create staging',
-      done: exists && (await c.github.hasStarter(repo)),
+      done: mine && (await c.github.hasStarter(repo)),
     },
     {
       id: 'app',
       label: 'install the GitHub App on the repository only',
-      done: exists && (await c.github.appInstalled(repo)),
+      done: mine && (await c.github.appInstalled(repo)),
     },
     {
       id: 'vercel',
-      label: `create the Vercel project ${repo.name} linked to the repository (production: main; previews: staging)`,
+      label: `create the Vercel project ${repo.name} linked to the repository (production: main; previews: staging) and record it`,
       done: vercelId !== null,
     },
     {
       id: 'protection',
       label: "check Vercel's login protection is on",
       done: vercelId !== null && (await c.vercel.protectionOn(vercelId)),
-    },
-    {
-      id: 'record',
-      label: 'record github_repo and vercel_project_id on the project',
-      done:
-        project.github_repo === `${repo.owner}/${repo.name}` &&
-        vercelId !== null &&
-        project.vercel_project_id === vercelId,
     },
   ];
 }
@@ -107,37 +120,36 @@ export async function provision(
 ): Promise<Step[]> {
   const project = await c.store.get(projectId);
   if (!project) throw new Error('project not found');
-  const repo = { owner: opts.githubOwner, name: slugFor(project.name) };
+  const repo = { owner: opts.githubOwner, name: slugFor(project.name, projectId) };
   const plan = await steps(c, repo, project);
   for (const s of plan)
     c.log(`${s.done ? 'done   ' : opts.dryRun ? 'planned' : 'doing  '} ${s.label}`);
   if (opts.dryRun) return plan;
   for (const s of plan) {
     if (s.done) continue;
-    if (s.id === 'repo') await c.github.createPrivateRepo(repo);
+    if (s.id === 'repo') {
+      await c.github.createPrivateRepo(repo);
+      await c.store.record(projectId, { github_repo: `${repo.owner}/${repo.name}` });
+    }
     if (s.id === 'starter') await c.github.pushStarter(repo);
     if (s.id === 'app') await c.github.installApp(repo);
-    if (s.id === 'vercel') await c.vercel.createProject(repo.name, repo);
+    if (s.id === 'vercel') {
+      const id = await c.vercel.createProject(repo.name, repo);
+      await c.store.record(projectId, { vercel_project_id: id });
+    }
     if (s.id === 'protection') {
-      const id = await c.vercel.findProject(repo.name);
+      const id = (await c.store.get(projectId))?.vercel_project_id;
       if (!id || !(await c.vercel.protectionOn(id)))
         throw new Error(
           "Vercel's login protection is off: turn it on in the project's settings, then run again",
         );
     }
-    if (s.id === 'record') {
-      const id = await c.vercel.findProject(repo.name);
-      await c.store.record(projectId, {
-        github_repo: `${repo.owner}/${repo.name}`,
-        vercel_project_id: id,
-      });
-    }
     c.log(`done    ${s.label}`);
   }
-  return steps(c, repo, await c.store.get(projectId).then((p) => p!));
+  return steps(c, repo, (await c.store.get(projectId))!);
 }
 
-/** Removes a half-created project after the owner types the project's name exactly. */
+/** Removes what this project recorded (a half-created project too), after the owner types its name exactly. */
 export async function cleanup(
   c: Ctx,
   projectId: string,
@@ -149,15 +161,16 @@ export async function cleanup(
     throw new Error(
       `cleanup removes the repository and the Vercel project: type the project name "${project.name}" to confirm`,
     );
-  const repo = { owner: opts.githubOwner, name: slugFor(project.name) };
-  const id = await c.vercel.findProject(repo.name);
-  if (id) {
-    await c.vercel.deleteProject(id);
-    c.log(`removed the Vercel project ${repo.name}`);
+  if (project.vercel_project_id) {
+    await c.vercel.deleteProject(project.vercel_project_id);
+    c.log(`removed the Vercel project ${project.vercel_project_id}`);
   }
-  if (await c.github.repoExists(repo)) {
-    await c.github.deleteRepo(repo);
-    c.log(`removed the repository ${repo.owner}/${repo.name}`);
+  if (project.github_repo) {
+    const [owner, name] = project.github_repo.split('/') as [string, string];
+    if (await c.github.repoExists({ owner, name })) {
+      await c.github.deleteRepo({ owner, name });
+      c.log(`removed the repository ${project.github_repo}`);
+    }
   }
   await c.store.record(projectId, { github_repo: null, vercel_project_id: null });
   c.log('cleared github_repo and vercel_project_id');

@@ -7,6 +7,7 @@ import {
   formatReport,
   judgePrompt,
   parseJudge,
+  evalRecordWarning,
   plannerPromptHash,
   runPlannerEval,
 } from './eval-planner';
@@ -139,5 +140,19 @@ describe('the eval record (runs when the prompt changes, D-283)', () => {
       r.promptHash,
       "The Planner's prompt changed: run pnpm --filter @wpe/worker eval:planner and commit evals/last-run/planner.json",
     ).toBe(plannerPromptHash());
+  });
+});
+
+describe('evalRecordWarning (gate review)', () => {
+  it('warns when no run is recorded, the model differs or the prompt changed, and is quiet when all match', () => {
+    const hash = plannerPromptHash();
+    expect(evalRecordWarning(null, 'gemini:x')).toMatch('No Planner eval is recorded');
+    expect(evalRecordWarning({ model: 'gemini:a', promptHash: hash }, 'gemini:b')).toMatch(
+      'was run on gemini:a',
+    );
+    expect(evalRecordWarning({ model: 'gemini:a', promptHash: 'old' }, 'gemini:a')).toMatch(
+      'prompt changed',
+    );
+    expect(evalRecordWarning({ model: 'gemini:a', promptHash: hash }, 'gemini:a')).toBeNull();
   });
 });

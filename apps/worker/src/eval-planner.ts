@@ -188,3 +188,20 @@ export function formatReport(r: EvalReport): string {
   lines.push(r.pass ? 'PASS' : 'FAIL');
   return lines.join('\n');
 }
+
+/**
+ * D-283: the Planner's eval record must match the model and prompt the worker uses. Returns a warning for the
+ * worker's start-up log when it does not (or when no live run is recorded yet), or null when it matches.
+ */
+export function evalRecordWarning(
+  record: { model: string; promptHash: string } | null,
+  model: string,
+): string | null {
+  const fix = 'run pnpm --filter @wpe/worker eval:planner and commit evals/last-run/planner.json';
+  if (!record) return `No Planner eval is recorded yet: ${fix}.`;
+  if (record.model !== model)
+    return `The Planner eval was run on ${record.model}, but the worker uses ${model}: ${fix}.`;
+  if (record.promptHash !== plannerPromptHash())
+    return `The Planner's prompt changed since its eval: ${fix}.`;
+  return null;
+}
