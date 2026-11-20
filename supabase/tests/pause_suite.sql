@@ -13,7 +13,7 @@ $$ select t.proj('build_rounds') || ';' || t.sr(1, 'waiting', 1, '1 second', '1 
    || format(';insert into run_approvals(id, run_id, kind, command) values (%L, %s, ''delete_files'', ''rm -r a'')', 'eeeeeeee-0000-0000-0000-000000000001', t.rid(1))
    || case when two then format(';insert into run_approvals(id, run_id, kind, command) values (%L, %s, ''rewrite_history'', ''git rebase staging'')', 'eeeeeeee-0000-0000-0000-000000000002', t.rid(1)) else '' end $$;
 create function t.dec(id text, ok boolean) returns text language sql as
-$$ select format('select decide_run_approval(%L, %s)', id, ok) $$;
+$$ select format('select decide_run_approval(%L, %s)', id, coalesce(ok::text, 'null')) $$;
 create function t.ap(id text, st text) returns text language sql as
 $$ select format('(select status::text from run_approvals where id=%L)=%L', id, st) $$;
 
@@ -56,3 +56,11 @@ select t.adv('backlog: a refused command is a kind', t.proj('build_rounds'), nul
   format('insert into backlog_items(project_id, question, kind) values (%L, ''curl refused'', ''refused_command'')', 'cccccccc-0000-0000-0000-000000000001'), 'ok');
 select t.adv('backlog: an unknown kind is refused', t.proj('build_rounds'), null, 'postgres',
   format('insert into backlog_items(project_id, question, kind) values (%L, ''x'', ''wish'')', 'cccccccc-0000-0000-0000-000000000001'), 'error:backlog_items_kind_check');
+
+\echo '### the owner answers only through decide_run_approval'
+select t.adv('run_approvals: the owner cannot approve by a direct update', t.waiting(), :'O', 'authenticated',
+  format('update run_approvals set status=''approved'' where id=%L', 'eeeeeeee-0000-0000-0000-000000000001'), 'ok', t.ap(:Q, 'pending'));
+select t.adv('run_approvals: the owner cannot insert one', t.waiting(), :'O', 'authenticated',
+  format('insert into run_approvals(run_id, kind, command) values (%s, ''delete_files'', ''x'')', t.rid(1)), 'error');
+select t.adv('run_approvals: the owner reads them', t.waiting(), :'O', 'authenticated',
+  'do $x$ begin if (select count(*) from run_approvals) <> 1 then raise exception ''cannot read''; end if; end $x$', 'ok');

@@ -446,7 +446,7 @@ create table run_approvals (
   id uuid primary key default gen_random_uuid(),
   run_id uuid not null references stage_runs (id) on delete cascade,
   kind text not null check (kind in ('delete_files', 'rewrite_history')),
-  command text not null,
+  command text not null check (length(command) between 1 and 2000),
   status run_approval_status not null default 'pending',
   requested_at timestamptz not null default now(),
   decided_at timestamptz,
@@ -2326,7 +2326,7 @@ begin
     'owners', 'projects', 'intake_templates', 'intake_responses', 'uploads', 'artifacts',
     'rounds', 'backlog_items', 'comments', 'change_requests', 'qc_runs',
     'skills_registry', 'stage_runs', 'gate_config', 'skill_uses',
-    'intake_rounds', 'run_logs', 'owner_notes', 'prd_feedback', 'run_approvals', 'email_log',
+    'intake_rounds', 'run_logs', 'owner_notes', 'prd_feedback', 'email_log',
     'project_internal'
   ] loop
     execute format(
@@ -2335,6 +2335,10 @@ begin
     );
   end loop;
 end $$;
+
+-- Pause requests (P4-T03): the owner reads them and answers only through decide_run_approval, so the decision
+-- is always recorded and the run always resumes; the worker writes them only through request_run_approval.
+create policy owner_read on run_approvals for select to authenticated using (private.is_owner());
 
 -- Approvals: the owner reads them; nothing writes them through the API. Every approval is written by
 -- accept_gate (P2-T18), which checks the stage, the current version, the order of the gates and the intake
