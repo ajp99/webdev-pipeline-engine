@@ -38,7 +38,7 @@ do $$ begin perform set_config('app.stage_advance','on',true); update projects s
 select t.run('owner chooses answer routing', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update backlog_items set answer_action=''immediate_fix'' where ask_client', 'ok:1');
 select t.run('a run can move to waiting', null, 'service_role', 'update stage_runs set status=''waiting''', 'ok:1');
 select t.run('attempts above 2 rejected', null, 'service_role', 'update stage_runs set attempts=3', 'error');
-select t.run('owner records a pause request', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'insert into run_approvals(run_id,kind,command) values (''33333333-3333-3333-3333-333333333333'',''rewrite_history'',''git push --force'')', 'ok:1');
+select t.run('owner cannot record a pause request directly (only the worker, through request_run_approval, P4-T03)', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'insert into run_approvals(run_id,kind,command) values (''33333333-3333-3333-3333-333333333333'',''rewrite_history'',''git push --force'')', 'error');
 select t.run('pause request with an unknown kind rejected', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'insert into run_approvals(run_id,kind,command) values (''33333333-3333-3333-3333-333333333333'',''curl'',''curl x'')', 'error');
 select t.run('round claims stored', '00000000-0000-0000-0000-0000000000a0'::uuid, 'authenticated', 'update rounds set claims=''[{"id":"c1","text":"Open since 1998"}]''::jsonb', 'ok:1');
 
