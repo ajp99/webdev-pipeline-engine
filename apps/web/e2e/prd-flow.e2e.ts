@@ -126,4 +126,47 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
   await expect(page.getByText('Saved as a new version.')).toBeVisible();
   await expect(page.getByRole('heading', { name: /^v1\.1/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Send v1.1 to the client' })).toBeVisible();
+
+  // Phase 3 (P3-T11): from the signed PRD to an approved prototype. The plan and the prototype agent are
+  // scripted; the prototype's build, commit, preview and screenshots are real.
+  const card = (gate: string) =>
+    page
+      .getByRole('listitem')
+      .filter({ hasText: projectName })
+      .filter({ hasText: `${gate} gate` });
+  await page.goto(`${projectUrl}/stage`);
+  await page.getByRole('button', { name: 'Run plan' }).click();
+  await waitFor(page, (p) => p.getByRole('link', { name: 'plan v1' }));
+  await page.getByRole('link', { name: 'plan v1' }).click();
+  await expect(page.getByRole('heading', { name: 'Rounds (2; 0 hard)' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Edit the plan' })).toBeVisible();
+  // Optional skill marks (P3-T08).
+  await page.locator('select[name="mark_seo/on-page-basics"]').selectOption('good');
+  await page.getByRole('button', { name: 'Save marks' }).click();
+  await expect(page.getByText('Skill marks saved (1 marked).')).toBeVisible();
+  // The owner accepts the plan; that queues the prototype run.
+  await page.goto('/owner/queue');
+  await card('soft').getByRole('button', { name: 'Accept' }).click();
+  await page.goto(`${projectUrl}/stage`);
+  await waitFor(page, (p) => p.getByRole('link', { name: 'prototype v1' }), 480_000);
+  await page.getByRole('link', { name: 'prototype v1' }).click();
+  await expect(page.getByRole('heading', { name: 'Screenshots for the client' })).toBeVisible();
+  await expect(page.getByAltText("Desktop screenshot of the prototype's main page")).toBeVisible();
+  await expect(page.getByAltText("Mobile screenshot of the prototype's main page")).toBeVisible();
+  await expect(page.getByText('Claims for the client to confirm: 1')).toBeVisible();
+  // The client's reply is a note the owner handles (P3-T06): here, dismissed.
+  await page.locator('textarea[name=body]').fill('Looks great, maybe a warmer photo later.');
+  await page.getByRole('button', { name: 'Record the note' }).click();
+  await page.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.getByText('Handled: ignored.')).toBeVisible();
+  // Two approvals: the owner first, then the client's, recorded with the channel (P3-T05).
+  await page.goto('/owner/queue');
+  await card('soft').getByRole('button', { name: 'Accept' }).click();
+  await page.goto('/owner/queue');
+  await card('client')
+    .locator('textarea[name=note]')
+    .fill('Client approved the screenshots by email, 20 November');
+  await card('client').getByRole('button', { name: 'Accept' }).click();
+  await page.goto(`${projectUrl}/stage`);
+  await expect(page.getByText(/build rounds stage/)).toBeVisible();
 });

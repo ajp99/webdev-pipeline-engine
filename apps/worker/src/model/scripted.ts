@@ -24,6 +24,43 @@ const PRD = {
   conflicts: [],
 };
 
+const PLAN = {
+  rounds: [
+    {
+      title: 'Brand and main pages',
+      scope: ['Home', 'Services'],
+      skills: [
+        'starter-customization/apply-brand',
+        'industry-copy/write-page-copy',
+        'accessibility-basics/page-checks',
+      ],
+      depends_on: [],
+      hard: false,
+      token_budget: 300000,
+    },
+    {
+      title: 'Contact and legal',
+      scope: ['Contact', 'Privacy policy', 'Cookie notice'],
+      skills: ['smtp-contact-form/configure-form', 'seo/on-page-basics'],
+      depends_on: [1],
+      hard: false,
+      token_budget: 200000,
+    },
+  ],
+  design_brief: {
+    palette: 'Calm blues and white (scripted)',
+    fonts: 'Inter',
+    layout: 'Mobile first, airy',
+    references: 'None given',
+  },
+  rationale: {
+    rounds: 'Few pages, no blog: 2 rounds.',
+    skills: 'From the PRD.',
+    budget: 'Small site.',
+    design: 'From the brand section.',
+  },
+};
+
 export function scriptedModel(): ModelClient {
   return {
     name: 'scripted:e2e',
@@ -40,6 +77,7 @@ export function scriptedModel(): ModelClient {
           tokens: 20,
         };
       }
+      if ('rounds' in props) return { text: JSON.stringify(PLAN), tokens: 30 };
       throw new Error('the scripted model has no answer for this schema');
     },
   };

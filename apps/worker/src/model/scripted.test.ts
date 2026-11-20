@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  parsePlannerReply,
   parseRequirementsReply,
+  PLANNER_JSON_SCHEMA,
   REQUIREMENTS_JSON_SCHEMA,
   REVIEW_JSON_SCHEMA,
   reviewReplySchema,
@@ -24,6 +26,21 @@ describe('scriptedModel (end-to-end test only)', () => {
     expect(
       parseRequirementsReply(JSON.parse(again.text), { hasPrevious: true, ownerNotes: [] }).ok,
     ).toBe(true);
+  });
+  it('answers the Planner with a plan that uses only skills from the library', async () => {
+    const plan = await scriptedModel().generateJson({
+      system: '',
+      user: '',
+      schema: PLANNER_JSON_SCHEMA,
+    });
+    const ids = [
+      'starter-customization/apply-brand',
+      'industry-copy/write-page-copy',
+      'accessibility-basics/page-checks',
+      'smtp-contact-form/configure-form',
+      'seo/on-page-basics',
+    ];
+    expect(parsePlannerReply(JSON.parse(plan.text), ids).ok).toBe(true);
   });
   it('refuses a schema it does not know', async () => {
     await expect(

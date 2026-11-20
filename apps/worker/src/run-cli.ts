@@ -22,7 +22,7 @@ import { supabaseRequirementsDeps } from './requirements-supabase';
 import { plannerHandler } from './planner';
 import { supabasePlannerDeps } from './planner-supabase';
 import { prototypeHandler } from './prototype';
-import { prototypeAgent } from './prototype-agent';
+import { prototypeAgent, scriptedPrototypeAgent } from './prototype-agent';
 import { commitStaging, prepareRepo } from './prototype-host';
 import { previewScreenshots } from './prototype-shots';
 import { supabasePrototypeDeps } from './prototype-supabase';
@@ -102,7 +102,11 @@ const prototype = prototypeHandler({
   })),
   prepare: (projectId, io) => prepareRepo(projectId, io),
   stopPreview,
-  agent: prototypeAgent(),
+  // The end-to-end test runs the real build, preview and screenshots around a scripted agent (WPE_E2E=1 only).
+  agent:
+    process.env.WPE_E2E === '1' && process.env.MODEL_PROVIDER === 'scripted'
+      ? scriptedPrototypeAgent()
+      : prototypeAgent(),
   check: (dir, io) => run('pnpm', ['build'], { cwd: dir, io, label: 'pnpm build' }),
   commit: commitStaging,
   startPreview: (dir, io) => startPreview(dir, io),
