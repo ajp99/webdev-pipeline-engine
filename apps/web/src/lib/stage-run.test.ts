@@ -62,6 +62,40 @@ describe('previewUrl', () => {
 });
 
 describe('artifactSections', () => {
+  it('shows a plan (P3-T03) as its rounds with hard flags and budgets, then the brief and rationale', () => {
+    const plan = {
+      rounds: [
+        {
+          number: 1,
+          title: 'Core',
+          scope: ['Home'],
+          skills: ['seo/x'],
+          depends_on: [],
+          hard: false,
+          token_budget: 200000,
+        },
+        {
+          number: 2,
+          title: 'Booking',
+          scope: ['Bookings'],
+          skills: [],
+          depends_on: [1],
+          hard: true,
+          token_budget: 300000,
+        },
+      ],
+      total_token_budget: 500000,
+      design_brief: { palette: 'Teal', fonts: 'Inter', layout: 'Airy', references: 'None' },
+      rationale: { rounds: 'r', skills: 's', budget: 'b', design: 'd' },
+      model: 'gemini',
+    };
+    const out = artifactSections(plan)!;
+    expect(out[0]!.title).toBe('Rounds (2; 1 hard)');
+    expect(out[0]!.markdown).toContain('2. Booking (hard: stronger model)');
+    expect(out[0]!.markdown).toContain('Budget: 300,000 tokens');
+    expect(out[1]).toEqual({ title: 'Total token budget', markdown: '500,000 tokens' });
+    expect(out.map((s) => s.title)).toContain('Design brief: palette');
+  });
   it('shows a PRD (D-325) as its fixed sections, the change summary first, and the notes as gaps and conflicts', () => {
     const prd = {
       sections: {

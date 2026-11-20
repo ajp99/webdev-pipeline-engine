@@ -133,6 +133,7 @@ export function supabaseRequirementsDeps(admin: SupabaseClient<Database>): Requi
         p_content: a.content as unknown as Json,
         p_model: a.model,
         p_notes: a.notes as unknown as Json,
+        ...(a.promptHash ? { p_prompt_hash: a.promptHash } : {}),
       });
       if (error) throw new Error(`complete_stage_artifact: ${error.message}`);
     },
