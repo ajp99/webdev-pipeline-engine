@@ -14,7 +14,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 
 ## Tasks
 
-- [ ] **P3-T01 Skills library structure and registry sync**  
+- [x] **P3-T01 Skills library structure and registry sync**  
   Acceptance: `skills/` folders and a documented SKILL.md format. An agent drafts the first skills for the areas in `skills/README.md` from the starter and spec, and the owner reviews them. A script scans `skills/` and updates `skills_registry`, at worker start and before each run. The Planner selects skills per project and the worker loads only those into the run. Skills are versioned plain files; the promotion lifecycle stays deferred until at least 2 projects have good marks (D-282).
 
 - [x] **P3-T02 Master starter**  

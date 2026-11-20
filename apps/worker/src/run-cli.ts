@@ -8,6 +8,7 @@ import { builderHandler } from './builder';
 import {
   checkBuild,
   prepareWorkdir,
+  run,
   startPreview,
   stopAllPreviews,
   stopPreview,
@@ -20,6 +21,11 @@ import { requirementsHandler } from './requirements';
 import { supabaseRequirementsDeps } from './requirements-supabase';
 import { plannerHandler } from './planner';
 import { supabasePlannerDeps } from './planner-supabase';
+import { prototypeHandler } from './prototype';
+import { prototypeAgent } from './prototype-agent';
+import { commitStaging, prepareRepo } from './prototype-host';
+import { previewScreenshots } from './prototype-shots';
+import { supabasePrototypeDeps } from './prototype-supabase';
 import { takeShots } from './reference-shots';
 import { playwrightBrowser } from './reference-shots-browser';
 import { storeShots } from './reference-shots-supabase';
@@ -87,9 +93,25 @@ try {
 // The walking skeleton (P2-T23): stub stage agents, and the Builder on this computer with your Claude Code
 // login (no API key; sign in once with `claude`). The preview is a local dev server.
 const stubDeps = supabaseStubDeps(admin);
+// The Prototype agent (P3-T04): an Agent SDK session on your Claude Code login, in a local site repository
+// (D-328); screenshots of the local preview with Playwright.
+const prototype = prototypeHandler({
+  ...supabasePrototypeDeps(admin, () => ({
+    skills: scanSkills(skillsRoot),
+    library: () => supabaseRegistryDeps(admin).listLibrary(),
+  })),
+  prepare: (projectId, io) => prepareRepo(projectId, io),
+  stopPreview,
+  agent: prototypeAgent(),
+  check: (dir, io) => run('pnpm', ['build'], { cwd: dir, io, label: 'pnpm build' }),
+  commit: commitStaging,
+  startPreview: (dir, io) => startPreview(dir, io),
+  screenshots: (url) => previewScreenshots(url),
+});
 const skeleton = {
   requirements,
   planner,
+  prototype,
   stubs: stubStageHandler(stubDeps),
   builder: builderHandler({
     loadApproved: stubDeps.loadApproved,

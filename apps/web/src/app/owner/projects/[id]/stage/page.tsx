@@ -57,7 +57,8 @@ export default async function StagePage({
 
   // The preview the Builder logged on its newest build run that has one.
   let preview: string | null = null;
-  const lastBuild = runList.find((r) => r.stage === 'build_rounds');
+  // The Builder and the Prototype agent (P3-T04) both log their local preview.
+  const lastBuild = runList.find((r) => r.stage === 'build_rounds' || r.stage === 'prototype');
   if (lastBuild) {
     const logs = await supabase
       .from('run_logs')
