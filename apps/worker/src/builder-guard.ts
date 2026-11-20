@@ -2,7 +2,7 @@
 // because the PRD it reads is client text. Reads stay inside the project directory (never the env files or
 // the preview records); writes go only under app/ (the page, its styles and layout), so the build and the
 // dev server, which this worker runs as the owner, never execute code the agent wrote (D-310, G19).
-import { basename, relative, resolve, sep } from 'node:path';
+import { basename, join, relative, resolve, sep } from 'node:path';
 
 export type ToolVerdict = { allow: true } | { allow: false; reason: string };
 
@@ -21,10 +21,42 @@ function inside(dir: string, p: string): string | null {
   return rel;
 }
 
-export function guardTool(dir: string, tool: string, input: Record<string, unknown>): ToolVerdict {
+/** Which files an agent may write: a relative path test and the words for a refusal. */
+export type WritePolicy = { agent: string; canWrite: (rel: string) => boolean; rule: string };
+
+/** The Builder (walking skeleton): .tsx, .ts and .css files under app/. */
+export const BUILDER_WRITES: WritePolicy = {
+  agent: 'Builder',
+  canWrite: (rel) => (rel === 'app' || rel.startsWith(`app${sep}`)) && WRITABLE_EXT.test(rel),
+  rule: '.tsx, .ts and .css files under app/',
+};
+
+/**
+ * The Prototype agent (P3-T04): the page content and settings (content/**.mdx and .json), the section
+ * components (components/sections/**.tsx) and the brand (app/globals.css, app/fonts.ts). Everything else in the
+ * starter (the contact route, the content loader, the build configuration) is put back before every run.
+ */
+export const PROTOTYPE_WRITES: WritePolicy = {
+  agent: 'Prototype agent',
+  canWrite: (rel) => {
+    const parts = rel.split(sep);
+    if (parts[0] === 'content') return /\.(mdx|json)$/.test(rel);
+    if (parts[0] === 'components' && parts[1] === 'sections')
+      return parts.length === 3 && /\.tsx$/.test(rel);
+    return rel === join('app', 'globals.css') || rel === join('app', 'fonts.ts');
+  },
+  rule: 'content/ (.mdx, .json), components/sections/ (.tsx), app/globals.css and app/fonts.ts',
+};
+
+export function guardTool(
+  dir: string,
+  tool: string,
+  input: Record<string, unknown>,
+  policy: WritePolicy = BUILDER_WRITES,
+): ToolVerdict {
   const isRead = READ_TOOLS.has(tool);
   const isWrite = WRITE_TOOLS.has(tool);
-  if (!isRead && !isWrite) return deny(`the ${tool} tool is not available to the Builder`);
+  if (!isRead && !isWrite) return deny(`the ${tool} tool is not available to the ${policy.agent}`);
 
   // Every path-like input must stay inside the directory. Glob patterns and Grep globs count too.
   const paths: string[] = [];
@@ -52,7 +84,7 @@ export function guardTool(dir: string, tool: string, input: Record<string, unkno
     const rel = inside(dir, p);
     if (rel === null) return deny(`${p} is outside the project directory`);
     if (rel.split(sep).some((part) => HIDDEN_FILE.test(part)))
-      return deny(`${basename(p)} is not available to the Builder`);
+      return deny(`${basename(p)} is not available to the ${policy.agent}`);
     if (rel.split(sep).includes('node_modules') && isWrite)
       return deny('node_modules cannot be changed');
   }
@@ -60,8 +92,8 @@ export function guardTool(dir: string, tool: string, input: Record<string, unkno
     if (paths.length === 0) return deny('a write needs a file path');
     for (const p of paths) {
       const rel = inside(dir, p)!;
-      if (!(rel === 'app' || rel.startsWith(`app${sep}`)) || !WRITABLE_EXT.test(rel))
-        return deny(`the Builder may only write .tsx, .ts and .css files under app/, not ${p}`);
+      if (!policy.canWrite(rel))
+        return deny(`the ${policy.agent} may only write ${policy.rule}, not ${p}`);
     }
   }
   return { allow: true };

@@ -70,6 +70,17 @@ export function artifactSections(content: unknown): Section[] | null {
       out.unshift({ title: 'What changed', markdown: prd.change_summary });
     return out;
   }
+  const proto = prototypeView(content);
+  if (proto) {
+    return [
+      { title: 'What the agent did', markdown: proto.summary },
+      {
+        title: 'Where it is',
+        markdown: `Main page (/), commit ${proto.commit.slice(0, 8)} on the local staging branch. Claims for the client to confirm: ${proto.claims}.`,
+      },
+      { title: 'Skills used', markdown: proto.skills.join(', ') || 'none' },
+    ];
+  }
   if (planProblem(content) === null) {
     // The plan (P3-T03): the rounds the owner confirms at the soft gate (count, hard flags, budget), then the
     // design brief and the rationale.
@@ -121,4 +132,32 @@ export function artifactSections(content: unknown): Section[] | null {
     out.push({ title, markdown });
   }
   return out;
+}
+
+export type PrototypeView = {
+  summary: string;
+  commit: string;
+  claims: number;
+  skills: string[];
+  screenshots: { desktop: string; mobile: string };
+};
+
+/** A prototype artifact (P3-T04) as the console shows it, or null when the content is not one. */
+export function prototypeView(content: unknown): PrototypeView | null {
+  const c = content as Partial<PrototypeView> & { branch?: unknown; page?: unknown };
+  if (typeof content !== 'object' || content === null || c.page !== '/' || c.branch !== 'staging')
+    return null;
+  const shots = c.screenshots as { desktop?: unknown; mobile?: unknown } | undefined;
+  if (typeof c.summary !== 'string' || typeof c.commit !== 'string' || typeof c.claims !== 'number')
+    return null;
+  if (typeof shots?.desktop !== 'string' || typeof shots?.mobile !== 'string') return null;
+  return {
+    summary: c.summary,
+    commit: c.commit,
+    claims: c.claims,
+    skills: Array.isArray(c.skills)
+      ? c.skills.filter((x): x is string => typeof x === 'string')
+      : [],
+    screenshots: { desktop: shots.desktop, mobile: shots.mobile },
+  };
 }

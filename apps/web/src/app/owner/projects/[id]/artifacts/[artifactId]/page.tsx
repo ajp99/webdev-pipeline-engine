@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
-import { artifactSections } from '@/lib/stage-run';
+import { artifactSections, prototypeView } from '@/lib/stage-run';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +27,18 @@ export default async function ArtifactPage({
   const sections = artifactSections(a.content);
   // P3-T12: the reference-site screenshots the Planner run took, shown with the plan (private, short-lived links).
   let shots: { path: string; url: string }[] = [];
+  // P3-T04: the prototype's desktop and mobile screenshots (private, short-lived links).
+  let screens: { label: string; url: string }[] = [];
+  const proto = a.type === 'prototype' ? prototypeView(a.content) : null;
+  if (proto) {
+    const signed = await supabase.storage
+      .from('intake-uploads')
+      .createSignedUrls([proto.screenshots.desktop, proto.screenshots.mobile], 600);
+    if (signed.error) throw new Error(signed.error.message);
+    screens = (signed.data ?? []).flatMap((x, i) =>
+      x.signedUrl ? [{ label: i === 0 ? 'Desktop' : 'Mobile', url: x.signedUrl }] : [],
+    );
+  }
   if (a.type === 'plan') {
     const rows = await supabase
       .from('uploads')
@@ -75,6 +87,30 @@ export default async function ArtifactPage({
           {JSON.stringify(a.content, null, 2)}
         </pre>
       )}
+      {screens.length ? (
+        <section className="mt-8">
+          <h2 className="font-medium">Screenshots for the client</h2>
+          <p className="text-sm text-neutral-600">
+            Send these to the client outside the pipeline; the local preview is for you only.
+          </p>
+          <div className="mt-2 flex flex-wrap items-start gap-4">
+            {screens.map((x) => (
+              <figure key={x.label} className={x.label === 'Mobile' ? 'w-48' : 'max-w-2xl flex-1'}>
+                <a href={x.url} target="_blank" rel="noreferrer">
+                  <img
+                    src={x.url}
+                    alt={`${x.label} screenshot of the prototype's main page`}
+                    className="w-full rounded border"
+                  />
+                </a>
+                <figcaption className="mt-1 text-xs text-neutral-500">
+                  {x.label} (opens full size)
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      ) : null}
       {shots.length ? (
         <section className="mt-8">
           <h2 className="font-medium">Reference sites the client listed</h2>

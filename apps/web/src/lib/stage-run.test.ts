@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { artifactSections, previewUrl, runBlocked } from './stage-run';
+import { artifactSections, previewUrl, prototypeView, runBlocked } from './stage-run';
 
 describe('runBlocked', () => {
   it('offers Run on a skeleton stage of an active project with no open run', () => {
@@ -62,6 +62,22 @@ describe('previewUrl', () => {
 });
 
 describe('artifactSections', () => {
+  it('shows a prototype (P3-T04) as its summary, commit, claims and skills', () => {
+    const c = {
+      page: '/',
+      branch: 'staging',
+      commit: 'abcdef1234',
+      screenshots: { desktop: 'p/prototype/v1-desktop.jpg', mobile: 'p/prototype/v1-mobile.jpg' },
+      summary: 'Teal hero.',
+      skills: ['starter-customization/apply-brand'],
+      claims: 3,
+    };
+    const out = artifactSections(c)!;
+    expect(out[0]).toEqual({ title: 'What the agent did', markdown: 'Teal hero.' });
+    expect(out[1]!.markdown).toContain('commit abcdef12');
+    expect(out[1]!.markdown).toContain('Claims for the client to confirm: 3');
+    expect(prototypeView({ ...c, branch: 'main' })).toBeNull();
+  });
   it('shows a plan (P3-T03) as its rounds with hard flags and budgets, then the brief and rationale', () => {
     const plan = {
       rounds: [
