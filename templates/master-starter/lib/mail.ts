@@ -3,6 +3,7 @@
 //   MAIL_TRANSPORT=smtp          generic SMTP, Google Workspace or a Gmail app password (smtp.gmail.com)
 //   MAIL_TRANSPORT=microsoft365  Microsoft 365 with OAuth 2.0 (app-only, client credentials)
 //   MAIL_TRANSPORT=stub          tests and local previews: messages are kept in memory, nothing is sent
+//                                (refused when NODE_ENV=production unless MAIL_TRANSPORT_ALLOW_STUB=1)
 import nodemailer from 'nodemailer';
 
 export type Message = { to: string; from: string; replyTo: string; subject: string; text: string };
@@ -54,7 +55,12 @@ export function transportFromEnv(
   fetchImpl: typeof fetch = fetch,
 ): Transport {
   const kind = env.MAIL_TRANSPORT?.trim() || 'stub';
-  if (kind === 'stub') return stubTransport;
+  if (kind === 'stub') {
+    // A live site must not drop enquiries silently: in production the stub needs MAIL_TRANSPORT_ALLOW_STUB=1.
+    if (env.NODE_ENV === 'production' && env.MAIL_TRANSPORT_ALLOW_STUB !== '1')
+      throw new Error('MAIL_TRANSPORT is not set: in production use smtp or microsoft365');
+    return stubTransport;
+  }
   if (kind === 'smtp') {
     const port = Number(env.SMTP_PORT ?? 465);
     const t = nodemailer.createTransport({

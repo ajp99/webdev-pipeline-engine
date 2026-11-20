@@ -1,4 +1,5 @@
 // Run with: pnpm --filter @wpe/worker start   (reads apps/worker/.env). Stop with Ctrl+C.
+import { existsSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { resolve } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
@@ -35,6 +36,7 @@ import { DEFAULTS, startRunner } from './runner';
 import { supabaseRunnerDeps } from './runner-supabase';
 import { stubStageHandler } from './stage-stubs';
 import { supabaseStubDeps } from './stage-stubs-supabase';
+import { evalRecordWarning } from './eval-planner';
 
 function need(name: string): string {
   const v = process.env[name];
@@ -83,6 +85,12 @@ try {
     model,
   );
   console.log(`Intake review and requirements use ${model.name}.`);
+  const evalRecord = resolve(import.meta.dirname, '../../../evals/last-run/planner.json');
+  const warning = evalRecordWarning(
+    existsSync(evalRecord) ? JSON.parse(readFileSync(evalRecord, 'utf8')) : null,
+    model.name,
+  );
+  if (warning) console.warn(warning);
 } catch (e) {
   const reason = e instanceof Error ? e.message : String(e);
   console.log(`Intake review and requirements are off: ${reason}`);

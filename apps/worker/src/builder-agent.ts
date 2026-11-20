@@ -4,7 +4,7 @@
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentResult, BuilderDeps, RunIo } from './builder';
 import { guardTool } from './builder-guard';
-import { childEnv } from './builder-host';
+import { childEnv, usageTokens } from './builder-host';
 
 const BUILDER_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep'];
 const DENIED_TOOLS = ['Bash', 'WebFetch', 'WebSearch', 'Task', 'NotebookEdit'];
@@ -65,7 +65,7 @@ function read(
     }
   } else if (msg.type === 'result') {
     const u = msg.usage;
-    acc.tokens += (u?.input_tokens ?? 0) + (u?.output_tokens ?? 0);
+    acc.tokens += usageTokens(u);
     if (msg.subtype !== 'success') acc.failed = `the session ended with ${msg.subtype}`;
   }
 }

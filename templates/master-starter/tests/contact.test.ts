@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleContact, MIN_FILL_MS, rateLimiter, type ContactConfig } from '../lib/contact';
+import {
+  clientIp,
+  handleContact,
+  MIN_FILL_MS,
+  rateLimiter,
+  type ContactConfig,
+} from '../lib/contact';
 import { stubOutbox, stubTransport, transportFromEnv } from '../lib/mail';
 
 const NOW = 1_000_000;
@@ -85,6 +91,15 @@ describe('mail transports from the environment', () => {
     expect(transportFromEnv({})).toBe(stubTransport);
     expect(() => transportFromEnv({ MAIL_TRANSPORT: 'carrier-pigeon' })).toThrow('not known');
   });
+  it('refuses the stub in production unless it is allowed on purpose (gate review)', () => {
+    expect(() => transportFromEnv({ NODE_ENV: 'production' })).toThrow('in production use smtp');
+    expect(() => transportFromEnv({ NODE_ENV: 'production', MAIL_TRANSPORT: 'stub' })).toThrow(
+      'in production',
+    );
+    expect(transportFromEnv({ NODE_ENV: 'production', MAIL_TRANSPORT_ALLOW_STUB: '1' })).toBe(
+      stubTransport,
+    );
+  });
   it('names a missing setting, never a secret value', () => {
     expect(() =>
       transportFromEnv({ MAIL_TRANSPORT: 'smtp', SMTP_HOST: 'h', SMTP_PASSWORD: 's3cret' }),
@@ -113,5 +128,26 @@ describe('mail transports from the environment', () => {
     expect(String((fetchImpl.mock.calls[0] as unknown[])[0])).toContain(
       'login.microsoftonline.com/t/oauth2/v2.0/token',
     );
+  });
+});
+
+describe('the rate-limit key and memory (gate review)', () => {
+  const h = (o: Record<string, string>) => new Headers(o);
+  it("uses Vercel's own address headers, and only the proxy's last x-forwarded-for entry", () => {
+    expect(clientIp(h({ 'x-real-ip': '203.0.113.9', 'x-forwarded-for': '1.1.1.1' }))).toBe(
+      '203.0.113.9',
+    );
+    expect(clientIp(h({ 'x-vercel-forwarded-for': '203.0.113.7' }))).toBe('203.0.113.7');
+    // A visitor writing their own first entry does not get a fresh count.
+    expect(clientIp(h({ 'x-forwarded-for': 'spoofed-1, 198.51.100.4' }))).toBe('198.51.100.4');
+    expect(clientIp(h({ 'x-forwarded-for': 'spoofed-2, 198.51.100.4' }))).toBe('198.51.100.4');
+    expect(clientIp(h({}))).toBe('unknown');
+  });
+  it('keeps at most maxKeys addresses, and still limits the one being counted', () => {
+    const allow = rateLimiter(2, 60_000, 3);
+    for (let i = 0; i < 100; i++) allow(`a${i}`, 1000);
+    expect(allow('x', 1000)).toBe(true);
+    expect(allow('x', 1001)).toBe(true);
+    expect(allow('x', 1002)).toBe(false);
   });
 });

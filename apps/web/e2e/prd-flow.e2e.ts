@@ -102,11 +102,12 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
 
   // After the sign-off: Advance (the owner's step), then a change request through to its PRD version v1.1.
   await page.goto('/owner/queue');
-  await page
+  const advance = page
     .getByRole('listitem')
     .filter({ hasText: projectName })
-    .getByRole('button', { name: 'Advance to plan' })
-    .click();
+    .getByRole('button', { name: 'Advance to plan' });
+  await advance.click();
+  await expect(advance).toHaveCount(0, { timeout: 30_000 });
   await page.goto(`${projectUrl}/changes`);
   await page.locator('textarea[name=description]').fill('Add a gallery page with practice photos.');
   await page.locator('input[name=pages]').fill('Gallery');
@@ -134,6 +135,12 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
       .getByRole('listitem')
       .filter({ hasText: projectName })
       .filter({ hasText: `${gate} gate` });
+  // Accept on the queue is a server action: wait until the card has left the queue before going on, or a
+  // navigation straight after the click can cancel the action before it reaches the database.
+  const accept = async (gate: string) => {
+    await card(gate).getByRole('button', { name: 'Accept' }).click();
+    await expect(card(gate)).toHaveCount(0, { timeout: 30_000 });
+  };
   await page.goto(`${projectUrl}/stage`);
   await page.getByRole('button', { name: 'Run plan' }).click();
   await waitFor(page, (p) => p.getByRole('link', { name: 'plan v1' }));
@@ -146,7 +153,7 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
   await expect(page.getByText('Skill marks saved (1 marked).')).toBeVisible();
   // The owner accepts the plan; that queues the prototype run.
   await page.goto('/owner/queue');
-  await card('soft').getByRole('button', { name: 'Accept' }).click();
+  await accept('soft');
   await page.goto(`${projectUrl}/stage`);
   await waitFor(page, (p) => p.getByRole('link', { name: 'prototype v1' }), 480_000);
   await page.getByRole('link', { name: 'prototype v1' }).click();
@@ -161,12 +168,18 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
   await expect(page.getByText('Handled: ignored.')).toBeVisible();
   // Two approvals: the owner first, then the client's, recorded with the channel (P3-T05).
   await page.goto('/owner/queue');
-  await card('soft').getByRole('button', { name: 'Accept' }).click();
-  await page.goto('/owner/queue');
+  await accept('soft');
   await card('client')
     .locator('textarea[name=note]')
     .fill('Client approved the screenshots by email, 20 November');
-  await card('client').getByRole('button', { name: 'Accept' }).click();
+  await accept('client');
+  // The client's sign-off makes the stage ready; the owner advances it (nothing advances on its own).
+  const toBuild = page
+    .getByRole('listitem')
+    .filter({ hasText: projectName })
+    .getByRole('button', { name: 'Advance to build rounds' });
+  await toBuild.click();
+  await expect(toBuild).toHaveCount(0, { timeout: 30_000 });
   await page.goto(`${projectUrl}/stage`);
   await expect(page.getByText(/build rounds stage/)).toBeVisible();
 });

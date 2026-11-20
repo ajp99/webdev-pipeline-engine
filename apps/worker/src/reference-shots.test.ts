@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   checkUrl,
+  responseAllowed,
   isPublicIp,
   MAX_SITES,
   takeShots,
@@ -8,7 +9,7 @@ import {
   type ShotBrowser,
 } from './reference-shots';
 
-// A fake DNS: example.org is public; evil.example points at a private address (DNS rebinding style).
+// A fake DNS: example.org is public; evil.example points at a private address.
 const resolver: Resolver = async (host) => {
   const table: Record<string, string[]> = {
     'example.org': ['93.184.215.14'],
@@ -34,6 +35,18 @@ describe('isPublicIp', () => {
     ['fd00::1', false],
     ['fe80::1', false],
     ['::ffff:10.0.0.1', false],
+    // The forms the URL parser and the attacker actually use (gate review): hex-mapped, compatible, NAT64, 6to4.
+    ['::ffff:7f00:1', false],
+    ['::ffff:a9fe:a9fe', false],
+    ['::7f00:1', false],
+    ['::', false],
+    ['64:ff9b::7f00:1', false],
+    ['2002:7f00:1::', false],
+    ['fec0::1', false],
+    ['100::1', false],
+    ['2001:0:4136:e378::1', false],
+    ['::ffff:5db8:d70e', true],
+    ['2002:5db8:d70e::1', true],
     ['93.184.215.14', true],
     ['2606:2800:220:1::1', true],
     ['not-an-ip', false],
@@ -48,6 +61,8 @@ describe('checkUrl refuses anything that is not a public web address', () => {
     ['http://169.254.169.254/latest/meta-data/', 'not a public address'],
     ['http://metadata.google.internal/', 'not a public address'],
     ['http://[::1]/', 'not a public address'],
+    ['http://[::ffff:127.0.0.1]/', 'not a public address'],
+    ['http://[::ffff:a9fe:a9fe]/', 'not a public address'],
     ['http://10.0.0.1/', 'not a public address'],
     ['http://intranet/', 'not a public address'],
     ['https://evil.example/', 'not a public address'],
@@ -149,5 +164,30 @@ describe('takeShots', () => {
       ok: false,
       reason: 'the page could not be opened',
     });
+  });
+});
+
+describe('responseAllowed (redirects are checked hop by hop)', () => {
+  const allow = async (u: string) => (await checkUrl(u, resolver)).ok;
+  it('passes ordinary responses', async () => {
+    expect(await responseAllowed('https://example.org/', 200, undefined, allow)).toBe(true);
+  });
+  it('blocks a redirect to a private address, the metadata address or a missing Location', async () => {
+    expect(
+      await responseAllowed('https://example.org/', 302, 'http://127.0.0.1:54323/', allow),
+    ).toBe(false);
+    expect(
+      await responseAllowed('https://example.org/', 301, 'http://169.254.169.254/latest', allow),
+    ).toBe(false);
+    expect(await responseAllowed('https://example.org/', 307, 'https://evil.example/', allow)).toBe(
+      false,
+    );
+    expect(await responseAllowed('https://example.org/', 302, undefined, allow)).toBe(false);
+  });
+  it('follows a redirect to another public page, relative ones included', async () => {
+    expect(await responseAllowed('https://example.org/a', 302, '/b', allow)).toBe(true);
+    expect(
+      await responseAllowed('https://example.org/', 308, 'https://cdn.example.org/x', allow),
+    ).toBe(true);
   });
 });

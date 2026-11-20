@@ -2,7 +2,7 @@
 // only, every write checked by PROTOTYPE_WRITES.
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { guardTool, PROTOTYPE_WRITES } from './builder-guard';
-import { childEnv } from './builder-host';
+import { childEnv, usageTokens } from './builder-host';
 import type { PrototypeDeps } from './prototype';
 
 export const DEFAULT_PROTOTYPE_MODEL = 'claude-sonnet-5-5';
@@ -53,7 +53,7 @@ export function prototypeAgent(model = prototypeModel()): PrototypeDeps['agent']
             log('info', `Prototype agent: ${b.name}${typeof fp === 'string' ? ` ${fp}` : ''}`);
           }
       } else if (msg.type === 'result') {
-        tokens += (msg.usage?.input_tokens ?? 0) + (msg.usage?.output_tokens ?? 0);
+        tokens += usageTokens(msg.usage);
         if (msg.subtype === 'success') summary = msg.result;
         else failed = `the session ended with ${msg.subtype}`;
       }

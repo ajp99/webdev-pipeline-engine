@@ -250,3 +250,23 @@ export async function startPreview(dir: string, io: RunIo, waitMs = 90_000): Pro
     `the preview server did not answer on port ${port} within ${waitMs / 1000} seconds`,
   );
 }
+
+/** All tokens a session used, cache reads and writes included, for the run's count and the cost report. */
+export function usageTokens(
+  u:
+    | {
+        input_tokens?: number | null;
+        output_tokens?: number | null;
+        cache_read_input_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
+      }
+    | null
+    | undefined,
+): number {
+  return (
+    (u?.input_tokens ?? 0) +
+    (u?.output_tokens ?? 0) +
+    (u?.cache_read_input_tokens ?? 0) +
+    (u?.cache_creation_input_tokens ?? 0)
+  );
+}
