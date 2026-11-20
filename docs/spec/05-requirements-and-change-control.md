@@ -1,6 +1,6 @@
 # Requirements lock and change control
 
-> **Dev-only scope (D-297 to D-304; proposal 2026-10-19-phase-2a-rebaseline):** until go-live there is no client login. The owner enters intake and records client-gate approvals with a required evidence note. PRD sign-off and change requests are recorded by the owner. The client-facing design below is the go-live design (G15).
+> **Dev-only scope (D-297 to D-304; proposal 2026-10-19-phase-2a-rebaseline):** until go-live there is no client login. The owner enters intake and records client-gate approvals with a required evidence note. PRD sign-off and change requests are recorded by the owner. The client-facing design below is the go-live design (G15). Until go-live an owner-saved PRD version carries a change summary the owner writes when saving; agent-drafted versions carry the agent's summary (D-324, G32). Change requests are recorded only after the sign-off and before the freeze, with three decisions (accept into the current round, defer, decline); an accepted request allows one new PRD version and needs no new sign-off (D-326).
 
 > Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
