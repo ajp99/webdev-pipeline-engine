@@ -145,3 +145,40 @@ select t.adv('feedback must name a PRD, not another artifact', t.proj('plan')||'
   format('insert into prd_feedback(project_id,artifact_id,body,created_by) select %L,id,''x'',%L from artifacts where project_id=%L', 'cccccccc-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000a0', 'cccccccc-0000-0000-0000-000000000001'), 'error:must name a PRD version');
 select t.adv('feedback needs a note', t.proj('requirements')||';'||t.prdv(1), :'O', 'authenticated',
   format('insert into prd_feedback(project_id,artifact_id,body,created_by) select %L,id,'' '',%L from artifacts where project_id=%L', 'cccccccc-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000a0', 'cccccccc-0000-0000-0000-000000000001'), 'error:needs a note');
+
+\echo '### independent review fixes (Phase 2b migration)'
+select t.adv('the owner cannot insert a PRD directly; only save_prd_version writes one', t.proj('requirements'), :'O', 'authenticated',
+  format('insert into artifacts(project_id,type,version,content) values (%L,''prd'',1,''{"x":1}'')', 'cccccccc-0000-0000-0000-000000000001'), 'error:written only through');
+select t.adv('the worker cannot insert a PRD directly; only complete_stage_artifact writes one', t.proj('requirements'), null, 'service_role',
+  format('insert into artifacts(project_id,type,version,content) values (%L,''prd'',1,''{"x":1}'')', 'cccccccc-0000-0000-0000-000000000001'), 'error:written only through');
+select t.adv('the owner cannot insert PRD notes directly', t.proj('requirements'), :'O', 'authenticated',
+  format('insert into artifacts(project_id,type,version,content) values (%L,''prd_notes'',1,''{"gaps":[],"conflicts":[]}'')', 'cccccccc-0000-0000-0000-000000000001'), 'error:written only through');
+select t.adv('the change request a version names cannot be changed', t.proj('plan')||';'||t.cr('eeeeeeee-0000-0000-0000-000000000001')||';'||t.art('plan')
+  ||';update artifacts set change_request_id=''eeeeeeee-0000-0000-0000-000000000001'' where project_id='||:'P', :'O', 'authenticated',
+  'update artifacts set change_request_id=null where project_id='||:'P', 'error:immutable');
+select t.adv('the owner cannot delete an artifact version', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
+  'delete from artifacts where project_id='||:'P', 'error:is kept');
+select t.adv('the worker cannot delete an artifact version', t.proj('plan')||';'||t.art('plan'), null, 'service_role',
+  'delete from artifacts where project_id='||:'P', 'error:is kept');
+select t.adv('a project''s own cascade still removes its artifacts', t.proj('plan')||';'||t.art('plan'), null, 'postgres',
+  'delete from projects where id='||:'P', 'ok', '(select count(*) from artifacts where project_id='||:'P'||')=0');
+select t.adv('a signed-off PRD cannot be replaced in the requirements stage', t.proj('requirements')||';'||t.prdv(1, 'approved'), :'O', 'authenticated', t.save(1, t.prdj('x')), 'error:newest PRD is signed off');
+select t.adv('a section of only newlines and tabs is refused', t.reqrun(), null, 'service_role', t.wprd(jsonb_set(t.prdj(), '{sections,brand}', to_jsonb(E'\n\t'::text))), 'error:section brand is missing or empty');
+select t.adv('an owner summary of only a newline is refused', t.proj('requirements')||';'||t.prdv(1), :'O', 'authenticated', t.save(1, t.prdj(E'\n')), 'error:write a short summary');
+select t.adv('a note issue of only whitespace is refused', t.reqrun(), null, 'service_role', t.wprd(t.prdj(), '{"gaps":[{"issue":"\n\t"}],"conflicts":[]}'), 'error:needs an issue');
+select t.adv('a change request description of only whitespace is refused', t.proj('plan'), :'O', 'authenticated',
+  format('insert into change_requests(project_id,description) values (%L,E''\n\t'')', 'cccccccc-0000-0000-0000-000000000001'), 'error:needs a description');
+select t.adv('an impact note of only whitespace is refused', t.proj('plan')||';'||t.cr('eeeeeeee-0000-0000-0000-000000000001', 'received', null), :'O', 'authenticated', t.decide('defer', E'\n'), 'error:write the impact note');
+select t.adv('the worker cannot record a change request', t.proj('plan'), null, 'service_role',
+  format('insert into change_requests(project_id,description) values (%L,''x'')', 'cccccccc-0000-0000-0000-000000000001'), 'error:only the owner');
+select t.adv('the worker cannot correct a change request', t.proj('plan')||';'||t.cr('eeeeeeee-0000-0000-0000-000000000001', 'received', null), null, 'service_role',
+  'update change_requests set description=''y'' where project_id='||:'P', 'error:only the owner');
+select t.adv('PRD feedback keeps its author when its note is corrected', t.proj('requirements')||';'||t.prdv(1)
+  ||';insert into prd_feedback(project_id,artifact_id,body,created_by) select project_id,id,''x'',''00000000-0000-0000-0000-0000000000a0'' from artifacts where project_id='||:'P', :'O', 'authenticated',
+  'update prd_feedback set body=''Please add hours'' where project_id='||:'P', 'ok', '(select body from prd_feedback where project_id='||:'P'||')=''Please add hours''');
+select t.adv('PRD feedback cannot be moved or re-authored', t.proj('requirements')||';'||t.prdv(1)
+  ||';insert into prd_feedback(project_id,artifact_id,body,created_by) select project_id,id,''x'',''00000000-0000-0000-0000-0000000000a0'' from artifacts where project_id='||:'P', :'A', 'authenticated',
+  'update prd_feedback set created_by='''||:'A'||''' where project_id='||:'P', 'ok', '(select created_by from prd_feedback where project_id='||:'P'||')='''||:'O'||'''::uuid');
+select t.adv('the owner cannot re-author PRD feedback', t.proj('requirements')||';'||t.prdv(1)
+  ||';insert into prd_feedback(project_id,artifact_id,body,created_by) select project_id,id,''x'',''00000000-0000-0000-0000-0000000000a0'' from artifacts where project_id='||:'P', :'O', 'authenticated',
+  'update prd_feedback set created_by='''||:'A'||''' where project_id='||:'P', 'error:only have its note corrected');

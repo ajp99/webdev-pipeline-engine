@@ -32,6 +32,11 @@ export const PRD_SUMMARY_MAX = 1000;
 export const PRD_NOTES_MAX_ITEMS = 50;
 export const PRD_NOTE_MAX = 1000;
 
+/** Length in characters (code points), as Postgres length() counts, not UTF-16 units. */
+export const chars = (s: string) => [...s].length;
+/** True when the text has a character other than whitespace (Postgres: x ~ '\S'). */
+const hasText = (s: string) => /\S/.test(s);
+
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -51,8 +56,8 @@ export function prdProblem(c: unknown): string | null {
     return `the PRD has a section that is not one of ${keys.join(', ')}`;
   for (const k of keys) {
     const v = sections[k];
-    if (typeof v !== 'string' || v.trim() === '') return `the PRD section ${k} is missing or empty`;
-    if (v.length > PRD_SECTION_MAX)
+    if (typeof v !== 'string' || !hasText(v)) return `the PRD section ${k} is missing or empty`;
+    if (chars(v) > PRD_SECTION_MAX)
       return `the PRD section ${k} is over ${PRD_SECTION_MAX} characters`;
   }
   const siteMap = sections.site_map as string;
@@ -63,7 +68,7 @@ export function prdProblem(c: unknown): string | null {
     !(SPAM_PROTECTION as readonly string[]).includes(c.spam_protection)
   )
     return 'spam_protection must be honeypot, turnstile or no_contact_form';
-  if (typeof c.change_summary !== 'string' || c.change_summary.length > PRD_SUMMARY_MAX)
+  if (typeof c.change_summary !== 'string' || chars(c.change_summary) > PRD_SUMMARY_MAX)
     return `change_summary must be a string of at most ${PRD_SUMMARY_MAX} characters`;
   return null;
 }

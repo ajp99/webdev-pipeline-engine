@@ -79,6 +79,17 @@ describe('prdProblem', () => {
   ])('refuses %s', (_name, c, msg) => {
     expect(prdProblem(c)).toContain(msg);
   });
+  it('counts characters as the database does, not UTF-16 units', () => {
+    // 10000 emoji are 10000 characters (20000 UTF-16 units): within the 20000 cap.
+    expect(prdProblem(withSection('brand', '😀'.repeat(20_000)))).toBeNull();
+    expect(prdProblem(withSection('brand', '😀'.repeat(20_001)))).toContain('over 20000');
+  });
+  it('treats newlines and tabs as empty, as the database does', () => {
+    expect(prdProblem(withSection('brand', '\n\t'))).toContain('section brand is missing');
+    expect(prdNotesProblem({ gaps: [{ issue: '\n\t' }], conflicts: [] })).toContain(
+      'needs an issue',
+    );
+  });
   it('accepts each spam protection choice', () => {
     for (const s of ['honeypot', 'turnstile', 'no_contact_form'] as const)
       expect(prdProblem({ ...valid(), spam_protection: s })).toBeNull();
