@@ -15,5 +15,12 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "src", "next.config.ts", ".next/types/**/*.ts"]
+  "include": [
+    "next-env.d.ts",
+    "src",
+    "next.config.ts",
+    ".next/types/**/*.ts",
+    "e2e",
+    "playwright.config.ts"
+  ]
 }

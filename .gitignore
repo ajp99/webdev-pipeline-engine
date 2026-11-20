@@ -20,3 +20,7 @@ backups/
 *.enc
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright output (P2-T14)
+playwright-report/
+test-results/

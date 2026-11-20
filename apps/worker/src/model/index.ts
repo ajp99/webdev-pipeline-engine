@@ -1,5 +1,6 @@
 import { anthropicClient } from './anthropic';
 import { geminiClient } from './gemini';
+import { scriptedModel } from './scripted';
 import type { ModelClient } from './types';
 
 export * from './types';
@@ -19,5 +20,11 @@ export function modelFromEnv(env: Record<string, string | undefined>): ModelClie
     return geminiClient({ apiKey, model });
   }
   if (provider === 'anthropic') return anthropicClient(model);
+  // The end-to-end test only (P2-T14): never on a real worker.
+  if (provider === 'scripted') {
+    if (env.WPE_E2E !== '1')
+      throw new Error('MODEL_PROVIDER=scripted is only for the end-to-end test (WPE_E2E=1)');
+    return scriptedModel();
+  }
   throw new Error(`MODEL_PROVIDER "${provider}" is not known (use gemini or anthropic)`);
 }
