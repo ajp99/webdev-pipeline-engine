@@ -1,6 +1,6 @@
 # Phase 2: Intake and PRD
 
-**Status:** 2a done (2026-11-20); 2b in progress
+**Status:** done (2a and 2b, 2026-11-20)
 
 **Goal:** Intake templates, owner-entered intake with locked rounds, agent follow-ups, the stage runner, and the PRD with the client's sign-off recorded by the owner. Client login, client email, invites, uploads from clients and industry-template generation are deferred to go-live (D-298, G15, G18).
 
@@ -58,7 +58,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [-] **P2-T13 Upload scanning and file handling (moved to go-live, G15)**  
   Acceptance: Uploads are scanned for malware in the worker before any agent sees them (the owner installs the scanner on their machine); infected files are quarantined and flagged to the owner. SVG is sanitized, zip is rejected, macro-enabled documents are never opened, and MP4 is treated as an asset only. Allowed types and the 25 MB limit are enforced in the database and in the form.
 
-- [ ] **P2-T14 Phase 2b gate evidence**  
+- [x] **P2-T14 Phase 2b gate evidence**  
   Acceptance: Record in `PROGRESS.md`: (1) a manual walkthrough with a fictional client (Acme), the owner entering the intake and recording the client's PRD sign-off with an evidence note, from template to signed PRD; (2) an automated end-to-end test (Playwright) of the same flow with model responses stubbed; (3) a cost report from `stage_runs` compared with the estimates in `docs/spec/13-cost.md`.
 
 - [x] **P2-T15 Design section and style cards**  
