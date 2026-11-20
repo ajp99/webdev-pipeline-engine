@@ -17,6 +17,7 @@ const base: QueueItem = {
   gateType: 'soft',
   gatekeeper: 'owner',
   actionable: true,
+  needsNote: false,
   artifactId: 'a1',
   artifactType: 'prototype',
   round: null,
@@ -44,11 +45,24 @@ describe('QueueItemCard', () => {
   it('shows no overdue badge when the gate is within its limit', () => {
     expect(html({ overdue: false, hoursWaiting: 3 })).not.toContain('Overdue');
   });
-  it('disables Accept on a client gate and says who is being waited for', () => {
-    const h = html({ gateType: 'client', gatekeeper: 'client', actionable: false });
+  it('a client gate asks for the evidence note and enables Accept', () => {
+    const h = html({ gateType: 'client', gatekeeper: 'client', needsNote: true });
     expect(h).toContain('client gate');
-    expect(h).toContain('Waiting for the client');
+    expect(h).toContain('name="note"');
+    expect(h).toMatch(/<textarea[^>]*required/);
+    expect(h).not.toMatch(/<button[^>]* disabled=""[^>]*>Accept/);
+  });
+  it('an owner gate has no note field', () => {
+    expect(html()).not.toContain('name="note"');
+  });
+  it('a gate with no artifact yet is disabled and says it waits for the agent', () => {
+    const h = html({ actionable: false, artifactId: null, needsNote: true, gatekeeper: 'client' });
+    expect(h).toContain('Waiting for the agent');
     expect(h).toMatch(/<button[^>]*disabled[^>]*>Accept/);
+    expect(h).not.toContain('/artifacts/');
+  });
+  it('links to the artifact page', () => {
+    expect(html()).toContain('href="/owner/projects/p1/artifacts/a1"');
   });
   it('waitedLabel', () => {
     expect(waitedLabel(0.2)).toBe('under an hour');

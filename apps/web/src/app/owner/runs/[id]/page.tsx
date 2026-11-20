@@ -12,6 +12,7 @@ import {
   statusLabel,
   timeline,
 } from '@/lib/runs';
+import { previewUrl } from '@/lib/stage-run';
 import { createClient } from '@/lib/supabase/server';
 import { cancelRun, endRun, retryRun } from '../actions';
 
@@ -72,6 +73,17 @@ export default async function RunDetail({
   if (lines.error) throw new Error(lines.error.message);
   if (reason.error) throw new Error(reason.error.message);
 
+  // The Builder logs "Preview: http://localhost:<port>" when its dev server is up.
+  const previewLines = await supabase
+    .from('run_logs')
+    .select('message')
+    .eq('run_id', id)
+    .like('message', 'Preview: %')
+    .order('id', { ascending: false })
+    .limit(5);
+  if (previewLines.error) throw new Error(previewLines.error.message);
+  const preview = previewUrl((previewLines.data ?? []).map((l) => l.message));
+
   const now = new Date();
   const steps = timeline({
     queuedAt: r.queued_at,
@@ -99,6 +111,15 @@ export default async function RunDetail({
         </span>
         {r.model === 'stub' ? <span className="ml-2 text-xs text-neutral-500">(stub)</span> : null}
       </h1>
+      {preview ? (
+        <p className="mt-2 text-sm">
+          Preview:{' '}
+          <a href={preview} target="_blank" rel="noreferrer" className="underline">
+            {preview}
+          </a>{' '}
+          <span className="text-neutral-500">(runs on this computer only)</span>
+        </p>
+      ) : null}
       {notice ? (
         <p role="status" className="mt-3 rounded bg-green-50 p-3 text-sm text-green-900">
           {notice}

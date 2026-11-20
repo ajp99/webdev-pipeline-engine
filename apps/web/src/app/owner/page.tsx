@@ -43,7 +43,13 @@ export default async function ProjectList() {
                     </Link>
                   ) : (
                     p.name
-                  )}
+                  )}{' '}
+                  <Link
+                    href={`/owner/projects/${p.id}/stage`}
+                    className="text-xs font-normal text-neutral-600 underline"
+                  >
+                    Stage
+                  </Link>
                 </td>
                 <td>{p.stage.replace('_', ' ')}</td>
                 <td>{p.status}</td>

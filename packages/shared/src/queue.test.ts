@@ -61,14 +61,26 @@ describe('buildQueue', () => {
     expect(q.items[0]!.overdue).toBe(true);
   });
 
-  it('shows a client gate that is missing as not actionable (the owner cannot accept it here)', () => {
+  it('shows a missing client gate as actionable with a required note (the owner records it for the client, D-298)', () => {
     const q = buildQueue(
       input(
         [row({ stage: 'prototype', gate_type: 'client', gatekeeper: 'client' })],
         [project({ stage: 'prototype' })],
       ),
     );
-    expect(q.items[0]).toMatchObject({ gatekeeper: 'client', actionable: false });
+    expect(q.items[0]).toMatchObject({ gatekeeper: 'client', actionable: true, needsNote: true });
+  });
+
+  it('needs no note on an owner gate, and a gate with no artifact yet is not actionable', () => {
+    const owner = buildQueue(input([row({})]));
+    expect(owner.items[0]).toMatchObject({ gatekeeper: 'owner', needsNote: false });
+    const none = buildQueue(
+      input(
+        [row({ stage: 'prototype', gate_type: 'client', gatekeeper: 'client', artifact_id: null })],
+        [project({ stage: 'prototype' })],
+      ),
+    );
+    expect(none.items[0]).toMatchObject({ actionable: false, needsNote: true });
   });
 
   it('shows only the gate to pass next: blocked and satisfied gates stay hidden', () => {

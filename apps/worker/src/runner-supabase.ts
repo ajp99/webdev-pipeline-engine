@@ -25,5 +25,11 @@ export function supabaseRunnerDeps(admin: SupabaseClient<Database>): RunnerDeps 
       if (error) throw new Error(`finish_run: ${error.message}`);
       return data;
     },
+    async log(run, level, message) {
+      const { error } = await admin
+        .from('run_logs')
+        .insert({ run_id: run.id, trace_id: run.trace_id, level, message });
+      if (error) throw new Error(`run_logs: ${error.message}`);
+    },
   };
 }

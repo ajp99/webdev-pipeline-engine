@@ -49,8 +49,13 @@ export type QueueItem = {
   stage: Stage;
   gateType: GateType;
   gatekeeper: string;
-  /** The owner can act on it now: an owner gate whose earlier gates are already approved. */
+  /**
+   * The owner can act on it now: a gate whose earlier gates are already approved. A client gate counts too:
+   * until go-live the owner records it for the client, with an evidence note (D-298).
+   */
   actionable: boolean;
+  /** Accept needs an evidence note naming the channel (client gates). */
+  needsNote: boolean;
   artifactId: string | null;
   artifactType: string;
   round: number | null;
@@ -122,7 +127,8 @@ export function buildQueue(input: QueueInput): Queue {
         stage: g.stage,
         gateType: g.gate_type,
         gatekeeper: g.gatekeeper,
-        actionable: g.state === 'missing' && g.gatekeeper === 'owner' && g.artifact_id !== null,
+        actionable: g.state === 'missing' && g.artifact_id !== null,
+        needsNote: g.gatekeeper === 'client',
         artifactId: g.artifact_id,
         artifactType: g.artifact_type,
         round: g.round,

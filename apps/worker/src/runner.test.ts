@@ -4,6 +4,7 @@ import {
   startRunner,
   type FinalStatus,
   type Handler,
+  type HandlerSelector,
   type Run,
   type RunnerConfig,
   type RunnerDeps,
@@ -226,12 +227,89 @@ describe('executeRun', () => {
   });
 });
 
+describe('run log lines', () => {
+  const sel =
+    (h: Handler): HandlerSelector =>
+    () =>
+      h;
+  const lines = () => {
+    const out: [string, string][] = [];
+    return { out, log: async (_run: Run, level: string, m: string) => void out.push([level, m]) };
+  };
+
+  it('writes the failure reason as an error line', async () => {
+    const l = lines();
+    const { deps } = fakeDeps({ log: l.log });
+    await executeRun(
+      deps,
+      run(),
+      sel(async () => Promise.reject(new Error('no key'))),
+      cfg(),
+    );
+    expect(l.out).toContainEqual(['error', 'no key']);
+  });
+
+  it('gives the handler its worker name and a log that reaches run_logs', async () => {
+    const l = lines();
+    const { deps } = fakeDeps({ log: l.log });
+    let seen = '';
+    await executeRun(
+      deps,
+      run(),
+      sel(async (ctx) => {
+        seen = ctx.worker;
+        ctx.log('info', 'Preview: http://localhost:4100');
+      }),
+      cfg(),
+    );
+    expect(seen).toBe(cfg().worker);
+    expect(l.out).toContainEqual(['info', 'Preview: http://localhost:4100']);
+  });
+
+  it('lands the failure line before the run is reported finished', async () => {
+    const order: string[] = [];
+    const { deps } = fakeDeps({
+      log: async (_r: Run, level: string) => {
+        await new Promise((r) => setTimeout(r, 50));
+        order.push(`log:${level}`);
+      },
+      finish: async (_id, _w, status) => {
+        order.push(`finish:${status}`);
+        return status as RunStatus;
+      },
+    });
+    const p = executeRun(
+      deps,
+      run(),
+      sel(async () => Promise.reject(new Error('boom'))),
+      cfg(),
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    await p;
+    expect(order).toEqual(['log:error', 'finish:failed']);
+  });
+
+  it('does not fail the run when a log line cannot be written', async () => {
+    const { deps, finished } = fakeDeps({ log: async () => Promise.reject(new Error('db down')) });
+    const out = await executeRun(
+      deps,
+      run(),
+      sel(async (ctx) => ctx.log('info', 'x')),
+      cfg(),
+    );
+    expect(out).toBe('succeeded');
+    expect(finished[0]).toMatchObject({ status: 'succeeded' });
+  });
+});
+
 describe('stub handler', () => {
   it('finishes after its steps and shows progress each step', async () => {
     let ticks = 0;
     const ac = new AbortController();
     const p = stubHandler({ steps: 3, stepMs: 100 })({
       run: run(),
+      worker: 'w1',
+      log: () => {},
       signal: ac.signal,
       progress: () => ticks++,
     });
@@ -244,6 +322,8 @@ describe('stub handler', () => {
     const ac = new AbortController();
     const p = stubHandler({ steps: 10, stepMs: 1000 })({
       run: run(),
+      worker: 'w1',
+      log: () => {},
       signal: ac.signal,
       progress: () => {},
     });
