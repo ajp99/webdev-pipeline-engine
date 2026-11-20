@@ -200,7 +200,7 @@ describe('resetForPrototype', () => {
       ['content/pages/home.mdx', 'starter home'],
       ['app/layout.tsx', 'layout'],
       ['package.json', '{}'],
-    ]) {
+    ] as const) {
       mkdirSync(join(starter, f, '..'), { recursive: true });
       writeFileSync(join(starter, f), t);
     }
@@ -211,7 +211,7 @@ describe('resetForPrototype', () => {
       ['app/evil.ts', 'x'],
       ['scripts/x.sh', 'x'],
       ['node_modules/a/i.js', 'dep'],
-    ]) {
+    ] as const) {
       mkdirSync(join(dir, f, '..'), { recursive: true });
       writeFileSync(join(dir, f), t);
     }
