@@ -1,4 +1,5 @@
 // Rules for running a stage from the console (P2-T23). Pure, so they can be tested.
+import { asPrd, PRD_SECTIONS, prdNotesProblem, type PrdNotes } from '@wpe/shared';
 
 /** The stages the walking skeleton has a handler for; the Run button shows only on these. */
 export const RUNNABLE_STAGES = ['requirements', 'plan', 'prototype', 'build_rounds'] as const;
@@ -46,8 +47,33 @@ export function previewUrl(messages: string[]): string | null {
 
 export type Section = { title: string; markdown: string };
 
-/** The readable sections of a stub or real artifact: its `sections` list, or null when it has none. */
+/**
+ * The readable sections of an artifact: a PRD's fixed sections (D-325), the owner-only PRD notes, or a stub's
+ * `sections` list; null when it has none.
+ */
 export function artifactSections(content: unknown): Section[] | null {
+  const prd = asPrd(content);
+  if (prd) {
+    const out: Section[] = PRD_SECTIONS.map((s) => ({
+      title: s.title,
+      markdown: prd.sections[s.key],
+    }));
+    out.push({ title: 'Contact form spam protection', markdown: prd.spam_protection });
+    if (prd.change_summary.trim())
+      out.unshift({ title: 'What changed', markdown: prd.change_summary });
+    return out;
+  }
+  if (prdNotesProblem(content) === null) {
+    const n = content as PrdNotes;
+    const list = (items: PrdNotes['gaps']) =>
+      items.length === 0
+        ? 'None.'
+        : items.map((i) => `- ${i.issue}${i.resolution ? ` (${i.resolution})` : ''}`).join('\n');
+    return [
+      { title: 'Gaps (owner only)', markdown: list(n.gaps) },
+      { title: 'Conflicts (owner only)', markdown: list(n.conflicts) },
+    ];
+  }
   if (typeof content !== 'object' || content === null) return null;
   const list = (content as { sections?: unknown }).sections;
   if (!Array.isArray(list) || list.length === 0) return null;

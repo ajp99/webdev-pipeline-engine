@@ -87,7 +87,7 @@ begin
     got := t.as_(null, 'service_role', $q$select * from claim_run('w1')$q$);
     r := r || t.pf('the worker holds the requirements run', (select status = 'running' and claimed_by = 'w1' from stage_runs where id = rid));
     r := r || t.pfe('the owner cannot write a stage artifact', t.as_(o, 'authenticated', format($q$select complete_stage_artifact(%L,%L,'w1','prd','{"a":1}','m')$q$, pid, rid)), 'permission denied');
-    got := got || t.as_(null, 'service_role', format($q$select complete_stage_artifact(%L,%L,'w1','prd','{"stub":true,"sections":[{"title":"Overview","markdown":"x"}]}','stub:template')$q$, pid, rid));
+    got := got || t.as_(null, 'service_role', format($q$select complete_stage_artifact(%L,%L,'w1','prd','{"sections":{"business":"b","site_map":"Home; Privacy policy; Cookie notice","features":"Contact form","content":"c","brand":"b","non_functional":"Lighthouse 80+"},"spam_protection":"honeypot","change_summary":""}','stub:template','{"gaps":[],"conflicts":[]}')$q$, pid, rid));
     got := got || t.as_(null, 'service_role', format($q$select finish_run(%L,'w1','succeeded',0)$q$, rid));
     got := regexp_replace(got, '(ok)+', 'ok');
     r := r || t.pfe('the worker claims, writes the PRD and finishes', got);
@@ -138,9 +138,10 @@ begin
     select count(*) into n from stage_runs where project_id = pid and status = 'succeeded';
     r := r || t.pf('five runs succeeded: intake, requirements, plan, prototype, build', n = 5);
     r := r || t.pf('the tokens add up on the runs', (select sum(tokens_used) = 5120 from stage_runs where project_id = pid));
-    r := r || t.pf('the artifacts are intake_record, prd, plan, prototype, each version 1',
-      (select count(*) = 4 and bool_and(version = 1) from artifacts where project_id = pid));
-    r := r || t.pf('every artifact has its approval record', not exists (select 1 from artifacts a where a.project_id = pid and not exists (select 1 from approvals ap where ap.artifact_id = a.id)));
+    r := r || t.pf('the artifacts are intake_record, prd, prd_notes, plan, prototype, each version 1',
+      (select count(*) = 5 and bool_and(version = 1) from artifacts where project_id = pid));
+    r := r || t.pf('every gated artifact has its approval record; the owner-only PRD notes are not gated', not exists (select 1 from artifacts a where a.project_id = pid and a.type <> 'prd_notes' and not exists (select 1 from approvals ap where ap.artifact_id = a.id))
+      and (select count(*) = 1 from artifacts where project_id = pid and type = 'prd_notes' and status = 'draft'));
     r := r || t.pf('the PRD and the prototype carry a client approval with its evidence note', (select count(*) = 2 from approvals ap join artifacts ar on ar.id = ap.artifact_id
       where ar.project_id = pid and ap.role = 'client' and ap.evidence_note is not null and ar.type in ('prd', 'prototype')));
     r := r || t.pf('there are five approvals in all: intake, PRD, plan, and the prototype twice', (select count(*) = 5 from approvals ap join artifacts ar on ar.id = ap.artifact_id where ar.project_id = pid));

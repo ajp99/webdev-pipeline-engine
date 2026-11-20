@@ -6,7 +6,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { validateTemplate, type Completion, type ReviewInput } from '@wpe/shared';
+import {
+  prdNotesProblem,
+  prdProblem,
+  validateTemplate,
+  type Completion,
+  type ReviewInput,
+} from '@wpe/shared';
 import { builderHandler, type BuilderDeps } from './builder';
 import { defaultSelector } from './handlers';
 import { intakeReviewHandler, type ReviewDeps } from './intake-review';
@@ -43,6 +49,7 @@ function world() {
   const logs: [LogLevel, string][] = [];
   const finished: { stage: string; status: FinalStatus; tokens: number }[] = [];
   const written: string[] = [];
+  const notes: unknown[] = [];
   const approved = (type: string) =>
     [...artifacts].reverse().find((a) => a.type === type && a.status === 'approved')?.content ??
     null;
@@ -58,6 +65,7 @@ function world() {
     loadApproved: async (_p, type) => approved(type),
     write: async (a) => {
       artifacts.push({ type: a.type, status: 'draft', content: a.content });
+      if (a.notes) notes.push(a.notes);
     },
   };
   const calls: string[] = [];
@@ -94,7 +102,7 @@ function world() {
     ),
     { stubs: stubStageHandler(stubs), builder: builderHandler(builder) },
   );
-  return { artifacts, logs, finished, written, calls, deps, approve, selector };
+  return { artifacts, notes, logs, finished, written, calls, deps, approve, selector };
 }
 
 const cfg: RunnerConfig = {
@@ -138,13 +146,16 @@ describe('the 2a flow, stubbed', () => {
     w.approve('intake_record');
 
     expect(await run('requirements')).toBe('succeeded');
-    const prd = JSON.stringify(w.artifacts.find((a) => a.type === 'prd')!.content);
-    expect(prd).toContain('Acme Dental');
+    const prdRow = w.artifacts.find((a) => a.type === 'prd')!;
+    expect(JSON.stringify(prdRow.content)).toContain('Acme Dental');
+    // The PRD has the stored shape and comes with its owner-only notes (D-325).
+    expect(prdProblem(prdRow.content)).toBeNull();
+    expect(prdNotesProblem(w.notes.at(-1))).toBeNull();
     w.approve('prd');
 
     expect(await run('plan')).toBe('succeeded');
     expect(JSON.stringify(w.artifacts.find((a) => a.type === 'plan')!.content)).toContain(
-      'Overview (stub)',
+      'Site map and pages',
     );
     w.approve('plan');
 

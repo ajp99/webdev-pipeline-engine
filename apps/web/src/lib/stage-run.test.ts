@@ -62,6 +62,31 @@ describe('previewUrl', () => {
 });
 
 describe('artifactSections', () => {
+  it('shows a PRD (D-325) as its fixed sections, the change summary first, and the notes as gaps and conflicts', () => {
+    const prd = {
+      sections: {
+        business: 'B',
+        site_map: 'Home; Privacy policy; Cookie notice',
+        features: 'F',
+        content: 'C',
+        brand: 'Br',
+        non_functional: 'N',
+      },
+      spam_protection: 'honeypot',
+      change_summary: 'Added a blog',
+      model: 'stub',
+    };
+    const out = artifactSections(prd)!;
+    expect(out[0]).toEqual({ title: 'What changed', markdown: 'Added a blog' });
+    expect(out.map((s) => s.title)).toContain('Site map and pages');
+    expect(out.at(-1)).toEqual({ title: 'Contact form spam protection', markdown: 'honeypot' });
+    expect(
+      artifactSections({ gaps: [{ issue: 'No budget', resolution: 'Asked' }], conflicts: [] }),
+    ).toEqual([
+      { title: 'Gaps (owner only)', markdown: '- No budget (Asked)' },
+      { title: 'Conflicts (owner only)', markdown: 'None.' },
+    ]);
+  });
   it('reads a sections list', () => {
     expect(artifactSections({ sections: [{ title: 'A', markdown: 'x' }] })).toEqual([
       { title: 'A', markdown: 'x' },

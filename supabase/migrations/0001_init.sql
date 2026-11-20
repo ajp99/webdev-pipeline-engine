@@ -36,7 +36,7 @@ create type artifact_status as enum ('draft', 'approved', 'rejected', 'supersede
 -- The artifact types the pipeline knows (stages.yaml outputs, plus release_note, D-223). A new type
 -- is one forward migration: alter type artifact_type add value.
 create type artifact_type as enum (
-  'intake_record', 'prd', 'plan', 'skill_set', 'round_scope', 'prototype', 'round_preview',
+  'intake_record', 'prd', 'prd_notes', 'plan', 'skill_set', 'round_scope', 'prototype', 'round_preview',
   'round_summary', 'backlog', 'qc_results', 'report', 'deployment_checklist', 'handover_guide',
   'release_note'
 );
@@ -245,6 +245,8 @@ create table artifacts (
   version int not null default 1,
   content jsonb not null default '{}'::jsonb,
   status artifact_status not null default 'draft',
+  -- D-324: who saved the version: the owner's user id, or null for the worker. Set by the database.
+  created_by uuid,
   created_at timestamptz not null default now(),
   unique (project_id, type, version),
   -- Lets comments and PRD feedback tie an artifact to the same project (composite foreign keys).
@@ -331,8 +333,13 @@ create table change_requests (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects (id) on delete cascade,
   description text not null,
+  -- D-326: what the request touches, as the owner enters it.
+  affected_pages text[] not null default '{}',
+  affected_features text[] not null default '{}',
   impact_note text,
   decision change_decision,
+  decided_at timestamptz,
+  decided_by uuid,
   status change_status not null default 'received',
   -- D-090: clients may submit change requests from go-live until handover is complete.
   submitted_by approver_role not null default 'owner',
@@ -629,15 +636,55 @@ create trigger gate_config_guard before insert or update or delete on gate_confi
 create function guard_artifact_immutable() returns trigger
 language plpgsql as $$
 begin
-  if (new.id, new.project_id, new.type, new.version, new.content, new.created_at)
-     is distinct from (old.id, old.project_id, old.type, old.version, old.content, old.created_at) then
+  if (new.id, new.project_id, new.type, new.version, new.content, new.created_at, new.created_by, new.change_request_id)
+     is distinct from (old.id, old.project_id, old.type, old.version, old.content, old.created_at, old.created_by, old.change_request_id) then
     raise exception 'an artifact version is immutable; write a new version instead';
+  end if;
+  -- D-327: the status moves only through the gate functions (they run as their owner, not an API role).
+  if new.status is distinct from old.status and current_user in ('authenticated', 'service_role', 'anon') then
+    raise exception 'an artifact''s status changes only through the gate functions';
   end if;
   return new;
 end;
 $$;
 create trigger artifacts_immutable before update on artifacts
   for each row execute function guard_artifact_immutable();
+
+-- D-327, D-324: through the API an artifact is always inserted as a draft, and the database records who
+-- wrote it (the owner's id, or null for the worker). Functions that run as their owner set the status
+-- they need (save_prd_version for a change-request version) and are not affected.
+create function guard_artifact_insert() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.created_by := auth.uid();
+  if current_user in ('authenticated', 'service_role', 'anon') then
+    if new.status <> 'draft' then
+      raise exception 'an artifact is written as a draft; its status changes only through the gate functions';
+    end if;
+    -- D-325: a PRD and its notes are written only by complete_stage_artifact and save_prd_version, which check them.
+    if new.type in ('prd', 'prd_notes') then
+      raise exception 'a % is written only through complete_stage_artifact or save_prd_version', new.type;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+create trigger artifacts_insert_guard before insert on artifacts
+  for each row execute function guard_artifact_insert();
+
+-- Artifact versions are history: an API role cannot delete one. A project's own cascade (trigger depth above 1)
+-- is not affected.
+create function guard_artifact_delete() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if pg_trigger_depth() = 1 and current_user in ('authenticated', 'service_role', 'anon') then
+    raise exception 'an artifact version is kept; write a new version instead';
+  end if;
+  return old;
+end;
+$$;
+create trigger artifacts_delete_guard before delete on artifacts
+  for each row execute function guard_artifact_delete();
 
 -- Through the API (owner, worker or client roles) a project is created active at intake, and its
 -- status moves to or from 'closed' (and close_reason changes) only through the close function.
@@ -737,6 +784,7 @@ language sql immutable set search_path = '' as $$
   select case p_type
     when 'intake_record'         then 'intake'::public.stage
     when 'prd'                   then 'requirements'
+    when 'prd_notes'             then 'requirements'
     when 'plan'                  then 'plan'
     when 'prototype'             then 'prototype'
     when 'round_summary'         then 'build_rounds'
@@ -1757,13 +1805,15 @@ grant execute on function complete_intake_review(uuid, int, text, jsonb, jsonb, 
 -- run must be claimed by the calling worker (as in heartbeat_run and finish_run). The content is an object
 -- under 100000 characters and carries the model name under "model".
 create function complete_stage_artifact(
-  p_project uuid, p_run uuid, p_worker text, p_type public.artifact_type, p_content jsonb, p_model text
+  p_project uuid, p_run uuid, p_worker text, p_type public.artifact_type, p_content jsonb, p_model text,
+  p_notes jsonb default null
 ) returns uuid
 language plpgsql security definer set search_path = '' as $$
 declare
   proj public.projects%rowtype;
   run  public.stage_runs%rowtype;
   art  uuid;
+  problem text;
 begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'complete_stage_artifact: not allowed';
@@ -1800,6 +1850,26 @@ begin
   if p_model is null or btrim(p_model) = '' or length(p_model) > 100 then
     raise exception 'complete_stage_artifact: the model name is missing or too long';
   end if;
+  -- D-325: a PRD has the fixed shape, a summary once there is an earlier version, and its owner-only notes.
+  if p_type = 'prd' then
+    problem := private.prd_content_problem(p_content);
+    if problem is not null then
+      raise exception 'complete_stage_artifact: %', problem;
+    end if;
+    if (p_content ->> 'change_summary') !~ '\S'
+       and exists (select 1 from public.artifacts where project_id = p_project and type = 'prd') then
+      raise exception 'complete_stage_artifact: a new PRD version needs a summary of what changed';
+    end if;
+    problem := private.prd_notes_problem(p_notes);
+    if problem is not null then
+      raise exception 'complete_stage_artifact: %', problem;
+    end if;
+    if length(p_notes::text) > 100000 then
+      raise exception 'complete_stage_artifact: the notes are over 100000 characters';
+    end if;
+  elsif p_notes is not null then
+    raise exception 'complete_stage_artifact: only a PRD has notes';
+  end if;
 
   if exists (
     select 1 from public.artifacts a
@@ -1817,11 +1887,311 @@ begin
     'draft', p_content || jsonb_build_object('model', p_model)
   )
   returning id into art;
+  if p_type = 'prd' then
+    update public.artifacts set status = 'superseded'
+     where project_id = p_project and type = 'prd_notes' and status = 'draft';
+    insert into public.artifacts (project_id, type, version, status, content)
+    values (
+      p_project, 'prd_notes',
+      coalesce((select max(version) from public.artifacts where project_id = p_project and type = 'prd_notes'), 0) + 1,
+      'draft', p_notes
+    );
+  end if;
   return art;
 end;
 $$;
-revoke all on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text) from public, anon, authenticated, service_role;
-grant execute on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text) to service_role;
+revoke all on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text, jsonb) from public, anon, authenticated, service_role;
+grant execute on function complete_stage_artifact(uuid, uuid, text, public.artifact_type, jsonb, text, jsonb) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- The PRD, its owner-only notes and change requests (Phase 2b, D-324 to D-327)
+-- ---------------------------------------------------------------------------
+-- D-325: what a PRD version must look like. Returns null when the content is fine, or the problem. The
+-- six sections follow spec 05; the site map must name the privacy policy and the cookie notice.
+create function private.prd_content_problem(c jsonb) returns text
+language plpgsql immutable set search_path = '' as $$
+declare
+  k text;
+  keys constant text[] := array['business', 'site_map', 'features', 'content', 'brand', 'non_functional'];
+begin
+  if c is null or jsonb_typeof(c) <> 'object' then
+    return 'the PRD must be an object';
+  end if;
+  if exists (select 1 from jsonb_object_keys(c) x where x not in ('sections', 'spam_protection', 'change_summary', 'model')) then
+    return 'the PRD has a key other than sections, spam_protection and change_summary';
+  end if;
+  if jsonb_typeof(c -> 'sections') is distinct from 'object' then
+    return 'the PRD needs a sections object';
+  end if;
+  if exists (select 1 from jsonb_object_keys(c -> 'sections') x where x <> all (keys)) then
+    return 'the PRD has a section that is not one of ' || array_to_string(keys, ', ');
+  end if;
+  foreach k in array keys loop
+    if jsonb_typeof(c -> 'sections' -> k) is distinct from 'string' or (c -> 'sections' ->> k) !~ '\S' then
+      return format('the PRD section %s is missing or empty', k);
+    end if;
+    if length(c -> 'sections' ->> k) > 20000 then
+      return format('the PRD section %s is over 20000 characters', k);
+    end if;
+  end loop;
+  if (c -> 'sections' ->> 'site_map') !~* 'privacy' or (c -> 'sections' ->> 'site_map') !~* 'cookie' then
+    return 'the site map must list a privacy policy and a cookie notice';
+  end if;
+  if jsonb_typeof(c -> 'spam_protection') is distinct from 'string'
+     or (c ->> 'spam_protection') not in ('honeypot', 'turnstile', 'no_contact_form') then
+    return 'spam_protection must be honeypot, turnstile or no_contact_form';
+  end if;
+  if jsonb_typeof(c -> 'change_summary') is distinct from 'string' or length(c ->> 'change_summary') > 1000 then
+    return 'change_summary must be a string of at most 1000 characters';
+  end if;
+  return null;
+end;
+$$;
+
+-- D-325: the owner-only gap and conflict list written with each PRD draft.
+create function private.prd_notes_problem(c jsonb) returns text
+language plpgsql immutable set search_path = '' as $$
+declare
+  k text;
+  it jsonb;
+begin
+  if c is null or jsonb_typeof(c) <> 'object' then
+    return 'the notes must be an object';
+  end if;
+  if exists (select 1 from jsonb_object_keys(c) x where x not in ('gaps', 'conflicts')) then
+    return 'the notes have a key other than gaps and conflicts';
+  end if;
+  foreach k in array array['gaps', 'conflicts'] loop
+    if jsonb_typeof(c -> k) is distinct from 'array' then
+      return format('the notes need a %s list', k);
+    end if;
+    if jsonb_array_length(c -> k) > 50 then
+      return format('the notes have more than 50 %s', k);
+    end if;
+    for it in select value from jsonb_array_elements(c -> k) loop
+      if jsonb_typeof(it) <> 'object'
+         or exists (select 1 from jsonb_object_keys(it) x where x not in ('issue', 'resolution'))
+         or jsonb_typeof(it -> 'issue') is distinct from 'string' or (it ->> 'issue') !~ '\S'
+         or length(it ->> 'issue') > 1000
+         or (it ? 'resolution' and (jsonb_typeof(it -> 'resolution') <> 'string' or length(it ->> 'resolution') > 1000)) then
+        return format('each of the %s needs an issue (at most 1000 characters) and may have a resolution', k);
+      end if;
+    end loop;
+  end loop;
+  return null;
+end;
+$$;
+revoke all on function private.prd_content_problem(jsonb) from public;
+revoke all on function private.prd_notes_problem(jsonb) from public;
+
+-- P2-T08, D-324, D-326, D-327: the owner saves a PRD version. In the requirements stage it is a new draft
+-- that needs a fresh client sign-off; p_base_version must be the newest version, so two open editors cannot
+-- overwrite each other. After the stage it needs an accepted change request (accept into the current round)
+-- that has no PRD version yet; that version is approved by the owner's decision on the request and needs no
+-- new sign-off. The owner always writes the change summary.
+create function save_prd_version(p_project uuid, p_base_version int, p_content jsonb, p_change_request uuid default null)
+returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  proj    public.projects%rowtype;
+  cr      public.change_requests%rowtype;
+  newest  int;
+  problem text;
+  art     uuid;
+begin
+  if not private.is_owner() then
+    raise exception 'save_prd_version: not allowed';
+  end if;
+  select * into proj from public.projects where id = p_project for update;
+  if not found then
+    raise exception 'save_prd_version: project not found';
+  end if;
+  if proj.status <> 'active' then
+    raise exception 'save_prd_version: the project must be active';
+  end if;
+  problem := private.prd_content_problem(p_content);
+  if problem is not null then
+    raise exception 'save_prd_version: %', problem;
+  end if;
+  if p_content ? 'model' then
+    raise exception 'save_prd_version: an owner version has no model';
+  end if;
+  if (p_content ->> 'change_summary') !~ '\S' then
+    raise exception 'save_prd_version: write a short summary of what changed';
+  end if;
+  if length(p_content::text) > 100000 then
+    raise exception 'save_prd_version: the content is over 100000 characters';
+  end if;
+  select coalesce(max(version), 0) into newest from public.artifacts where project_id = p_project and type = 'prd';
+  if p_base_version is distinct from newest then
+    raise exception 'save_prd_version: the PRD has changed since you opened it (the newest version is %); reload and edit again', newest;
+  end if;
+
+  if proj.stage = 'requirements' then
+    if p_change_request is not null then
+      raise exception 'save_prd_version: a change request applies only after the PRD is signed off';
+    end if;
+    if exists (select 1 from public.artifacts where project_id = p_project and type = 'prd' and version = newest and status = 'approved') then
+      raise exception 'save_prd_version: the newest PRD is signed off; advance the stage, then change it through a change request';
+    end if;
+    update public.artifacts set status = 'superseded'
+     where project_id = p_project and type = 'prd' and status = 'draft';
+    insert into public.artifacts (project_id, type, version, status, content)
+    values (p_project, 'prd', newest + 1, 'draft', p_content)
+    returning id into art;
+    return art;
+  end if;
+
+  if array_position(enum_range(null::public.stage), proj.stage) < array_position(enum_range(null::public.stage), 'requirements'::public.stage) then
+    raise exception 'save_prd_version: the project has no PRD stage yet';
+  end if;
+  if p_change_request is null then
+    raise exception 'save_prd_version: the PRD is signed off; a new version needs an accepted change request';
+  end if;
+  select * into cr from public.change_requests where id = p_change_request and project_id = p_project for update;
+  if not found then
+    raise exception 'save_prd_version: change request not found for this project';
+  end if;
+  if cr.status <> 'accepted' or cr.decision is distinct from 'accept_current_round' then
+    raise exception 'save_prd_version: the change request must be accepted';
+  end if;
+  if exists (select 1 from public.artifacts where change_request_id = cr.id and type = 'prd') then
+    raise exception 'save_prd_version: this change request already has its PRD version';
+  end if;
+  insert into public.artifacts (project_id, type, version, status, content, change_request_id)
+  values (p_project, 'prd', newest + 1, 'approved', p_content, cr.id)
+  returning id into art;
+  return art;
+end;
+$$;
+revoke all on function save_prd_version(uuid, int, jsonb, uuid) from public, anon, authenticated, service_role;
+grant execute on function save_prd_version(uuid, int, jsonb, uuid) to authenticated;
+
+-- D-326: change requests as the owner records them until go-live. Through the API a request is created
+-- received and undecided, only after the PRD sign-off (the project is past requirements), while the project
+-- is active and before the freeze; its text can be corrected while it is received; the decision is made only
+-- by decide_change_request. Functions that run as their owner (decide_change_request, later rounds) are not
+-- affected.
+create function guard_change_request() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  proj public.projects%rowtype;
+begin
+  if current_user not in ('authenticated', 'service_role', 'anon') then
+    return coalesce(new, old);
+  end if;
+  if tg_op = 'DELETE' then
+    raise exception 'a change request is kept; decline it instead';
+  end if;
+  -- D-326: only the owner records and corrects change requests (the worker never does).
+  if not private.is_owner() then
+    raise exception 'only the owner records change requests';
+  end if;
+  select * into proj from public.projects where id = new.project_id;
+  if tg_op = 'INSERT' then
+    if proj.status <> 'active' then
+      raise exception 'change requests are recorded only for an active project';
+    end if;
+    if array_position(enum_range(null::public.stage), proj.stage) <= array_position(enum_range(null::public.stage), 'requirements'::public.stage) then
+      raise exception 'change requests start after the PRD sign-off; before it, edit the PRD';
+    end if;
+    if proj.changes_frozen_at is not null then
+      raise exception 'changes are frozen for this project';
+    end if;
+    if new.status <> 'received' or new.decision is not null or new.decided_at is not null or new.decided_by is not null then
+      raise exception 'a new change request is received and undecided; decide it with decide_change_request';
+    end if;
+    new.created_by := auth.uid();
+    new.submitted_by := 'owner';
+  else
+    if (new.status, new.decision, new.decided_at, new.decided_by, new.project_id, new.created_by, new.created_at, new.submitted_by)
+       is distinct from (old.status, old.decision, old.decided_at, old.decided_by, old.project_id, old.created_by, old.created_at, old.submitted_by) then
+      raise exception 'a change request is decided only with decide_change_request';
+    end if;
+    if old.status <> 'received' then
+      raise exception 'a decided change request cannot be edited';
+    end if;
+  end if;
+  if new.description !~ '\S' or length(new.description) > 4000 then
+    raise exception 'a change request needs a description of at most 4000 characters';
+  end if;
+  if cardinality(new.affected_pages) > 50 or cardinality(new.affected_features) > 50 then
+    raise exception 'a change request lists at most 50 pages and 50 features';
+  end if;
+  return new;
+end;
+$$;
+create trigger change_requests_guard before insert or update or delete on change_requests
+  for each row execute function guard_change_request();
+
+create function decide_change_request(p_request uuid, p_decision public.change_decision, p_impact_note text)
+returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  cr   public.change_requests%rowtype;
+  proj public.projects%rowtype;
+begin
+  if not private.is_owner() then
+    raise exception 'decide_change_request: not allowed';
+  end if;
+  -- The project first, then the request: the same order as save_prd_version, so the two cannot deadlock.
+  select * into proj from public.projects
+   where id = (select c.project_id from public.change_requests c where c.id = p_request) for update;
+  select * into cr from public.change_requests where id = p_request for update;
+  if not found then
+    raise exception 'decide_change_request: change request not found';
+  end if;
+  if proj.status <> 'active' then
+    raise exception 'decide_change_request: the project must be active';
+  end if;
+  if cr.status <> 'received' then
+    raise exception 'decide_change_request: the request is already %', cr.status;
+  end if;
+  if p_decision is null or p_decision not in ('accept_current_round', 'defer', 'decline') then
+    raise exception 'decide_change_request: until go-live the decision is accept into the current round, defer or decline';
+  end if;
+  if p_decision = 'accept_current_round' and proj.changes_frozen_at is not null then
+    raise exception 'decide_change_request: changes are frozen for this project';
+  end if;
+  if p_impact_note is null or p_impact_note !~ '\S' or length(p_impact_note) > 2000 then
+    raise exception 'decide_change_request: write the impact note (at most 2000 characters)';
+  end if;
+  update public.change_requests
+     set decision = p_decision,
+         impact_note = p_impact_note,
+         status = case p_decision when 'accept_current_round' then 'accepted'::public.change_status
+                                  when 'defer' then 'deferred' else 'declined' end,
+         decided_at = now(),
+         decided_by = auth.uid()
+   where id = cr.id;
+end;
+$$;
+revoke all on function decide_change_request(uuid, public.change_decision, text) from public, anon, authenticated, service_role;
+grant execute on function decide_change_request(uuid, public.change_decision, text) to authenticated;
+
+-- D-087, P2-T09: a client's Request changes note belongs to a PRD version of the same project; the database
+-- records who wrote it. Agents never read this table.
+create function guard_prd_feedback() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if not exists (select 1 from public.artifacts a where a.id = new.artifact_id and a.project_id = new.project_id and a.type = 'prd') then
+    raise exception 'PRD feedback must name a PRD version of the same project';
+  end if;
+  if new.body !~ '\S' or length(new.body) > 4000 then
+    raise exception 'PRD feedback needs a note of at most 4000 characters';
+  end if;
+  if tg_op = 'UPDATE' then
+    if (new.created_by, new.artifact_id, new.project_id, new.created_at) is distinct from (old.created_by, old.artifact_id, old.project_id, old.created_at) then
+      raise exception 'PRD feedback can only have its note corrected';
+    end if;
+  elsif current_user in ('authenticated', 'service_role', 'anon') then
+    new.created_by := auth.uid();
+  end if;
+  return new;
+end;
+$$;
+create trigger prd_feedback_guard before insert or update on prd_feedback
+  for each row execute function guard_prd_feedback();
 
 -- ---------------------------------------------------------------------------
 -- Row-level security

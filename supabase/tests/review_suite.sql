@@ -33,7 +33,7 @@ select t.adv('the worker cannot clear the giver of an approval by hand', t.proj(
 select t.adv('owner cannot rewrite an artifact''s content', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', 'update artifacts set content=''{"a":1}'' where project_id=''cccccccc-0000-0000-0000-000000000001''', 'error:immutable');
 select t.adv('owner cannot change an artifact''s version', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', 'update artifacts set version=9 where project_id=''cccccccc-0000-0000-0000-000000000001''', 'error:immutable');
 select t.adv('the worker cannot rewrite an artifact''s content', t.proj('plan')||';'||t.art('plan'), null, 'service_role', 'update artifacts set content=''{"a":1}'' where project_id=''cccccccc-0000-0000-0000-000000000001''', 'error:immutable');
-select t.adv('owner can still change an artifact''s status', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', 'update artifacts set status=''approved'' where project_id=''cccccccc-0000-0000-0000-000000000001''', 'ok');
+select t.adv('owner cannot change an artifact''s status directly; the gate functions do (D-327)', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', 'update artifacts set status=''approved'' where project_id=''cccccccc-0000-0000-0000-000000000001''', 'error:only through the gate functions');
 
 \echo '### rows tied to their own project'
 select t.run('an upload cannot point at another project''s files', :'O'::uuid, 'authenticated', 'insert into uploads(project_id,kind,storage_path,mime_type,size_bytes) values (''11111111-1111-1111-1111-111111111111'',''asset'',''22222222-2222-2222-2222-222222222222/p'',''image/png'',1000)', 'error');
