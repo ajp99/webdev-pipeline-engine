@@ -67,9 +67,9 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
   // Accepting the intake queues the requirements agent; its PRD shows on the PRD page.
   await page.goto(`${projectUrl}/prd`);
   await waitFor(page, (p) => p.getByRole('heading', { name: /^Draft 1/ }));
-  await expect(page.getByText('Site map and pages')).toBeVisible();
-  await expect(page.getByText('Gaps and conflicts (owner only)')).toBeVisible();
-  await expect(page.getByText('No budget given')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Site map and pages' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Gaps and conflicts (owner only)' })).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'No budget given' })).toBeVisible();
 
   // The owner edits a section; the summary is prefilled with the changed section and the owner keeps it.
   await page.getByRole('link', { name: 'Edit' }).click();
