@@ -2034,6 +2034,13 @@ begin
     if exists (select 1 from public.artifacts where project_id = p_project and type = 'prd' and version = newest and status = 'approved') then
       raise exception 'save_prd_version: the newest PRD is signed off; advance the stage, then change it through a change request';
     end if;
+    -- An agent run drafts from the version it loaded and supersedes every draft; an owner edit saved meanwhile
+    -- would be buried without an error (gate review of 2026-11-20). The stage_runs row is locked with the
+    -- project above, so a run cannot be claimed and start drafting from an older version in between.
+    if exists (select 1 from public.stage_runs where project_id = p_project and stage = 'requirements'
+                and status in ('queued', 'running', 'waiting', 'cancel_requested')) then
+      raise exception 'save_prd_version: the requirements agent is working on the PRD; wait for its run to finish or cancel it, then edit';
+    end if;
     update public.artifacts set status = 'superseded'
      where project_id = p_project and type = 'prd' and status = 'draft';
     insert into public.artifacts (project_id, type, version, status, content)
@@ -2263,6 +2270,10 @@ create policy owner_read_gate_feedback on gate_feedback
   for select to authenticated using (private.is_owner());
 
 -- Every other table has the owner_all policy only; there is no client policy until go-live (G15).
+
+-- D-087: the client's Request changes notes go to the owner, never to agents. The worker's role bypasses RLS,
+-- so its table privileges go (gate review of 2026-11-20); the console reads them as the owner.
+revoke all on prd_feedback from service_role;
 
 -- ---------------------------------------------------------------------------
 -- Storage: the private bucket for intake uploads (P2-T03, D-075, D-100, D-211)

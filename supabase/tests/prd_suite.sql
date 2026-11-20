@@ -182,3 +182,17 @@ select t.adv('PRD feedback cannot be moved or re-authored', t.proj('requirements
 select t.adv('the owner cannot re-author PRD feedback', t.proj('requirements')||';'||t.prdv(1)
   ||';insert into prd_feedback(project_id,artifact_id,body,created_by) select project_id,id,''x'',''00000000-0000-0000-0000-0000000000a0'' from artifacts where project_id='||:'P', :'O', 'authenticated',
   'update prd_feedback set created_by='''||:'A'||''' where project_id='||:'P', 'error:only have its note corrected');
+
+\echo '### Phase 2b gate review fixes'
+select t.adv('the owner cannot save while a requirements run is queued', t.proj('requirements')||';'||t.prdv(1)
+  ||';insert into stage_runs(project_id,stage,status) values (''cccccccc-0000-0000-0000-000000000001'',''requirements'',''queued'')', :'O', 'authenticated',
+  t.save(1, t.prdj('x')), 'error:requirements agent is working on the PRD');
+select t.adv('the owner cannot save while a requirements run is running', t.reqrun()||';'||t.prdv(1), :'O', 'authenticated',
+  t.save(1, t.prdj('x')), 'error:requirements agent is working on the PRD');
+select t.adv('a finished run does not block the owner', t.proj('requirements')||';'||t.prdv(1)
+  ||';insert into stage_runs(project_id,stage,status,attempts,finished_at) values (''cccccccc-0000-0000-0000-000000000001'',''requirements'',''succeeded'',1,now())', :'O', 'authenticated',
+  t.save(1, t.prdj('x')), 'ok');
+select t.adv('the worker cannot read the client''s Request changes notes', t.proj('requirements')||';'||t.prdv(1), null, 'service_role',
+  'select count(*) from prd_feedback', 'error:permission denied');
+select t.adv('the worker cannot write them either', t.proj('requirements')||';'||t.prdv(1), null, 'service_role',
+  format('insert into prd_feedback(project_id,artifact_id,body,created_by) select %L,id,''x'',%L from artifacts where project_id=%L', 'cccccccc-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000a0', 'cccccccc-0000-0000-0000-000000000001'), 'error:permission denied');
