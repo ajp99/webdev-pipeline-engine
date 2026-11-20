@@ -24,3 +24,6 @@ next-env.d.ts
 # Playwright output (P2-T14)
 playwright-report/
 test-results/
+
+# Eval reports (P3-T10); the record evals/last-run/ is committed
+evals/results/
