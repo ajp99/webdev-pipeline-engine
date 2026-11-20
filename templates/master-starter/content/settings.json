@@ -1,0 +1,23 @@
+{
+  "businessName": "Example Business",
+  "tagline": "A short line about what the business does",
+  "description": "One or two sentences that describe the business for search results and link previews.",
+  "url": "https://www.example.com",
+  "locale": "en",
+  "schemaType": "LocalBusiness",
+  "contact": {
+    "email": "hello@example.com",
+    "phone": "+00 0000 000000",
+    "address": {
+      "street": "1 Example Street",
+      "city": "Example Town",
+      "postalCode": "00000",
+      "country": "GB"
+    },
+    "openingHours": ["Mo-Fr 09:00-17:00"]
+  },
+  "logo": null,
+  "shareImage": "/share.png",
+  "social": [],
+  "contactForm": { "enabled": true, "turnstileSiteKey": null }
+}

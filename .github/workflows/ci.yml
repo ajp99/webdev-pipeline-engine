@@ -110,3 +110,32 @@ jobs:
           retention-days: 7
       - if: always()
         run: supabase stop --no-backup
+
+  starter:
+    # P3-T02: the master starter's tests, a production build (fonts downloaded from Google Fonts at build time)
+    # and Lighthouse 80+ on every category, for the home page and a content page.
+    name: Master starter (tests, build, Lighthouse)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: templates/master-starter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace
+      - run: pnpm test
+      - run: pnpm typecheck
+      - run: pnpm check:content
+      - run: pnpm build
+      - name: Lighthouse on the built site
+        run: |
+          MAIL_TRANSPORT=stub pnpm start -p 3000 > /tmp/starter.log 2>&1 &
+          for _ in $(seq 1 30); do curl -fs http://localhost:3000/ >/dev/null && break; sleep 1; done
+          for path in / /about; do
+            npx -y lighthouse@12 "http://localhost:3000$path" --quiet --chrome-flags="--headless=new --no-sandbox" \
+              --output=json --output-path=/tmp/lh.json
+            node scripts/lighthouse-check.mjs /tmp/lh.json 0.8
+          done

@@ -14,9 +14,9 @@ version: 1
 ## Steps
 
 1. Read `content/settings.json` and its schema. Change only values; never rename keys.
-2. Set the palette from the design brief: a primary, an accent and neutral colours as CSS custom properties in `app/globals.css` (Tailwind theme variables). Check text on every background reaches WCAG AA contrast (4.5:1 for body text, 3:1 for large text).
-3. Set the fonts from the Google Fonts catalog through `next/font` in `app/layout.tsx`: at most two families, with `display: swap`. Never link a font from a third-party URL.
-4. Logo: use the supplied file from `public/` with descriptive alt text, or the text wordmark when the client has none (D-184).
+2. Set the palette from the design brief in the `--color-*` custom properties at the top of `app/globals.css` (primary, on-primary, ink, muted, surface, line, background). Check text on every background reaches WCAG AA contrast (4.5:1 for body text, 3:1 for large text).
+3. Set the fonts from the Google Fonts catalog through `next/font` in `app/fonts.ts`: at most two families, with `display: swap`. Never link a font from a third-party URL.
+4. Logo: put the supplied file in `public/` and set `logo` (src and alt) in `content/settings.json`, or the text wordmark when the client has none (D-184).
 5. Navigation: write `content/navigation.json` from the PRD site map, in its order. The privacy policy and cookie notice go in the footer, not the main menu.
 6. Run the build. Schema errors from the settings check are in plain words: fix the value they name.
 

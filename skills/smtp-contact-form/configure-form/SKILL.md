@@ -12,10 +12,10 @@ version: 1
 
 ## Steps
 
-1. If the PRD says no_contact_form, remove the contact section and route, and link phone and email instead.
+1. If the PRD says no_contact_form, set `contactForm.enabled` to false in `content/settings.json` (the route then answers 404) and leave `<ContactSection />` to show the phone and email.
 2. Fields: name, email and message by default; add only what the PRD lists. Every field has a label and server-side validation.
-3. Spam protection on every form: the honeypot field, the minimum fill time check and the best-effort rate limit stay on. Add Cloudflare Turnstile only when the PRD's choice is turnstile.
-4. Transport: read the SMTP settings from environment variables only (generic SMTP, Google Workspace or a Gmail app password, Microsoft 365 OAuth 2.0). Never commit credentials; document the variables in `.env.example`.
+3. Spam protection on every form: the honeypot field, the minimum fill time check and the best-effort rate limit stay on. Add Cloudflare Turnstile only when the PRD's choice is turnstile: set `contactForm.turnstileSiteKey` in the settings and `TURNSTILE_SECRET_KEY` in the environment.
+4. Transport: `MAIL_TRANSPORT` (smtp, microsoft365 or stub) and its settings come from environment variables only (generic SMTP, Google Workspace or a Gmail app password, Microsoft 365 OAuth 2.0). Never commit credentials; document the variables in `.env.example`.
 5. On failure, show the failure screen with the phone number and plain contact links.
 6. Use the stubbed transport in tests; check a valid message is sent, and that a honeypot hit or a too-fast submit is dropped quietly.
 
