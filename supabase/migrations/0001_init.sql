@@ -1803,7 +1803,9 @@ grant execute on function complete_intake_review(uuid, int, text, jsonb, jsonb, 
 -- the owner's Accept or Feedback always sees the newest version. It is refused when the newest version of
 -- that type is already approved (a late run must not push an approved version out of the gates), and the
 -- run must be claimed by the calling worker (as in heartbeat_run and finish_run). The content is an object
--- under 100000 characters and carries the model name under "model".
+-- under 100000 characters and carries the model name under "model". It also records the model and the prompt
+-- template's SHA-256 on the run (D-283); they describe the attempt that wrote the artifact, so a run requeued
+-- after a later failure still shows what produced its artifact.
 create function complete_stage_artifact(
   p_project uuid, p_run uuid, p_worker text, p_type public.artifact_type, p_content jsonb, p_model text,
   p_notes jsonb default null, p_prompt_hash text default null
@@ -1849,6 +1851,10 @@ begin
   end if;
   if p_model is null or btrim(p_model) = '' or length(p_model) > 100 then
     raise exception 'complete_stage_artifact: the model name is missing or too long';
+  end if;
+  -- 'stub' on a run marks a stub run for the worker's handler choice; a real artifact never claims it.
+  if p_model = 'stub' then
+    raise exception 'complete_stage_artifact: the model name stub is reserved for stub runs';
   end if;
   -- D-283: the run records the pinned model and, for a model call, the SHA-256 of its prompt template.
   if p_prompt_hash is not null and p_prompt_hash !~ '^[0-9a-f]{64}$' then

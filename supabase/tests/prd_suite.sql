@@ -16,7 +16,7 @@ $$ select t.proj('requirements')||';insert into stage_runs(id,project_id,stage,s
    ||t.rid(1)||',''cccccccc-0000-0000-0000-000000000001'',''requirements'',''running'',1,now(),''w1'',now())' $$;
 -- The worker writes a PRD draft with the content and notes given.
 create function t.wprd(content jsonb, notes text default null) returns text language sql as
-$$ select t.csa(1, 'prd', content::text, 'stub', coalesce(notes, t.notes())) $$;
+$$ select t.csa(1, 'prd', content::text, 'stub:test', coalesce(notes, t.notes())) $$;
 -- The owner saves a PRD version on top of version base, optionally for a change request.
 create function t.save(base int, content jsonb, cr text default null) returns text language sql as
 $$ select format('select save_prd_version(%L::uuid, %s, %L::jsonb, %s)', 'cccccccc-0000-0000-0000-000000000001', base, content::text,
@@ -53,7 +53,7 @@ select t.adv('a second draft with a summary is version 2; the old PRD and notes 
   t.art_status('prd', 1, 'superseded')||' and '||t.art_status('prd', 2, 'draft')||' and '||t.art_status('prd_notes', 1, 'superseded')||' and '||t.art_status('prd_notes', 2, 'draft'));
 
 \echo '### the owner-only notes (D-325)'
-select t.adv('a PRD without notes is refused', t.reqrun(), null, 'service_role', t.csa(1, 'prd', t.prdj()::text, 'stub', null), 'error:the notes must be an object');
+select t.adv('a PRD without notes is refused', t.reqrun(), null, 'service_role', t.csa(1, 'prd', t.prdj()::text, 'stub:test', null), 'error:the notes must be an object');
 select t.adv('notes without a conflicts list are refused', t.reqrun(), null, 'service_role', t.wprd(t.prdj(), '{"gaps":[]}'), 'error:need a conflicts list');
 select t.adv('notes with another key are refused', t.reqrun(), null, 'service_role', t.wprd(t.prdj(), '{"gaps":[],"conflicts":[],"owner_notes":"x"}'), 'error:other than gaps and conflicts');
 select t.adv('a note item without an issue is refused', t.reqrun(), null, 'service_role', t.wprd(t.prdj(), '{"gaps":[{"resolution":"x"}],"conflicts":[]}'), 'error:needs an issue');
@@ -61,7 +61,7 @@ select t.adv('a note item with another key is refused', t.reqrun(), null, 'servi
 select t.adv('a resolution must be text', t.reqrun(), null, 'service_role', t.wprd(t.prdj(), '{"gaps":[],"conflicts":[{"issue":"x","resolution":1}]}'), 'error:needs an issue');
 select t.adv('more than 50 gaps are refused', t.reqrun(), null, 'service_role',
   t.wprd(t.prdj(), (select jsonb_build_object('gaps', jsonb_agg(jsonb_build_object('issue', 'g' || i)), 'conflicts', '[]'::jsonb)::text from generate_series(1, 51) i)), 'error:more than 50 gaps');
-select t.adv('a plan cannot carry notes', t.running(), null, 'service_role', t.csa(1, 'plan', '{"body":"x"}', 'stub', '{"gaps":[],"conflicts":[]}'), 'error:only a PRD has notes');
+select t.adv('a plan cannot carry notes', t.running(), null, 'service_role', t.csa(1, 'plan', '{"body":"x"}', 'stub:test', '{"gaps":[],"conflicts":[]}'), 'error:only a PRD has notes');
 
 \echo '### artifacts through the API are drafts (D-327)'
 select t.adv('the owner can insert a draft, and the database records the owner as its author', t.proj('plan'), :'O', 'authenticated',
