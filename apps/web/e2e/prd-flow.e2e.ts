@@ -173,6 +173,13 @@ test('from a new project to the client signing off the PRD', async ({ page }) =>
     .locator('textarea[name=note]')
     .fill('Client approved the screenshots by email, 20 November');
   await accept('client');
+  // The client's sign-off makes the stage ready; the owner advances it (nothing advances on its own).
+  const toBuild = page
+    .getByRole('listitem')
+    .filter({ hasText: projectName })
+    .getByRole('button', { name: 'Advance to build rounds' });
+  await toBuild.click();
+  await expect(toBuild).toHaveCount(0, { timeout: 30_000 });
   await page.goto(`${projectUrl}/stage`);
   await expect(page.getByText(/build rounds stage/)).toBeVisible();
 });
