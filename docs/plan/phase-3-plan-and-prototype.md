@@ -1,6 +1,6 @@
 # Phase 3: Plan and prototype
 
-**Status:** in progress
+**Status:** done (2026-11-20; P3-T10's first live run carried to the Phase 4 gate, D-331)
 
 **Goal:** The skills library, the master starter, the Planner, the provisioning script, the eval harness, and one prototype design shown to the client as screenshots, with owner approval and the client's approval recorded by the owner (D-298).
 
@@ -23,7 +23,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P3-T03 Planner agent**  
   Acceptance: Starts only after the fixtures and expected-output checks of P3-T10 exist (D-244). Produces the plan artifact: structured fields (rounds with scope, skills, dependencies, token budget) plus a markdown rationale per section, edited as text by the owner. Proposes the round count by the rule of thumb (5 pages or fewer and no blog is 2 rounds, otherwise 4; the owner can override), flags hard rounds for Opus 5.5, and proposes the token budget; the owner confirms these when approving the plan (soft gate). The plan includes a design brief section (palette, fonts, layout approach, references) built from the intake's design section and the reference-site screenshots. A plain API call with JSON-schema structured output (D-275); the model ID is pinned and `prompt_hash` is recorded (D-283).
 
-- [ ] **P3-T04 Prototype agent**  
+- [x] **P3-T04 Prototype agent**  
   Acceptance: Builds one design of the main page from the plan, the intake design section, the brand inputs and the starter, with real copy drafted from the intake (every factual claim in a `<Claim>` marker). Commits it to the `staging` branch of the project's local git repository (until go-live, D-328; the push to GitHub with a short-lived App token is go-live item G33). The worker builds the site and serves it locally, then takes full-page desktop and mobile screenshots with Playwright (the owner installs the browser on their machine). No agent self-check; no live preview goes to the client.
 
 - [x] **P3-T05 Two-step prototype approval (client step owner-recorded, D-298)**  
@@ -41,10 +41,10 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P3-T09 Project provisioning script (owner-run)**  
   Acceptance: One command, run by the owner, creates the client repo from `templates/master-starter`, installs the GitHub App on it, creates and links the Vercel project (production branch `main`, previews from `staging`; Vercel's login protection stays on), and records `github_repo` and `vercel_project_id`. Each step checks whether it is already done, so a rerun resumes; a cleanup command removes a half-created project after a confirmation; a dry-run mode shows the planned steps first. Workers never receive broader credentials. Until go-live it is built and tested in dry-run against fake GitHub and Vercel clients; the real run is go-live item G33 (D-328).
 
-- [ ] **P3-T10 Eval harness (fixtures first)**  
+- [ ] **P3-T10 Eval harness (fixtures first)** (built and tested; the first live run, the committed record and the owner's spot check are carried to the Phase 4 gate, D-331)  
   Acceptance: The fixtures and their expected-output checks are written before P3-T03 starts; the harness and judge follow the Planner. Fictional client fixtures live in `evals/fixtures/`: a dental clinic, a law firm and a restaurant. A harness runs the Planner (skill selection and round plan) against them and scores the results with an Opus 5.5 judge (on the owner's Claude Code login until go-live, D-329). It runs when prompts or models change, and its scores are calibrated against the owner's spot checks. Fixtures contain no real client data. They include prompt-injection cases for the reader step (D-267). No automated check runs when a prompt or model changes before this harness exists (D-283).
 
-- [ ] **P3-T11 Phase 3 gate evidence**  
+- [x] **P3-T11 Phase 3 gate evidence**  
   Acceptance: Record in `PROGRESS.md`: a manual walkthrough from a signed PRD to an approved prototype with a fictional client, the owner recording the client's approval; an automated end-to-end test of the same flow with model responses stubbed; a cost report in tokens from `stage_runs`; and the Planner eval results on the 3 fixtures.
 
 - [x] **P3-T12 Reference-site screenshot tool**  

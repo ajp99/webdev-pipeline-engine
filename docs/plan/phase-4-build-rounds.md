@@ -54,3 +54,5 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 ## Gate
 
 The phase is done when: **A full round runs with its backlog triaged**. Only the owner marks it done, by setting **Status** above to `done` and updating `docs/plan/README.md`.
+
+Carried from Phase 3 (D-331): before this gate is accepted, the owner runs the Planner eval (`pnpm --filter @wpe/worker eval:planner`), commits `evals/last-run/planner.json`, adds a spot check to `evals/calibration.md`, and P3-T10 is ticked.
