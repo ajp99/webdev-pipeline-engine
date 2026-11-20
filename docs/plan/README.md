@@ -7,7 +7,7 @@ Five phases, built in order. Each phase is closed by one gate that only the owne
 | 1 | [Foundation](phase-1-foundation.md) | Migrations applied to a real local Supabase, checks pass, an approved dummy artifact moves a project stage | done |
 | 2a | [Intake and runner](phase-2-intake-and-prd.md) | A fictional client's intake, entered by the owner, runs through the real stage runner and intake agent to an accepted intake | done |
 | 2b | [PRD and client review](phase-2-intake-and-prd.md) | The owner records a fictional client's sign-off of a PRD | done |
-| 3 | [Plan and prototype](phase-3-plan-and-prototype.md) | Prototype approved from screenshots | not started |
+| 3 | [Plan and prototype](phase-3-plan-and-prototype.md) | Prototype approved from screenshots | in progress |
 | 4 | [Build rounds](phase-4-build-rounds.md) | A full round runs with its backlog triaged | not started |
 | 5 | [QC, report, handover](phase-5-qc-report-handover.md) | A pilot site is handed over | not started |
 
