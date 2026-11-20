@@ -197,6 +197,12 @@ describe('modelFromEnv', () => {
       /GEMINI_API_KEY is not set/,
     );
     expect(() => modelFromEnv({ MODEL_PROVIDER: 'nope', MODEL_NAME: 'm' })).toThrow(/not known/);
+    expect(() => modelFromEnv({ MODEL_PROVIDER: 'scripted', MODEL_NAME: 'm' })).toThrow(
+      /only for the end-to-end test/,
+    );
+    expect(modelFromEnv({ MODEL_PROVIDER: 'scripted', MODEL_NAME: 'm', WPE_E2E: '1' }).name).toBe(
+      'scripted:e2e',
+    );
   });
 
   it('builds Gemini from the settings', () => {
