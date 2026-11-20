@@ -114,8 +114,8 @@ select t.adv('handover: accepting with nothing outstanding closes the project', 
   '(select status::text from projects where id='''||:'CP'||''')=''closed''');
 
 \echo '### accept_gate and the next stage''s run'
-select t.adv('no stage has an agent yet: advancing queues no run', t.proj('intake')||';'||t.art('intake_record')||';'||t.ir(1,'reviewed'), :'O', 'authenticated', t.acc('intake_record'), 'ok',
-  t.is_stage('requirements')||' and (select count(*) from stage_runs where project_id='''||:'CP'||''')=0');
+select t.adv('the requirements stage has a stub agent: advancing queues its run', t.proj('intake')||';'||t.art('intake_record')||';'||t.ir(1,'reviewed'), :'O', 'authenticated', t.acc('intake_record'), 'ok',
+  t.is_stage('requirements')||' and (select count(*) from stage_runs where project_id='''||:'CP'||''' and stage=''requirements'' and status=''queued'')=1');
 select t.adv('a stage with an agent gets a queued run when the project enters it', t.proj('intake')||';'||t.art('intake_record')||';'||t.ir(1,'reviewed')||';'||t.agent_on(), :'O', 'authenticated', t.acc('intake_record'), 'ok',
   '(select count(*) from stage_runs where project_id='''||:'CP'||''' and stage=''requirements'' and status=''queued'')=1');
 select t.adv('accepting a gate that does not advance queues no run', t.proj('prototype')||';'||t.art('prototype')||';'||t.agent_on(), :'O', 'authenticated', t.acc('prototype'), 'ok',

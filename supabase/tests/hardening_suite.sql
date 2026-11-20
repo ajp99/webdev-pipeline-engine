@@ -81,8 +81,8 @@ select case when (select coalesce(array_agg(p.proname::text order by p.proname),
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
       and has_function_privilege('service_role', p.oid, 'execute'))
-    = array['claim_run','complete_intake_review','enqueue_run','finish_run','heartbeat_run']
-  then 'PASS      the worker can call the four queue functions it uses and complete_intake_review, nothing else'
+    = array['claim_run','complete_intake_review','complete_stage_artifact','enqueue_run','finish_run','heartbeat_run']
+  then 'PASS      the worker can call the four queue functions it uses, complete_intake_review and complete_stage_artifact, nothing else'
   else 'FAIL      the worker can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')

@@ -23,6 +23,9 @@ $$ select format('(select count(*) from gate_feedback where project_id=%L)=%s', 
 create function t.runs(n int, st text default 'queued') returns text language sql as
 $$ select format('(select count(*) from stage_runs where project_id=%L and status=%L)=%s', 'cccccccc-0000-0000-0000-000000000001', st, n) $$;
 
+-- Makes no stage a stage with an agent, so a refusal can only come from feedback_gate itself, not from enqueue_run.
+create function t.agent_off() returns text language sql as
+$$ select 'create or replace function private.stage_has_agent(p_stage public.stage) returns boolean language sql immutable set search_path = '''' as $f$ select false $f$' $$;
 \echo '### who can give feedback'
 select t.adv('feedback: a non-owner is refused', t.proj('plan')||';'||t.art('plan'), :'A', 'authenticated', t.fb('plan'), 'error:feedback_gate: not allowed');
 select t.adv('feedback: the worker is refused', t.proj('plan')||';'||t.art('plan'), null, 'service_role', t.fb('plan'), 'error');
@@ -56,7 +59,7 @@ select t.adv('blank feedback is refused', t.proj('plan')||';'||t.art('plan'), :'
 select t.adv('missing feedback is refused', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', t.fb('plan',null), 'error:write the feedback first');
 select t.adv('feedback over 10000 characters is refused', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', t.fb('plan',repeat('x',10001)), 'error:gate_feedback_body');
 select t.adv('feedback of exactly 10000 characters is kept', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', t.fb('plan',repeat('x',10000)), 'ok', t.fbcount(1));
-select t.adv('a paused project gets no feedback', t.proj('plan','paused')||';'||t.art('plan'), :'O', 'authenticated', t.fb('plan'), 'error:only an active project');
+select t.adv('a paused project gets no feedback', t.proj('plan','paused')||';'||t.art('plan')||';'||t.agent_off(), :'O', 'authenticated', t.fb('plan'), 'error:only an active project');
 select t.adv('an unknown project gets no feedback', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated',
   'select feedback_gate(''dddddddd-0000-0000-0000-000000000001'', (select id from artifacts where type=''plan'' and project_id='''||:'CP'||'''), ''x'')', 'error:project not found');
 select t.adv('feedback on an older version is refused', t.proj('plan')||';'||t.art('plan',1,'superseded')||';'||t.art('plan',2), :'O', 'authenticated',
@@ -104,7 +107,7 @@ select t.adv('round: the third loop on a round is allowed', t.proj('build_rounds
 select t.adv('round: loops on another round do not count', t.proj('build_rounds')||';'||t.rnd(1,'approved')||';'||t.rs(1,1,'approved')||';'||t.fbrows('round_summary',3,1)||';'||t.rnd(2,'in_review')||';'||t.rs(2,2), :'O', 'authenticated', t.fbr('round_summary',1,2), 'ok');
 
 \echo '### runs'
-select t.adv('without an agent for the stage feedback queues no run', t.proj('plan')||';'||t.art('plan'), :'O', 'authenticated', t.fb('plan'), 'ok', t.runs(0));
+select t.adv('without an agent for the stage feedback queues no run', t.proj('plan')||';'||t.art('plan')||';'||t.agent_off(), :'O', 'authenticated', t.fb('plan'), 'ok', t.runs(0));
 select t.adv('with an agent for the stage feedback queues a run for the stage', t.proj('plan')||';'||t.art('plan')||';'||t.agent_on(), :'O', 'authenticated', t.fb('plan'), 'ok',
   t.runs(1)||' and (select stage::text from stage_runs where project_id='''||:'CP'||''')=''plan''');
 select t.adv('a run already queued is not doubled', t.proj('plan')||';'||t.art('plan')||';'||t.agent_on()||';insert into stage_runs(project_id,stage) values ('''||:'CP'||''',''plan'')', :'O', 'authenticated', t.fb('plan'), 'ok', t.runs(1)||' and '||t.fbcount(1));
