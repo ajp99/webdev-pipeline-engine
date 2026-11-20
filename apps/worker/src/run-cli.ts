@@ -1,5 +1,6 @@
 // Run with: pnpm --filter @wpe/worker start   (reads apps/worker/.env). Stop with Ctrl+C.
 import { hostname } from 'node:os';
+import { resolve } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@wpe/shared';
 import { agentDeps } from './builder-agent';
@@ -17,6 +18,8 @@ import { supabaseReviewDeps } from './intake-review-supabase';
 import { modelFromEnv } from './model';
 import { requirementsHandler } from './requirements';
 import { supabaseRequirementsDeps } from './requirements-supabase';
+import { scanSkills, syncRegistry, withSkillSync } from './skills';
+import { supabaseRegistryDeps } from './skills-supabase';
 import { DEFAULTS, startRunner } from './runner';
 import { supabaseRunnerDeps } from './runner-supabase';
 import { stubStageHandler } from './stage-stubs';
@@ -73,9 +76,20 @@ const skeleton = {
     ...agentDeps(process.env),
   }),
 };
+// The skills library (P3-T01): skills_registry follows skills/ at start and before every run.
+const skillsRoot = resolve(import.meta.dirname, '../../../skills');
+const syncSkills = async () => syncRegistry(supabaseRegistryDeps(admin), scanSkills(skillsRoot));
+try {
+  const changes = await syncSkills();
+  console.log(`Skills: ${changes.length ? changes.join('; ') : 'registry up to date'}.`);
+} catch (e) {
+  console.log(
+    `Skills: ${e instanceof Error ? e.message : String(e)} (runs fail until it is fixed).`,
+  );
+}
 const runner = startRunner(
   supabaseRunnerDeps(admin),
-  defaultSelector(process.env, review, skeleton),
+  withSkillSync(defaultSelector(process.env, review, skeleton), syncSkills),
   {
     worker,
     heartbeatMs: DEFAULTS.heartbeatMs,

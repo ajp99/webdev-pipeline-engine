@@ -19,10 +19,12 @@ Reusable SKILL.md files that agents load for specific work. Grouped by area; one
 skills/<area>/<skill-name>/SKILL.md
 ```
 
-A SKILL.md has a short front-matter block (`name`, `description`), then Preconditions, Steps, and Decision guidance. Skills must use parameters instead of client-specific names, URLs, colors or paths.
+A SKILL.md starts with a front-matter block between `---` lines: `name` (the id, `<area>/<skill-name>`, equal to the folder), `description` (one line: what it is for) and `version` (a whole number; raise it when the steps change). The body has three sections: `## Preconditions`, `## Steps` and `## Decision guidance`. Skills use parameters, never a client's names, URLs, colours or paths. `packages/shared/src/skills.ts` checks the format; a bad file stops the worker's skill scan with its problem.
+
+## Registry and loading (P3-T01, D-282)
+
+The worker scans `skills/` at start and before every run and brings `skills_registry` in step: a new skill is added as a library skill, a changed version is updated, and a skill whose file is gone is marked deprecated. The Planner selects skills per project by id; a run loads only those, and only if the registry lists them as library skills (`apps/worker/src/skills.ts`).
 
 ## Lifecycle
 
-Skills move project-local, candidate, library, deprecated (see `docs/spec/06-agents-skills-tools.md`). Only owner-approved skills live here in `skills/`. Project-local skills stay in the client's repo until promoted. `skills_registry` in the database tracks scope, version and approval.
-
-The folders are empty for now; phase 3 (task P3-T01) creates the first skills.
+The promotion lifecycle (project-local, candidate, library, deprecated; see `docs/spec/06-agents-skills-tools.md`) is deferred until at least two projects have good marks (D-282). Until then every skill here is a library skill, reviewed by the owner before it is merged.
