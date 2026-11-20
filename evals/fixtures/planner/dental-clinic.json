@@ -1,0 +1,38 @@
+{
+  "id": "dental-clinic",
+  "description": "Fictional family dental clinic: four pages, a contact form, no blog. Expects 2 rounds.",
+  "input": {
+    "projectName": "Brightside Family Dental (fictional)",
+    "prd": {
+      "sections": {
+        "business": "Brightside Family Dental is a fictional two-dentist practice in a small town. Goal: more new patients booking a first check-up. Audience: local families with children and older adults.",
+        "site_map": "- Home: who we are and a booking call to action\n- Services: check-ups, cleaning, fillings, children's dentistry\n- About: the two dentists and the practice\n- Contact: address, opening hours, contact form\n- Privacy policy\n- Cookie notice",
+        "features": "- Contact form (Must), honeypot spam protection\n- Map embed on Contact (Should)\n- Online booking (Won't): phone bookings only for now",
+        "content": "The client supplies photos of the practice and the team. The agency drafts all page texts from the intake.",
+        "brand": "Logo supplied. Colours: teal and white. Tone: calm, friendly, reassuring.",
+        "non_functional": "Lighthouse 80+, basic SEO, responsive, accessibility basics."
+      },
+      "spam_protection": "honeypot",
+      "change_summary": ""
+    },
+    "design": {
+      "design_style_cards": ["minimal"],
+      "layout_density": "airy",
+      "colours": "teal and white"
+    }
+  },
+  "expect": {
+    "rounds": 2,
+    "pages": ["Home", "Services", "About", "Contact", "Privacy", "Cookie"],
+    "skillAreas": [
+      "starter-customization",
+      "industry-copy",
+      "seo",
+      "accessibility-basics",
+      "smtp-contact-form"
+    ],
+    "forbiddenSkillAreas": ["deployment", "handover"],
+    "designMentions": ["teal", "minimal"],
+    "forbiddenText": []
+  }
+}
