@@ -21,6 +21,8 @@ for (const id of Object.keys(reports[0].categories)) {
   const pass = m >= Number(min);
   ok &&= pass;
   const runs = scores.map((s) => Math.round(s * 100)).join(', ');
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${id.padEnd(16)} ${Math.round(m * 100)}  (runs: ${runs})`);
+  console.log(
+    `${pass ? 'PASS' : 'FAIL'}  ${id.padEnd(16)} ${Math.round(m * 100)}  (runs: ${runs})`,
+  );
 }
 process.exit(ok ? 0 : 1);
