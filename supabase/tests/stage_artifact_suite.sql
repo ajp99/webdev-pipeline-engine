@@ -5,7 +5,7 @@
 \set P '''cccccccc-0000-0000-0000-000000000001'''
 
 -- The call: run n writes an artifact of type typ with the given content (json text) for the scratch project.
-create function t.csa(n int, typ text default 'plan', content text default '{"body": "x"}', model text default 'stub', notes text default null, phash text default null) returns text language sql as
+create function t.csa(n int, typ text default 'plan', content text default '{"body": "x"}', model text default 'stub:test', notes text default null, phash text default null) returns text language sql as
 $$ select format('select complete_stage_artifact(%L::uuid, %s, %L, %L, %L::jsonb, %L, %L::jsonb, %L)', 'cccccccc-0000-0000-0000-000000000001', t.rid(n), 'w1', typ, content, model, notes, phash) $$;
 -- A valid PRD (D-325) and empty notes, for the requirements stage.
 create function t.prd_json() returns text language sql as
@@ -18,7 +18,7 @@ $$ select format('(select count(*) from artifacts where project_id=%L and type='
 
 \echo '### stage artifact: complete_stage_artifact'
 select t.adv('the worker writes a plan draft for its running run', t.running(), null, 'service_role', t.csa(1), 'ok',
-  '(select count(*) from artifacts where project_id='||:'P'||' and type=''plan'' and version=1 and status=''draft'' and content->>''body''=''x'' and content->>''model''=''stub'')=1');
+  '(select count(*) from artifacts where project_id='||:'P'||' and type=''plan'' and version=1 and status=''draft'' and content->>''body''=''x'' and content->>''model''=''stub:test'')=1');
 select t.adv('the next write is version 2 and the old draft is superseded', t.running()||';'||t.art('plan'), null, 'service_role', t.csa(1), 'ok',
   '(select status::text from artifacts where project_id='||:'P'||' and type=''plan'' and version=1)=''superseded'' and (select status::text from artifacts where project_id='||:'P'||' and type=''plan'' and version=2)=''draft''');
 select t.adv('the newest version being approved refuses a late write', t.running()||';'||t.art('plan',1,'approved'), null, 'service_role', t.csa(1), 'error:already approved',
@@ -52,7 +52,7 @@ select t.adv('a missing model name is refused', t.running(), null, 'service_role
 select t.adv('a model name over 100 characters is refused', t.running(), null, 'service_role', t.csa(1, 'plan', '{"body": "x"}', repeat('m', 101)), 'error:model name');
 select t.adv('a refused write changes nothing', t.running()||';'||t.art('plan'), null, 'service_role', t.csa(1, 'plan', '{}'), 'error:non-empty object',
   t.plans()||'=1 and (select status::text from artifacts where project_id='||:'P'||' and type=''plan'')=''draft''');
-select t.adv('the prd and prototype types work in their stages too', t.proj('requirements')||';insert into stage_runs(id,project_id,stage,status,attempts,heartbeat_at,claimed_by,started_at) values ('||t.rid(1)||','||:'P'||',''requirements'',''running'',1,now(),''w1'',now())', null, 'service_role', t.csa(1, 'prd', t.prd_json(), 'stub', '{"gaps":[],"conflicts":[]}'), 'ok',
+select t.adv('the prd and prototype types work in their stages too', t.proj('requirements')||';insert into stage_runs(id,project_id,stage,status,attempts,heartbeat_at,claimed_by,started_at) values ('||t.rid(1)||','||:'P'||',''requirements'',''running'',1,now(),''w1'',now())', null, 'service_role', t.csa(1, 'prd', t.prd_json(), 'stub:test', '{"gaps":[],"conflicts":[]}'), 'ok',
   '(select count(*) from artifacts where project_id='||:'P'||' and type=''prd'')=1');
 
 \echo '### stage artifact: which stages queue a run on entry'
@@ -68,3 +68,4 @@ select t.adv('without a prompt hash the run still records its model', t.running(
   t.is(1, 'model', 'stub:template')||' and '||t.isnull(1, 'prompt_hash'));
 select t.adv('a prompt hash that is not a SHA-256 is refused', t.running(), null, 'service_role', t.csa(1, 'plan', '{"body":"x"}', 'm', null, 'abc'), 'error:must be a SHA-256');
 
+select t.adv('the model name stub is reserved for stub runs', t.running(), null, 'service_role', t.csa(1, 'plan', '{"body":"x"}', 'stub'), 'error:reserved for stub runs');
