@@ -40,13 +40,13 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P2-T07 Requirements agent produces the PRD**  
   Acceptance: A plain API call with JSON-schema structured output (D-275). Produces the `prd` artifact (client-visible) as schema-validated JSON with a fixed list of sections, each a markdown string, rendered for the client and the editor, with the privacy policy and cookie notice in the page list and the contact form spam protection choice; no round plan. Also produces an owner-only `prd_notes` artifact with the gap and conflict list. Reads the owner's private notes and never quotes them in anything the client sees.
 
-- [ ] **P2-T08 PRD editor with version diff**  
+- [x] **P2-T08 PRD editor with version diff**  
   Acceptance: The owner edits each section in a markdown text area with a live preview and sees a side-by-side version diff. Every saved version is an immutable artifact row with its author and time, listed as the version history. Each new version carries a short summary of what changed: the agent's for an agent draft, the owner's for an owner edit, prefilled with the changed sections (D-324). While the stage is open an edit makes a new version that needs a fresh approval; once the project has advanced, new versions of the PRD are blocked and the change goes through a change request (D-238).
 
-- [ ] **P2-T09 Client PRD review (owner-recorded, D-298)**  
+- [x] **P2-T09 Client PRD review (owner-recorded, D-298)**  
   Acceptance: The console shows the latest client-visible PRD version and the change summary for the owner to send to the client outside the pipeline. The owner records the client's reply: Sign off (one client gate, an approval with role `client`, the owner as giver and a required `evidence_note` naming the channel; the signed version freezes as v1.0) or Request changes with a note stored in `prd_feedback` that goes to the owner, not to agents. There is no client email or client login until go-live (G15).
 
-- [ ] **P2-T10 Change requests (owner-recorded, D-298)**  
+- [x] **P2-T10 Change requests (owner-recorded, D-298)**  
   Acceptance: Change-request records with description, affected pages and features, the impact note, and the owner's decision (accept into the current round, defer or decline, D-326); an accepted one allows one new PRD version (v1.1, v1.2, ...). The owner enters requests the client sends outside the pipeline, from go-live until the transfer script sets the freeze (D-230); client submission in the dashboard is a go-live item (G15). The owner sets the impact note and the decision.
 
 - [-] **P2-T11 Client email notifications (moved to go-live, G15)**  
