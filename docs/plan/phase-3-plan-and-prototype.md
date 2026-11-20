@@ -38,7 +38,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [x] **P3-T08 Skill use marks**  
   Acceptance: At stage approval the owner can optionally mark each skill used as good or bad; marks are stored in `skill_uses`; unmarked uses do not count.
 
-- [ ] **P3-T09 Project provisioning script (owner-run)**  
+- [x] **P3-T09 Project provisioning script (owner-run)**  
   Acceptance: One command, run by the owner, creates the client repo from `templates/master-starter`, installs the GitHub App on it, creates and links the Vercel project (production branch `main`, previews from `staging`; Vercel's login protection stays on), and records `github_repo` and `vercel_project_id`. Each step checks whether it is already done, so a rerun resumes; a cleanup command removes a half-created project after a confirmation; a dry-run mode shows the planned steps first. Workers never receive broader credentials. Until go-live it is built and tested in dry-run against fake GitHub and Vercel clients; the real run is go-live item G33 (D-328).
 
 - [ ] **P3-T10 Eval harness (fixtures first)**  
