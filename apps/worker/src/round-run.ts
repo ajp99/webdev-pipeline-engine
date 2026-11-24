@@ -28,6 +28,8 @@ export type RoundRow = {
   merged: boolean;
   /** Null for a round the owner rejected (or never started): its next run starts again from staging. */
   branch?: string | null;
+  /** The commit of the round's approved summary: the branch must still be there when it is merged. */
+  reviewed?: string | null;
 };
 /** Backlog items the owner has not triaged yet (open, not ask-client): questions and blockers. */
 export type OpenItem = { round: number | null; kind: 'question' | 'blocker' };
@@ -97,7 +99,9 @@ export interface RoundDeps {
   prepare(projectId: string, io: RunIo): Promise<string>;
   stopPreview(dir: string): Promise<void>;
   /** Merges an accepted round's branch into staging with a merge commit, unless it is already merged (D-332). */
-  merge(dir: string, round: number, io: RunIo): Promise<string>;
+  merge(dir: string, round: number, io: RunIo, reviewed: string | null): Promise<string>;
+  /** Throws when the repository is not on the round's branch after the session. */
+  onBranch(dir: string, name: string): Promise<void>;
   recordMerge(projectId: string, round: number, commit: string): Promise<void>;
   /** Creates round-N from staging, or switches to it for a Feedback version or a retry. */
   branch(dir: string, name: string, io: RunIo, fresh: boolean): Promise<void>;
@@ -154,12 +158,15 @@ export function nextRound(
   plan: Plan,
   rows: RoundRow[],
   feedback: RoundLoad['feedback'],
+  open: OpenItem[] = [],
 ): NextRound | null {
   const byNo = new Map(rows.map((r) => [r.number, r]));
   const planned = (n: number) => plan.rounds.find((r) => r.number === n);
   if (feedback) {
     const r = planned(feedback.round);
-    if (r && byNo.get(r.number)?.status === 'in_review') return { round: r, why: 'feedback' };
+    // In review, or building when a Feedback run failed: the notes still apply.
+    const st = r ? byNo.get(r.number)?.status : undefined;
+    if (r && (st === 'in_review' || st === 'building')) return { round: r, why: 'feedback' };
   }
   const building = rows
     .filter((r) => r.status === 'building')
@@ -174,9 +181,11 @@ export function nextRound(
   for (const r of [...plan.rounds].sort((a, b) => a.number - b.number)) {
     const st = byNo.get(r.number)?.status ?? 'planned';
     if (st !== 'planned') continue;
-    return r.depends_on.every((d) => byNo.get(d)?.status === 'approved')
-      ? { round: r, why: 'next' }
-      : null;
+    // P4-T01: the rounds before it are approved and their backlog is triaged.
+    const ready =
+      r.depends_on.every((d) => byNo.get(d)?.status === 'approved') &&
+      !open.some((o) => o.round !== null && o.round < r.number);
+    return ready ? { round: r, why: 'next' } : null;
   }
   return null;
 }
@@ -238,7 +247,7 @@ export function roundHandler(deps: RoundDeps): Handler {
     for (const r of input.rounds
       .filter((x) => x.status === 'approved' && !x.merged)
       .sort((a, b) => a.number - b.number)) {
-      const commit = await deps.merge(dir, r.number, io);
+      const commit = await deps.merge(dir, r.number, io, r.reviewed ?? null);
       await deps.recordMerge(run.project_id, r.number, commit);
       log('info', `merged round ${r.number} into staging (${commit.slice(0, 8)})`);
       r.merged = true;
@@ -301,6 +310,7 @@ export function roundHandler(deps: RoundDeps): Handler {
     const result = await deps.session({ gate, system, prompt: user, model, signal, progress });
     if (signal.aborted) throw new Error('stopped');
     log('info', `Builder: ${result.summary.slice(0, 300)}`);
+    await deps.onBranch(dir, branch);
 
     const backlog = parseBacklog(await deps.takeBacklog(dir));
     if (backlog.problem) log('warn', backlog.problem);

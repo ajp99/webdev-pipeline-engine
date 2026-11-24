@@ -31,6 +31,7 @@ import { evalRecordWarning } from './eval-planner';
 import { runReader } from './reader';
 import { ownerApproval, roundBuilderSession } from './round-builder';
 import {
+  assertBranch,
   commitRound,
   listClaims,
   mergeRound,
@@ -146,6 +147,7 @@ const skeleton = {
     prepare: (projectId, io) => prepareRoundRepo(projectId, io),
     stopPreview,
     merge: mergeRound,
+    onBranch: assertBranch,
     branch: roundBranch,
     session: roundBuilderSession,
     askOwner: (runId, signal) => ownerApproval(admin as never, runId, worker, signal),

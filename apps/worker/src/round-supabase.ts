@@ -64,16 +64,16 @@ export function supabaseRoundDeps(
             .limit(1),
           admin
             .from('rounds')
-            .select('number, status, merged_at')
+            .select('number, status, merged_at, branch')
             .eq('project_id', projectId)
             .is('change_request_id', null),
           admin
             .from('artifacts')
-            .select('id, content')
+            .select('id, content, status')
             .eq('project_id', projectId)
             .eq('type', 'round_summary')
             .order('version', { ascending: false })
-            .limit(1),
+            .limit(100),
           admin
             .from('gate_feedback')
             .select('artifact_id, body')
@@ -85,7 +85,7 @@ export function supabaseRoundDeps(
             .eq('project_id', projectId),
           admin
             .from('backlog_items')
-            .select('id, question, owner_answer, client_answer, status')
+            .select('id, round, kind, ask_client, question, owner_answer, client_answer, status')
             .eq('project_id', projectId)
             .order('created_at'),
           admin
@@ -101,13 +101,22 @@ export function supabaseRoundDeps(
       const p = Object.fromEntries(
         Object.entries(planContent as Record<string, unknown>).filter(([k]) => k !== 'model'),
       ) as Plan;
+      const summaries = must(newest) ?? [];
+      // The commit the owner accepted for each round: merged only if the branch is still there (D-332).
+      const reviewed = new Map<number, string>();
+      for (const a of summaries) {
+        const c = a.content as { round?: unknown; commit?: unknown } | null;
+        if (a.status === 'approved' && typeof c?.commit === 'string' && Number.isInteger(c.round))
+          if (!reviewed.has(c.round as number)) reviewed.set(c.round as number, c.commit);
+      }
       const rows: RoundRow[] = (must(rounds) ?? []).map((r) => ({
         number: r.number,
         status: r.status,
         merged: r.merged_at !== null,
         branch: r.branch,
+        reviewed: reviewed.get(r.number) ?? null,
       }));
-      const top = must(newest)?.[0];
+      const top = summaries[0];
       const topRound = Number((top?.content as { round?: unknown } | null)?.round);
       const notes = (must(feedback) ?? [])
         .filter((f) => f.artifact_id === top?.id)
@@ -132,17 +141,20 @@ export function supabaseRoundDeps(
         feedback:
           notes.length &&
           Number.isInteger(topRound) &&
-          rows.some((r) => r.number === topRound && r.status === 'in_review')
+          // In review, or building again after a Feedback run that failed: the notes still apply.
+          rows.some(
+            (r) => r.number === topRound && (r.status === 'in_review' || r.status === 'building'),
+          )
             ? { round: topRound, notes }
             : null,
         ownerAnswers,
-        // P4-T01: open questions and blockers the owner has not triaged (answered, accepted or sent to the client).
+        // P4-T01: open questions the owner has not triaged (answered, accepted or sent to the client) and open blockers.
         open: items
           .filter(
             (b) =>
               b.status === 'open' &&
-              !b.ask_client &&
-              (b.kind === 'question' || b.kind === 'blocker'),
+              // A blocker holds its round until it is answered, even while the client is asked.
+              (b.kind === 'blocker' || (b.kind === 'question' && !b.ask_client)),
           )
           .map((b) => ({ round: b.round, kind: b.kind as 'question' | 'blocker' })),
         reader: {
