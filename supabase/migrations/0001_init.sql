@@ -1167,6 +1167,11 @@ begin
     raise exception 'reject_gate: round % is not in review', p_round;
   end if;
   update public.artifacts set status = 'rejected' where id = art.id;
+  -- D-332: a rejected round goes back to planned with no branch, so its next run starts again from staging (the
+  -- worker keeps the old branch under another name).
+  if v.stage = 'build_rounds' then
+    update public.rounds set status = 'planned', branch = null where project_id = p_project and number = p_round;
+  end if;
 end;
 $$;
 revoke all on function reject_gate(uuid, uuid, int) from public, anon, authenticated, service_role;
