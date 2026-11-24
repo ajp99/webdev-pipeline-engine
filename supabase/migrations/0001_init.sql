@@ -322,7 +322,7 @@ create table backlog_items (
   -- is the allowlist's refusal with its reason (P4-T02). options: what the agent considered.
   kind text not null default 'question' check (kind in ('question', 'assumption', 'blocker', 'refused_command')),
   options text,
-  run_id uuid references stage_runs (id) on delete set null,
+  run_id uuid, -- references stage_runs, added after that table below
   created_at timestamptz not null default now()
 );
 create index backlog_items_project_idx on backlog_items (project_id);
@@ -420,6 +420,8 @@ create table stage_runs (
   constraint prompt_hash_is_sha256 check (prompt_hash is null or prompt_hash ~ '^[0-9a-f]{64}$'),
   unique (id, trace_id)
 );
+alter table backlog_items
+  add constraint backlog_items_run_id_fkey foreign key (run_id) references stage_runs (id) on delete set null;
 create index stage_runs_project_idx on stage_runs (project_id);
 -- D-278: one running, waiting or cancel_requested run per project; a queued run does not hold the slot.
 create unique index stage_runs_one_active_per_project on stage_runs (project_id)
