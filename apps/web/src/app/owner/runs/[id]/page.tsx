@@ -51,10 +51,10 @@ export default async function RunDetail({
     r.status === 'waiting'
       ? await supabase
           .from('run_approvals')
-          .select('id, kind, command, created_at')
+          .select('id, kind, command, requested_at')
           .eq('run_id', id)
           .eq('status', 'pending')
-          .order('created_at')
+          .order('requested_at')
       : null;
   if (pauses?.error) throw new Error(pauses.error.message);
 

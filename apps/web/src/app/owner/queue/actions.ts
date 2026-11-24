@@ -36,8 +36,7 @@ export async function acceptGate(formData: FormData) {
   });
   if (accepted.error) throw new Error(accepted.error.message);
   // An accepted round is merged into staging by the worker's next run, which then starts the next round (D-332).
-  if (roundArg(formData).p_round)
-    await supabase.rpc('enqueue_run', { p_project: projectId, p_stage: 'build_rounds' });
+  if (roundArg(formData).p_round) await queueRound(supabase, projectId);
   revalidatePath('/owner', 'layout');
 }
 
@@ -78,13 +77,19 @@ export async function rejectGate(formData: FormData) {
   });
   if (rejected.error) throw new Error(rejected.error.message);
   // A rejected round goes back to planned (D-332): queue its run so it is built again from staging.
-  if (roundArg(formData).p_round)
-    await supabase.rpc('enqueue_run', { p_project: projectId, p_stage: 'build_rounds' });
+  if (roundArg(formData).p_round) await queueRound(supabase, projectId);
   revalidatePath('/owner', 'layout');
 }
 
 // The database refuses longer notes too (gate_feedback_body).
 const FEEDBACK_MAX = 10_000;
+
+/** Queues the next build-rounds run; one already queued or running is fine, anything else is shown. */
+async function queueRound(supabase: Awaited<ReturnType<typeof createClient>>, projectId: string) {
+  const q = await supabase.rpc('enqueue_run', { p_project: projectId, p_stage: 'build_rounds' });
+  if (q.error && !/already/.test(q.error.message))
+    throw new Error(`The round was recorded, but its run was not queued: ${q.error.message}`);
+}
 
 /** The round of a build-rounds gate form, passed to the gate functions (P4-T09); nothing for other stages. */
 function roundArg(formData: FormData): { p_round?: number } {

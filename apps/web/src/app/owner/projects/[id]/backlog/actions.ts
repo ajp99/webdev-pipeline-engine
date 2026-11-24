@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
+import type { Database } from '@wpe/shared';
 import { createClient } from '@/lib/supabase/server';
 
 const MAX = 4000;
@@ -29,8 +30,11 @@ export async function actOnBacklog(formData: FormData) {
   if (!item.data) return back(projectId, 'error', 'That item is not in this project.');
   if (text.length > MAX) return back(projectId, 'error', `Keep it under ${MAX} characters.`);
   const open = item.data.status === 'open';
-  let patch: Record<string, unknown>;
+  let patch: Database['public']['Tables']['backlog_items']['Update'];
   if (action === 'answer') {
+    // An item sent to the client takes the client's answer only, which goes to the Builder through the reader.
+    if (item.data.ask_client)
+      return back(projectId, 'error', "This item is with the client: enter the client's answer.");
     if (!text) return back(projectId, 'error', 'Write the answer first.');
     patch = { owner_answer: text, status: 'answered' };
   } else if (action === 'accept_assumption') {
@@ -78,7 +82,8 @@ export async function actOnBacklog(formData: FormData) {
       p_project: projectId,
       p_artifact: a.id,
       ...(Number.isInteger(round) ? { p_round: round } : {}),
-      p_body: `The client answered "${item.data.question.slice(0, 300)}": ${text}`,
+      // The client's words reach the Builder only through the reader stage (D-267, D-298), never in this note.
+      p_body: `The client answered the question "${item.data.question.slice(0, 300)}". Their answer is in the client fields; apply it to this round.`,
     });
     if (fb.error)
       return back(
@@ -88,5 +93,9 @@ export async function actOnBacklog(formData: FormData) {
       );
     return back(projectId, 'notice', 'Answer saved and sent to the round in review as Feedback.');
   }
+  // Triage can unblock the next round (P4-T01): queue a build-rounds run; one already queued or running is fine.
+  const q = await supabase.rpc('enqueue_run', { p_project: projectId, p_stage: 'build_rounds' });
+  if (q.error && !/already|not at|stage/.test(q.error.message))
+    return back(projectId, 'notice', `Saved; the next run was not queued: ${q.error.message}`);
   return back(projectId, 'notice', 'Saved.');
 }
