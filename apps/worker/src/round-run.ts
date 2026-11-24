@@ -30,6 +30,8 @@ export type RoundLoad = {
   rounds: RoundRow[];
   /** The owner's Feedback on a round in review that has not been answered by a new version yet. */
   feedback: { round: number; notes: string[] } | null;
+  /** The owner's answers to the Builder's backlog questions (owner text, not client text). */
+  ownerAnswers: string[];
   reader: ReaderInput;
   /** Skill bodies by id, from the library (D-260). */
   skills: Skill[];
@@ -55,7 +57,8 @@ export type RoundSummaryContent = {
   screenshots: { desktop: string; mobile: string };
   summary: string;
   skills: string[];
-  claims: number;
+  /** The <Claim> markers on the round's pages, for the owner to confirm (P4-T05, D-143). */
+  claims: { file: string; text: string }[];
   backlog: { questions: number; assumptions: number; refused: number };
   /** What the reader stage kept away from the Builder, for the owner (D-267). */
   reader_flags: string[];
@@ -91,7 +94,7 @@ export interface RoundDeps {
     round: number;
     entries: BacklogEntry[];
   }): Promise<void>;
-  claims(dir: string): Promise<number>;
+  claims(dir: string): Promise<{ file: string; text: string }[]>;
   commit(dir: string, io: RunIo, message: string): Promise<string>;
   diff(dir: string): Promise<{ files: RoundSummaryContent['files']; notes: string }>;
   startPreview(dir: string, io: RunIo): Promise<string>;
@@ -233,7 +236,10 @@ export function roundHandler(deps: RoundDeps): Handler {
       round,
       designBrief: input.plan.design_brief,
       client: builderView(reader.fields),
-      ownerNotes: next.why === 'feedback' ? (input.feedback?.notes ?? []) : [],
+      ownerNotes: [
+        ...(next.why === 'feedback' ? (input.feedback?.notes ?? []) : []),
+        ...input.ownerAnswers,
+      ],
       skills: skills.map((s) => ({ name: s.id, body: s.body })),
     });
 
@@ -312,7 +318,7 @@ export function roundHandler(deps: RoundDeps): Handler {
         screenshots: paths,
         summary: result.summary.slice(0, 4000),
         skills: skills.map((s) => s.id),
-        claims,
+        claims: claims.slice(0, 200),
         backlog: {
           questions: backlog.entries.filter((e) => e.kind === 'question').length,
           assumptions: backlog.entries.filter((e) => e.kind === 'assumption').length,

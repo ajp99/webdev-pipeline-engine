@@ -111,6 +111,9 @@ export type Database = {
           context: string | null;
           created_at: string;
           id: string;
+          kind: string;
+          options: string | null;
+          run_id: string | null;
           owner_answer: string | null;
           project_id: string;
           question: string;
@@ -126,6 +129,9 @@ export type Database = {
           context?: string | null;
           created_at?: string;
           id?: string;
+          kind?: string;
+          options?: string | null;
+          run_id?: string | null;
           owner_answer?: string | null;
           project_id: string;
           question: string;
@@ -140,6 +146,9 @@ export type Database = {
           context?: string | null;
           created_at?: string;
           id?: string;
+          kind?: string;
+          options?: string | null;
+          run_id?: string | null;
           owner_answer?: string | null;
           project_id?: string;
           question?: string;
@@ -717,6 +726,8 @@ export type Database = {
           claims: NonNullable<Json>;
           claims_cleared_at: string | null;
           id: string;
+          merge_commit: string | null;
+          merged_at: string | null;
           number: number;
           pr_number: number | null;
           pr_url: string | null;
@@ -732,6 +743,8 @@ export type Database = {
           claims?: NonNullable<Json>;
           claims_cleared_at?: string | null;
           id?: string;
+          merge_commit?: string | null;
+          merged_at?: string | null;
           number: number;
           pr_number?: number | null;
           pr_url?: string | null;
@@ -746,6 +759,8 @@ export type Database = {
           claims?: NonNullable<Json>;
           claims_cleared_at?: string | null;
           id?: string;
+          merge_commit?: string | null;
+          merged_at?: string | null;
           number?: number;
           pr_number?: number | null;
           pr_url?: string | null;
@@ -1171,6 +1186,14 @@ export type Database = {
           stage: Database['public']['Enums']['stage'];
           state: string;
         }[];
+      };
+      decide_run_approval: {
+        Args: { p_approval: string; p_approve: boolean };
+        Returns: Database['public']['Enums']['run_approval_status'];
+      };
+      request_run_approval: {
+        Args: { p_command: string; p_kind: string; p_run: string; p_worker: string };
+        Returns: string;
       };
       request_run_cancel: {
         Args: { p_run: string };

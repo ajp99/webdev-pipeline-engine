@@ -123,6 +123,7 @@ function deps(over: Partial<RoundLoad> = {}, backlog = '') {
     plan,
     rounds: [],
     feedback: null,
+    ownerAnswers: [],
     reader: {
       projectName: 'Brightside',
       intake: {},
@@ -154,7 +155,10 @@ function deps(over: Partial<RoundLoad> = {}, backlog = '') {
     checks: step('checks'),
     takeBacklog: async () => (order.push('takeBacklog'), backlog),
     logBacklog: async (a) => void order.push(`logBacklog ${a.entries.length}`),
-    claims: async () => (order.push('claims'), 2),
+    claims: async () => (
+      order.push('claims'),
+      [{ file: 'content/pages/home.mdx', text: 'Since 2009' }]
+    ),
     commit: async (_d, _io, m) => (order.push(`commit ${m}`), 'a'.repeat(40)),
     diff: async () => (
       order.push('diff'),
@@ -204,7 +208,7 @@ describe('roundHandler (P4-T01, P4-T04)', () => {
       round: 1,
       branch: 'round-1',
       base: 'staging',
-      claims: 2,
+      claims: [{ file: 'content/pages/home.mdx', text: 'Since 2009' }],
       reader_flags: fields.flags,
       feedback_version: false,
     });
