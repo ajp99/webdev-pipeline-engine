@@ -1102,7 +1102,7 @@ begin
   values (art.id, auth.uid(), gk, p_gate, nullif(btrim(p_note), ''));
 
   if v.stage = 'build_rounds' then
-    update public.rounds set status = 'approved' where project_id = p_project and number = p_round;
+    update public.rounds set status = 'approved', claims_cleared_at = now() where project_id = p_project and number = p_round;
     update public.artifacts set status = 'approved' where id = art.id;
     return case when private.advance_blocker(p_project) is null then 'ready_to_advance' else 'recorded' end;
   end if;
