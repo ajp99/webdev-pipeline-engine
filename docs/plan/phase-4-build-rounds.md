@@ -50,7 +50,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P4-T12 Phase 4 gate evidence**  
   Acceptance: Record in `PROGRESS.md`: two real rounds on the dental fixture with a throwaway repo, exercising a re-plan, Feedback loops, a risky-command pause and an ask-client answer; an automated round-loop test with model and GitHub calls stubbed; table-driven tests of the command allowlist (allowed, refused and paused commands, including attempts to reword a refused one); and a cost report in tokens.
 
-- [ ] **P4-T13 Reader stage**  
+- [x] **P4-T13 Reader stage**  
   Acceptance (D-267): a step with no tools turns the client's text, uploads and reference screenshots into schema-validated fields, and the Builder receives only those fields, never raw client content. Prompt-injection fixtures (P3-T10) show a hostile client message does not reach the Builder as an instruction.
 
 ## Gate
