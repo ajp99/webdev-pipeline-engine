@@ -1,6 +1,7 @@
 import type { Plan, PlanRound, ReaderFields } from '@wpe/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  claimsToCheck,
   nextRound,
   parseBacklog,
   roundHandler,
@@ -124,6 +125,7 @@ function deps(over: Partial<RoundLoad> = {}, backlog = '') {
     rounds: [],
     feedback: null,
     ownerAnswers: [],
+    open: [],
     reader: {
       projectName: 'Brightside',
       intake: {},
@@ -143,7 +145,7 @@ function deps(over: Partial<RoundLoad> = {}, backlog = '') {
     stopPreview: step('stopPreview'),
     merge: async (_d, n) => (order.push(`merge ${n}`), 'f'.repeat(40)),
     recordMerge: async (_p, n) => void order.push(`recordMerge ${n}`),
-    branch: async (_d, b) => void order.push(`branch ${b}`),
+    branch: async (_d, b, _io, fresh) => void order.push(`branch ${b}${fresh ? ' fresh' : ''}`),
     startRound: async (_p, r) => void order.push(`startRound ${r.number}`),
     session: async (a) => {
       order.push(`session ${a.model}`);
@@ -208,7 +210,16 @@ describe('roundHandler (P4-T01, P4-T04)', () => {
       round: 1,
       branch: 'round-1',
       base: 'staging',
-      claims: [{ file: 'content/pages/home.mdx', text: 'Since 2009' }],
+      claims: [
+        { file: 'content/pages/home.mdx', text: 'Since 2009' },
+        { file: 'content/pages/home.mdx', text: '500 happy patients' },
+      ],
+      claims_to_check: [
+        { file: 'content/pages/home.mdx', text: 'Since 2009' },
+        { file: 'content/pages/home.mdx', text: '500 happy patients' },
+      ],
+      unmarked_claims: [{ file: 'content/pages/about.mdx', text: 'Award-winning team' }],
+      packages: [{ name: 'clsx', from: null, to: '2.1.1', install_scripts: false }],
       reader_flags: fields.flags,
       feedback_version: false,
     });
@@ -265,5 +276,43 @@ describe('roundHandler (P4-T01, P4-T04)', () => {
     };
     await expect(roundHandler(d)(ctx())).rejects.toThrow('pnpm build failed');
     expect(order.some((s) => s.startsWith('commit'))).toBe(false);
+  });
+});
+
+describe('triage, Reject and the claim check (P4-T01, P4-T05, P4-T09)', () => {
+  it("the next round waits until the earlier rounds' questions and blockers are triaged", () => {
+    expect(
+      nextRound(plan, [row(1, 'approved')], null, [{ round: 1, kind: 'question' }]),
+    ).toBeNull();
+    expect(
+      nextRound(plan, [row(1, 'approved')], null, [{ round: null, kind: 'question' }])?.round
+        .number,
+    ).toBe(2);
+  });
+  it('a blocked round waits for its blocker, then is retried', () => {
+    expect(nextRound(plan, [row(1, 'building')], null, [{ round: 1, kind: 'blocker' }])).toBeNull();
+    expect(nextRound(plan, [row(1, 'building')], null, [{ round: 1, kind: 'question' }])?.why).toBe(
+      'retry',
+    );
+  });
+  it('a rejected round starts again from staging', async () => {
+    const { d, order } = deps({
+      rounds: [{ number: 1, status: 'planned', merged: false, branch: null }],
+    });
+    await roundHandler(d)(ctx());
+    expect(order).toContain('branch round-1 fresh');
+  });
+  it('lists marked claims whose numbers the client never gave', () => {
+    const f = { ...fields, claims: ['Family practice since 2009'] };
+    expect(
+      claimsToCheck(
+        [
+          { file: 'a', text: 'Since 2009' },
+          { file: 'a', text: '500 happy patients' },
+          { file: 'a', text: 'Friendly team' },
+        ],
+        f,
+      ).map((c) => c.text),
+    ).toEqual(['500 happy patients']);
   });
 });

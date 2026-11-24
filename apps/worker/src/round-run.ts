@@ -22,7 +22,27 @@ import type { Handler } from './runner';
 import type { Screens } from './prototype';
 
 export type RoundStatus = 'planned' | 'building' | 'in_review' | 'approved';
-export type RoundRow = { number: number; status: RoundStatus; merged: boolean };
+export type RoundRow = {
+  number: number;
+  status: RoundStatus;
+  merged: boolean;
+  /** Null for a round the owner rejected (or never started): its next run starts again from staging. */
+  branch?: string | null;
+};
+/** Backlog items the owner has not triaged yet (open, not ask-client): questions and blockers. */
+export type OpenItem = { round: number | null; kind: 'question' | 'blocker' };
+export type Claims = {
+  /** <Claim> markers on the round's pages. */
+  marked: { file: string; text: string }[];
+  /** Lines that read like a factual claim (numbers, awards, licences, guarantees, since, %) but carry no marker. */
+  unmarked: { file: string; text: string }[];
+};
+export type PackageChange = {
+  name: string;
+  from: string | null;
+  to: string | null;
+  install_scripts: boolean;
+};
 
 export type RoundLoad = {
   projectName: string;
@@ -32,6 +52,7 @@ export type RoundLoad = {
   feedback: { round: number; notes: string[] } | null;
   /** The owner's answers to the Builder's backlog questions (owner text, not client text). */
   ownerAnswers: string[];
+  open: OpenItem[];
   reader: ReaderInput;
   /** Skill bodies by id, from the library (D-260). */
   skills: Skill[];
@@ -59,6 +80,11 @@ export type RoundSummaryContent = {
   skills: string[];
   /** The <Claim> markers on the round's pages, for the owner to confirm (P4-T05, D-143). */
   claims: { file: string; text: string }[];
+  /** Markers whose numbers the client never gave (check them first), and claim-like lines with no marker. */
+  claims_to_check: { file: string; text: string }[];
+  unmarked_claims: { file: string; text: string }[];
+  /** Dependencies the round added or changed, with versions and install scripts (D-286). */
+  packages: PackageChange[];
   backlog: { questions: number; assumptions: number; refused: number };
   /** What the reader stage kept away from the Builder, for the owner (D-267). */
   reader_flags: string[];
@@ -74,7 +100,7 @@ export interface RoundDeps {
   merge(dir: string, round: number, io: RunIo): Promise<string>;
   recordMerge(projectId: string, round: number, commit: string): Promise<void>;
   /** Creates round-N from staging, or switches to it for a Feedback version or a retry. */
-  branch(dir: string, name: string, io: RunIo): Promise<void>;
+  branch(dir: string, name: string, io: RunIo, fresh: boolean): Promise<void>;
   startRound(projectId: string, round: PlanRound, branch: string): Promise<void>;
   session: RoundSession;
   refused(a: {
@@ -94,9 +120,11 @@ export interface RoundDeps {
     round: number;
     entries: BacklogEntry[];
   }): Promise<void>;
-  claims(dir: string): Promise<{ file: string; text: string }[]>;
+  claims(dir: string): Promise<Claims>;
   commit(dir: string, io: RunIo, message: string): Promise<string>;
-  diff(dir: string): Promise<{ files: RoundSummaryContent['files']; notes: string }>;
+  diff(
+    dir: string,
+  ): Promise<{ files: RoundSummaryContent['files']; notes: string; packages: PackageChange[] }>;
   startPreview(dir: string, io: RunIo): Promise<string>;
   screenshots(url: string, io: RunIo): Promise<Screens>;
   store(
@@ -137,6 +165,8 @@ export function nextRound(
     .filter((r) => r.status === 'building')
     .sort((a, b) => a.number - b.number)[0];
   if (building) {
+    // A blocked round waits until the owner has dealt with its blocker.
+    if (open.some((o) => o.kind === 'blocker' && o.round === building.number)) return null;
     const r = planned(building.number);
     return r ? { round: r, why: 'retry' } : null;
   }
@@ -214,7 +244,7 @@ export function roundHandler(deps: RoundDeps): Handler {
       r.merged = true;
     }
 
-    const next = nextRound(input.plan, input.rounds, input.feedback);
+    const next = nextRound(input.plan, input.rounds, input.feedback, input.open);
     if (!next) {
       log(
         'info',
@@ -224,7 +254,14 @@ export function roundHandler(deps: RoundDeps): Handler {
     }
     const { round } = next;
     const branch = `round-${round.number}`;
-    await deps.branch(dir, branch, io);
+    const row = input.rounds.find((r) => r.number === round.number);
+    // A rejected round (its row kept, branch cleared) starts again from staging; the old branch is kept renamed.
+    await deps.branch(
+      dir,
+      branch,
+      io,
+      next.why === 'next' && row !== undefined && row.branch === null,
+    );
     await deps.startRound(run.project_id, round, branch);
     log('info', `round ${round.number} (${next.why}): ${round.title}`);
 
@@ -318,7 +355,10 @@ export function roundHandler(deps: RoundDeps): Handler {
         screenshots: paths,
         summary: result.summary.slice(0, 4000),
         skills: skills.map((s) => s.id),
-        claims: claims.slice(0, 200),
+        claims: claims.marked.slice(0, 200),
+        claims_to_check: claimsToCheck(claims.marked, reader.fields).slice(0, 200),
+        unmarked_claims: claims.unmarked.slice(0, 200),
+        packages: diff.packages.slice(0, 100),
         backlog: {
           questions: backlog.entries.filter((e) => e.kind === 'question').length,
           assumptions: backlog.entries.filter((e) => e.kind === 'assumption').length,
@@ -332,4 +372,15 @@ export function roundHandler(deps: RoundDeps): Handler {
     progress();
     return { tokens: reader.tokens + result.tokens };
   };
+}
+
+/**
+ * The claim check before the owner (P4-T05, D-284): a marked claim whose numbers the client never gave is listed
+ * first, so the owner checks it against the intake. Numbers only; the language check runs in QC (P5-T01).
+ */
+export function claimsToCheck(marked: Claims['marked'], fields: ReaderFields): Claims['marked'] {
+  const given = JSON.stringify(fields);
+  return marked.filter((c) =>
+    (c.text.match(/\d[\d,.]*/g) ?? []).some((n) => !given.includes(n.replace(/[.,]$/, ''))),
+  );
 }

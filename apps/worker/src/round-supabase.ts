@@ -105,6 +105,7 @@ export function supabaseRoundDeps(
         number: r.number,
         status: r.status,
         merged: r.merged_at !== null,
+        branch: r.branch,
       }));
       const top = must(newest)?.[0];
       const topRound = Number((top?.content as { round?: unknown } | null)?.round);
@@ -135,6 +136,15 @@ export function supabaseRoundDeps(
             ? { round: topRound, notes }
             : null,
         ownerAnswers,
+        // P4-T01: open questions and blockers the owner has not triaged (answered, accepted or sent to the client).
+        open: items
+          .filter(
+            (b) =>
+              b.status === 'open' &&
+              !b.ask_client &&
+              (b.kind === 'question' || b.kind === 'blocker'),
+          )
+          .map((b) => ({ round: b.round, kind: b.kind as 'question' | 'blocker' })),
         reader: {
           projectName: project.name,
           intake: Object.fromEntries(
@@ -160,18 +170,16 @@ export function supabaseRoundDeps(
 
     async startRound(projectId, round, branch) {
       must(
-        await admin
-          .from('rounds')
-          .upsert(
-            {
-              project_id: projectId,
-              number: round.number,
-              scope: round.scope as unknown as Json,
-              branch,
-              status: 'building',
-            },
-            { onConflict: 'project_id,number' },
-          ),
+        await admin.from('rounds').upsert(
+          {
+            project_id: projectId,
+            number: round.number,
+            scope: round.scope as unknown as Json,
+            branch,
+            status: 'building',
+          },
+          { onConflict: 'project_id,number' },
+        ),
       );
     },
 

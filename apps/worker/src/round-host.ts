@@ -5,6 +5,7 @@ import { readdir, readFile, rm } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { ROUND_BACKLOG_FILE } from '@wpe/shared';
 import type { RunIo } from './builder';
+import type { Claims, PackageChange } from './round-run';
 import { run, workDirFor, workRoot } from './builder-host';
 
 /** Git with its output captured; throws with git's message on failure. */
@@ -73,11 +74,23 @@ export async function mergeRound(dir: string, round: number, io: RunIo): Promise
 }
 
 /** Switches to the round's branch, creating it from staging; an existing branch first takes in staging. */
-export async function roundBranch(dir: string, name: string, io: RunIo): Promise<void> {
-  const exists = await gitOut(dir, 'rev-parse', '--verify', '-q', name).then(
+export async function roundBranch(
+  dir: string,
+  name: string,
+  io: RunIo,
+  fresh = false,
+): Promise<void> {
+  let exists = await gitOut(dir, 'rev-parse', '--verify', '-q', name).then(
     () => true,
     () => false,
   );
+  if (exists && fresh) {
+    // A rejected round starts again from staging; its old branch is kept under another name, never deleted.
+    const kept = `${name}-rejected-${Date.now()}`;
+    await gitOut(dir, 'branch', '-m', name, kept);
+    io.log('info', `kept the rejected work as ${kept}`);
+    exists = false;
+  }
   if (!exists) {
     await gitOut(dir, 'checkout', '-q', '-b', name, 'staging');
     io.log('info', `created ${name} from staging`);
@@ -115,12 +128,54 @@ export async function roundDiff(
       return { path: p.join('\t'), added: Number(a) || 0, removed: Number(r) || 0 };
     });
   const notes = await gitOut(dir, 'diff', 'staging...HEAD', '--', '.pipeline/NOTES.md');
-  return { files, notes };
+  return { files, notes, packages: await packageChanges(dir) };
 }
 
-/** Every <Claim> marker in the site's content and components, with its file and text (P4-T05, D-143). */
-export async function listClaims(dir: string): Promise<{ file: string; text: string }[]> {
+const deps = (json: string): Record<string, string> => {
+  try {
+    const p = JSON.parse(json) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    return { ...p.devDependencies, ...p.dependencies };
+  } catch {
+    return {};
+  }
+};
+
+/** Dependencies added, changed or removed against staging, and whether each has install scripts (D-286). */
+export async function packageChanges(dir: string): Promise<PackageChange[]> {
+  const before = deps(await gitOut(dir, 'show', 'staging:package.json').catch(() => '{}'));
+  const after = deps(await readFile(join(dir, 'package.json'), 'utf8').catch(() => '{}'));
+  const out: PackageChange[] = [];
+  for (const name of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
+    if (before[name] === after[name]) continue;
+    const pkg = await readFile(join(dir, 'node_modules', name, 'package.json'), 'utf8').catch(
+      () => '{}',
+    );
+    const scripts = (JSON.parse(pkg) as { scripts?: Record<string, string> }).scripts ?? {};
+    out.push({
+      name,
+      from: before[name] ?? null,
+      to: after[name] ?? null,
+      install_scripts: ['preinstall', 'install', 'postinstall'].some((k) => k in scripts),
+    });
+  }
+  return out;
+}
+
+// Words that make a sentence a factual claim (P4-T05): numbers, awards, certifications, licences, guarantees,
+// "since" and percentages.
+const CLAIM_WORDS =
+  /\d|\b(award|certified|certification|licen[cs]ed|guarantee[ds]?|accredited|since)\b|%/i;
+
+/**
+ * Every <Claim> marker in the site's content and components, with its file and text (P4-T05, D-143), and the
+ * lines of page copy that read like a claim but carry no marker.
+ */
+export async function listClaims(dir: string): Promise<Claims> {
   const out: { file: string; text: string }[] = [];
+  const unmarked: { file: string; text: string }[] = [];
   const walk = async (d: string): Promise<void> => {
     for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
       const p = join(d, e.name);
@@ -137,7 +192,7 @@ export async function listClaims(dir: string): Promise<{ file: string; text: str
     }
   };
   for (const top of ['content', 'components', 'app']) await walk(join(dir, top));
-  return out;
+  return { marked: out, unmarked: unmarked.slice(0, 200) };
 }
 
 /** The checks a round must pass before review (P4-T02): the starter's build, typecheck and content schema. */
