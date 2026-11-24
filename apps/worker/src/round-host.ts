@@ -32,12 +32,27 @@ export async function prepareRoundRepo(
       `there is no site repository with a staging branch in ${dir}: the prototype stage makes it`,
     );
   }
+  // A merge that stopped on a conflict is abandoned, never completed with conflict markers in it.
+  if (
+    await gitOut(dir, 'rev-parse', '-q', '--verify', 'MERGE_HEAD').then(
+      () => true,
+      () => false,
+    )
+  ) {
+    await gitOut(dir, 'merge', '--abort');
+    io.log('warn', 'abandoned a merge a stopped run left half done');
+  }
   const dirty = (await gitOut(dir, 'status', '--porcelain')).trim();
   if (dirty) {
-    // A run that stopped half-way left changes: they are kept as a commit on the branch they were made on.
+    // A run that stopped half-way left changes: they are kept as a commit, but only on a round branch.
+    const on = await currentBranch(dir);
+    if (!/^round-\d+$/.test(on))
+      throw new Error(
+        `the site repository has uncommitted changes on ${on}: look at them before the next run`,
+      );
     await gitOut(dir, 'add', '-A');
     await gitOut(dir, 'commit', '-q', '-m', 'Work left by a stopped run');
-    io.log('warn', 'kept the changes a stopped run left, as a commit');
+    io.log('warn', `kept the changes a stopped run left, as a commit on ${on}`);
   }
   await gitOut(dir, 'checkout', '-q', 'staging');
   try {
@@ -53,9 +68,53 @@ export async function prepareRoundRepo(
   return dir;
 }
 
-/** Merges round-N into staging with a merge commit and returns its id; a round already in staging is not merged again. */
-export async function mergeRound(dir: string, round: number, io: RunIo): Promise<string> {
+/** The branch the repository is on. */
+export async function currentBranch(dir: string): Promise<string> {
+  return (await gitOut(dir, 'rev-parse', '--abbrev-ref', 'HEAD')).trim();
+}
+
+/** Stops the run when the Builder's session ended on another branch than the round's (nothing is committed). */
+export async function assertBranch(dir: string, name: string): Promise<void> {
+  const on = await currentBranch(dir);
+  if (on !== name)
+    throw new Error(
+      `the Builder ended on ${on}, not ${name}: nothing was committed; look at the repository`,
+    );
+}
+
+/** Runs a merge; on a conflict the merge is abandoned and the run stops, so no conflict markers are committed. */
+async function mergeOrAbort(dir: string, ...args: string[]): Promise<void> {
+  try {
+    await gitOut(dir, 'merge', ...args);
+  } catch (e) {
+    await gitOut(dir, 'merge', '--abort').catch(() => undefined);
+    throw new Error(
+      `the merge stopped on a conflict and was abandoned: ${e instanceof Error ? e.message : e}`,
+      {
+        cause: e,
+      },
+    );
+  }
+}
+
+/**
+ * Merges round-N into staging with a merge commit and returns its id; a round already in staging is not merged
+ * again. The branch must still be at the commit the owner reviewed and accepted.
+ */
+export async function mergeRound(
+  dir: string,
+  round: number,
+  io: RunIo,
+  reviewed: string | null,
+): Promise<string> {
   const branch = `round-${round}`;
+  if (reviewed) {
+    const tip = (await gitOut(dir, 'rev-parse', branch).catch(() => '')).trim();
+    if (tip && tip !== reviewed)
+      throw new Error(
+        `${branch} is at ${tip.slice(0, 8)}, not the reviewed ${reviewed.slice(0, 8)}: it is not merged`,
+      );
+  }
   await gitOut(dir, 'checkout', '-q', 'staging');
   try {
     await gitOut(dir, 'merge-base', '--is-ancestor', branch, 'staging');
@@ -66,9 +125,9 @@ export async function mergeRound(dir: string, round: number, io: RunIo): Promise
     return merges.split('\n')[0] || (await head(dir));
   } catch (e) {
     if (e instanceof Error && /unknown revision|not a valid/.test(e.message))
-      throw new Error(`there is no branch ${branch}`);
+      throw new Error(`there is no branch ${branch}`, { cause: e });
   }
-  await gitOut(dir, 'merge', '--no-ff', '-q', '-m', `Merge ${branch}`, branch);
+  await mergeOrAbort(dir, '--no-ff', '-q', '-m', `Merge ${branch}`, branch);
   io.log('info', `merged ${branch} into staging`);
   return head(dir);
 }
@@ -97,7 +156,7 @@ export async function roundBranch(
     return;
   }
   await gitOut(dir, 'checkout', '-q', name);
-  await gitOut(dir, 'merge', '-q', '--no-edit', 'staging');
+  await mergeOrAbort(dir, '-q', '--no-edit', 'staging');
 }
 
 /** Commits everything on the current branch and returns the commit id. */
@@ -116,9 +175,11 @@ export async function takeBacklog(dir: string): Promise<string> {
 }
 
 /** What the round changed against staging: files with line counts, and the NOTES.md diff (D-267). */
-export async function roundDiff(
-  dir: string,
-): Promise<{ files: { path: string; added: number; removed: number }[]; notes: string }> {
+export async function roundDiff(dir: string): Promise<{
+  files: { path: string; added: number; removed: number }[];
+  notes: string;
+  packages: PackageChange[];
+}> {
   const stat = await gitOut(dir, 'diff', '--numstat', 'staging...HEAD');
   const files = stat
     .split('\n')
@@ -188,6 +249,18 @@ export async function listClaims(dir: string): Promise<Claims> {
             file: relative(dir, p),
             text: m[1]!.replace(/\s+/g, ' ').trim().slice(0, 500),
           });
+        if (e.name.endsWith('.mdx')) {
+          // Page copy only: front matter, imports, markup lines and marked claims are skipped.
+          const body = text
+            .replace(/^---[\s\S]*?---/, '')
+            .replace(/<Claim(?:\s[^>]*)?>[\s\S]*?<\/Claim>/g, '');
+          for (const line of body.split('\n')) {
+            const l = line.trim();
+            if (!l || /^(import|export|<|\{|```)/.test(l)) continue;
+            if (CLAIM_WORDS.test(l))
+              unmarked.push({ file: relative(dir, p), text: l.slice(0, 300) });
+          }
+        }
       }
     }
   };
