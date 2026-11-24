@@ -27,22 +27,22 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 - [ ] **P4-T04 Round pull request and backlog logging**  
   Acceptance: Each round works on a `round-N` branch. Before the pull request opens, the build, lint, typecheck and content schema checks must pass. The PR goes into `staging`; Vercel attaches a preview (owner only); `rounds` records the branch, PR number and URL. The Builder logs every question and assumption with context, options considered and what it assumed; only a true blocker stops the round and is flagged to the owner.
 
-- [ ] **P4-T05 Claim markers**  
+- [x] **P4-T05 Claim markers**  
   Acceptance: A claim scan (numbers, award, certified, licensed, guarantee, since, %) runs over agent-written copy and an LLM verifier checks each hit against the PRD and intake (D-284). The Builder wraps every factual claim in a `<Claim>` marker. The round summary lists them in `rounds.claims`; approving the round records `claims_cleared_at`. A QC check fails if a marker belongs to a claim that was not cleared. A script strips all cleared markers at deploy prep (task P5-T04).
 
-- [ ] **P4-T06 Round summary**  
+- [x] **P4-T06 Round summary**  
   Acceptance: At round end the Builder posts what was built, what was assumed, open questions, dependencies added that the plan did not name, and the round's claims, and the lockfile diff: packages added or changed, their versions and which have install scripts (D-286).
 
-- [ ] **P4-T07 Owner backlog view**  
+- [x] **P4-T07 Owner backlog view**  
   Acceptance: The owner can answer questions, mark them ask-client, or accept the agent's assumption. For each ask-client answer the owner chooses `next_round` or `immediate_fix` (an immediate fix run on the open pull request). Assumptions stay visible until confirmed or corrected.
 
-- [ ] **P4-T08 Client ask-client answers (owner-entered, D-298)**  
+- [x] **P4-T08 Client ask-client answers (owner-entered, D-298)**  
   Acceptance: The owner marks backlog items ask-client, relays them to the client outside the pipeline, and enters the client's answer with a note. The client sees nothing in the pipeline: the client dashboard that shows only ask-client items with an answer box is a go-live item (G15).
 
-- [ ] **P4-T09 Round gate**  
+- [x] **P4-T09 Round gate**  
   Acceptance: Accept merges the round's pull request into `staging` with a merge commit (keeping every commit) and clears the round's claims. Accept happens only in the console; merging the pull request in GitHub does not count as Accept (D-279). The owner reviews the diff of `.pipeline/NOTES.md` at the gate (D-267). Feedback posts the owner's notes on the pull request and the agent pushes a new version, at most 3 times per round (`feedback_count`). Reject closes the pull request.
 
-- [ ] **P4-T10 Token tracking**  
+- [x] **P4-T10 Token tracking**  
   Acceptance: `stage_runs` records tokens used. The console shows a progress bar of token use against the plan's token budget. No dollar amounts and no warnings.
 
 - [-] **P4-T11 GitHub webhook (dropped)**  
