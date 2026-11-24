@@ -1914,7 +1914,7 @@ begin
   if run.status <> 'running' or run.stage is distinct from proj.stage then
     raise exception 'complete_stage_artifact: the run must be running in the project''s current stage';
   end if;
-  if p_type not in ('prd', 'plan', 'prototype') or private.artifact_stage(p_type) is distinct from proj.stage then
+  if p_type not in ('prd', 'plan', 'prototype', 'round_summary') or private.artifact_stage(p_type) is distinct from proj.stage then
     raise exception 'complete_stage_artifact: a % artifact cannot be written in the % stage', p_type, proj.stage;
   end if;
   if p_content is null or jsonb_typeof(p_content) <> 'object' or p_content = '{}'::jsonb then
@@ -1958,10 +1958,24 @@ begin
     raise exception 'complete_stage_artifact: only a PRD has notes';
   end if;
 
+  -- A round summary belongs to one build round (P4-T01, D-332): its content names the round, which must be
+  -- building or in review; Feedback versions stay on the same round, and an approved round takes no new version.
+  if p_type = 'round_summary' then
+    if jsonb_typeof(p_content->'round') is distinct from 'number' or (p_content->>'round')::numeric <> floor((p_content->>'round')::numeric)
+       or not exists (select 1 from public.rounds r where r.project_id = p_project and r.number = (p_content->>'round')::int
+                        and r.status in ('building', 'in_review')) then
+      raise exception 'complete_stage_artifact: a round summary needs the number of a round that is building or in review';
+    end if;
+    if jsonb_typeof(coalesce(p_content->'claims', '[]'::jsonb)) <> 'array' then
+      raise exception 'complete_stage_artifact: a round summary''s claims must be a list';
+    end if;
+  end if;
   if exists (
     select 1 from public.artifacts a
      where a.project_id = p_project and a.type = p_type and a.status = 'approved'
-       and a.version = (select max(b.version) from public.artifacts b where b.project_id = p_project and b.type = p_type)
+       and (p_type <> 'round_summary' or a.content->'round' = p_content->'round')
+       and a.version = (select max(b.version) from public.artifacts b where b.project_id = p_project and b.type = p_type
+                          and (p_type <> 'round_summary' or b.content->'round' = p_content->'round'))
   ) then
     raise exception 'complete_stage_artifact: the newest % is already approved; a new version needs Feedback or a change request', p_type;
   end if;
@@ -1975,6 +1989,12 @@ begin
   )
   returning id into art;
   update public.stage_runs set model = p_model, prompt_hash = p_prompt_hash where id = p_run;
+  if p_type = 'round_summary' then
+    -- The round goes to review with the claims its pages carry (D-143); approving the round clears them.
+    update public.rounds
+       set status = 'in_review', claims = coalesce(p_content->'claims', '[]'::jsonb), claims_cleared_at = null
+     where project_id = p_project and number = (p_content->>'round')::int;
+  end if;
   if p_type = 'prd' then
     update public.artifacts set status = 'superseded'
      where project_id = p_project and type = 'prd_notes' and status = 'draft';
