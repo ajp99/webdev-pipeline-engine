@@ -17,13 +17,11 @@ export function waitedLabel(hours: number): string {
 }
 
 export function QueueItemCard({ item }: { item: QueueItem }) {
-  const canAccept = item.actionable && item.round === null;
-  const reason =
-    item.round !== null
-      ? 'Round review arrives in phase 4'
-      : !item.actionable
-        ? 'Waiting for the agent'
-        : undefined;
+  // P4-T09: a round is accepted, rejected or sent back with Feedback here; the worker merges it after Accept.
+  const canAccept = item.actionable;
+  const reason = !item.actionable ? 'Waiting for the agent' : undefined;
+  const roundField =
+    item.round !== null ? <input type="hidden" name="round" value={item.round} /> : null;
   return (
     <li className="rounded border border-neutral-200 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -49,6 +47,7 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
           <input type="hidden" name="projectId" value={item.projectId} />
           <input type="hidden" name="artifactId" value={item.artifactId ?? ''} />
           <input type="hidden" name="gateType" value={item.gateType} />
+          {roundField}
           {item.needsNote ? (
             <div className="flex w-full flex-col gap-1">
               <label htmlFor={`note-${item.key}`} className="text-sm text-neutral-600">
@@ -77,6 +76,7 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
         <form action={rejectGate}>
           <input type="hidden" name="projectId" value={item.projectId} />
           <input type="hidden" name="artifactId" value={item.artifactId ?? ''} />
+          {roundField}
           <button
             type="submit"
             disabled={!item.canReject}
@@ -95,7 +95,7 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
         ) : null}
         {reason ? <span className="text-sm text-neutral-500">{reason}</span> : null}
       </div>
-      {item.round === null && item.feedbackCap > 0 ? (
+      {item.feedbackCap > 0 ? (
         <div className="mt-3 text-sm">
           {item.canFeedback ? (
             <details>
@@ -105,6 +105,7 @@ export function QueueItemCard({ item }: { item: QueueItem }) {
               <form action={sendFeedback} className="mt-2 flex flex-col gap-2">
                 <input type="hidden" name="projectId" value={item.projectId} />
                 <input type="hidden" name="artifactId" value={item.artifactId ?? ''} />
+                {roundField}
                 <label htmlFor={`fb-${item.key}`} className="text-neutral-600">
                   Notes for the agent
                 </label>

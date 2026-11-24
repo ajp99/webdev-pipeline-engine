@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { skillsUsed } from '@/lib/plan-edit';
-import { artifactSections, prototypeView } from '@/lib/stage-run';
+import { artifactSections, prototypeView, roundView } from '@/lib/stage-run';
 import { actOnNote, recordPrototypeNote, saveSkillMarks } from './actions';
 import { createClient } from '@/lib/supabase/server';
 
@@ -53,10 +53,13 @@ export default async function ArtifactPage({
   // P3-T04: the prototype's desktop and mobile screenshots (private, short-lived links).
   let screens: { label: string; url: string }[] = [];
   const proto = a.type === 'prototype' ? prototypeView(a.content) : null;
-  if (proto) {
+  // P4-T06: a round summary.
+  const round = a.type === 'round_summary' ? roundView(a.content) : null;
+  const shotsOf = proto?.screenshots ?? round?.screenshots;
+  if (shotsOf) {
     const signed = await supabase.storage
       .from('intake-uploads')
-      .createSignedUrls([proto.screenshots.desktop, proto.screenshots.mobile], 600);
+      .createSignedUrls([shotsOf.desktop, shotsOf.mobile], 600);
     if (signed.error) throw new Error(signed.error.message);
     screens = (signed.data ?? []).flatMap((x, i) =>
       x.signedUrl ? [{ label: i === 0 ? 'Desktop' : 'Mobile', url: x.signedUrl }] : [],
@@ -146,6 +149,7 @@ export default async function ArtifactPage({
           </div>
         </section>
       ) : null}
+      {round ? <RoundSummary v={round} projectId={id} /> : null}
       {a.type === 'prototype' ? (
         <section className="mt-8 rounded border p-4">
           <h2 className="font-medium">The client&apos;s reply on this version</h2>
@@ -257,5 +261,114 @@ export default async function ArtifactPage({
         </section>
       ) : null}
     </main>
+  );
+}
+
+function Lines({
+  title,
+  items,
+  note,
+}: {
+  title: string;
+  items: { file: string; text: string }[];
+  note: string;
+}) {
+  if (!items.length) return null;
+  return (
+    <section className="mt-4">
+      <h3 className="text-sm font-medium">
+        {title} ({items.length})
+      </h3>
+      <p className="text-xs text-neutral-500">{note}</p>
+      <ul className="mt-1 list-disc pl-5 text-sm">
+        {items.map((c, i) => (
+          <li key={i}>
+            {c.text} <span className="text-xs text-neutral-500">({c.file})</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** The round summary (P4-T06); Accept, Feedback and Reject are on the round's gate card in the queue (P4-T09). */
+function RoundSummary({
+  v,
+  projectId,
+}: {
+  v: NonNullable<ReturnType<typeof roundView>>;
+  projectId: string;
+}) {
+  return (
+    <section className="mt-8 rounded border p-4">
+      <h2 className="font-medium">
+        Round {v.round}: {v.title} {v.feedbackVersion ? '(Feedback version)' : ''}
+      </h2>
+      <p className="mt-1 text-sm text-neutral-600">
+        Branch <code>{v.branch}</code> at <code>{v.commit.slice(0, 8)}</code>, compared with
+        staging. Questions {v.backlog.questions}, assumptions {v.backlog.assumptions}, refused
+        commands {v.backlog.refused}:{' '}
+        <a className="underline" href={`/owner/projects/${projectId}/backlog`}>
+          backlog
+        </a>
+        .
+      </p>
+      <p className="mt-3 whitespace-pre-wrap text-sm">{v.summary}</p>
+      <Lines
+        title="Claims to check first"
+        items={v.claimsToCheck}
+        note="Numbers the client never gave."
+      />
+      <Lines
+        title="Claims on the pages"
+        items={v.claims}
+        note="Accepting the round confirms them (D-143)."
+      />
+      <Lines
+        title="Claim-like lines with no marker"
+        items={v.unmarkedClaims}
+        note="Ask for a Feedback version if any of these needs a marker or a change."
+      />
+      {v.packages.length ? (
+        <section className="mt-4">
+          <h3 className="text-sm font-medium">Dependencies changed ({v.packages.length})</h3>
+          <ul className="list-disc pl-5 text-sm">
+            {v.packages.map((p) => (
+              <li key={p.name}>
+                {p.name}: {p.from ?? 'new'} to {p.to ?? 'removed'}
+                {p.install_scripts ? ' (has install scripts)' : ''}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {v.readerFlags.length ? (
+        <Lines
+          title="Kept away from the Builder"
+          items={v.readerFlags.map((t) => ({ file: 'reader', text: t }))}
+          note="Client text that read like instructions (D-267)."
+        />
+      ) : null}
+      <details className="mt-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          Files changed ({v.files.length})
+        </summary>
+        <ul className="mt-1 font-mono text-xs">
+          {v.files.map((f) => (
+            <li key={f.path}>
+              +{f.added} -{f.removed} {f.path}
+            </li>
+          ))}
+        </ul>
+      </details>
+      <details className="mt-2" open={Boolean(v.notesDiff)}>
+        <summary className="cursor-pointer text-sm font-medium">
+          .pipeline/NOTES.md changes (D-267)
+        </summary>
+        <pre className="mt-1 overflow-x-auto rounded bg-neutral-50 p-2 text-xs">
+          {v.notesDiff || 'No change.'}
+        </pre>
+      </details>
+    </section>
   );
 }

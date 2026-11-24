@@ -64,3 +64,21 @@ export async function endRun(formData: FormData) {
     : `notice=${encodeURIComponent('Run ended. It stays in the list as history.')}`;
   redirect(`/owner/runs/${runId}?${msg}`);
 }
+
+/**
+ * The owner's answer to a pause request (P4-T03): the Builder waits on a risky command (deleting a directory or
+ * many files, rewriting git history) until this. The database refuses a request already answered or a run that
+ * is no longer waiting.
+ */
+export async function decidePause(formData: FormData) {
+  await requireRole('owner', '/owner/runs');
+  const approvalId = String(formData.get('approvalId') ?? '');
+  const approve = String(formData.get('decision') ?? '') === 'approve';
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('decide_run_approval', {
+    p_approval: approvalId,
+    p_approve: approve,
+  });
+  if (error && !/already|no longer waiting/.test(error.message)) throw new Error(error.message);
+  revalidatePath('/owner', 'layout');
+}

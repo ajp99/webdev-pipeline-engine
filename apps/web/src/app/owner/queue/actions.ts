@@ -32,8 +32,12 @@ export async function acceptGate(formData: FormData) {
     p_gate: gateType,
     p_artifact: artifactId,
     ...(note ? { p_note: note } : {}),
+    ...roundArg(formData),
   });
   if (accepted.error) throw new Error(accepted.error.message);
+  // An accepted round is merged into staging by the worker's next run, which then starts the next round (D-332).
+  if (roundArg(formData).p_round)
+    await supabase.rpc('enqueue_run', { p_project: projectId, p_stage: 'build_rounds' });
   revalidatePath('/owner', 'layout');
 }
 
@@ -70,13 +74,23 @@ export async function rejectGate(formData: FormData) {
   const rejected = await supabase.rpc('reject_gate', {
     p_project: projectId,
     p_artifact: artifactId,
+    ...roundArg(formData),
   });
   if (rejected.error) throw new Error(rejected.error.message);
+  // A rejected round goes back to planned (D-332): queue its run so it is built again from staging.
+  if (roundArg(formData).p_round)
+    await supabase.rpc('enqueue_run', { p_project: projectId, p_stage: 'build_rounds' });
   revalidatePath('/owner', 'layout');
 }
 
 // The database refuses longer notes too (gate_feedback_body).
 const FEEDBACK_MAX = 10_000;
+
+/** The round of a build-rounds gate form, passed to the gate functions (P4-T09); nothing for other stages. */
+function roundArg(formData: FormData): { p_round?: number } {
+  const n = Number(formData.get('round'));
+  return Number.isInteger(n) && n > 0 ? { p_round: n } : {};
+}
 
 /**
  * Feedback: sends the owner's notes to the stage's agent. The database keeps the version as it is, counts the
@@ -95,6 +109,7 @@ export async function sendFeedback(formData: FormData) {
     p_project: projectId,
     p_artifact: artifactId,
     p_body: body,
+    ...roundArg(formData),
   });
   if (sent.error) throw new Error(sent.error.message);
   revalidatePath('/owner', 'layout');

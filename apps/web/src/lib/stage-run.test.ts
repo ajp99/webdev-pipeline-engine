@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { artifactSections, previewUrl, prototypeView, runBlocked } from './stage-run';
+import {
+  artifactSections,
+  previewUrl,
+  prototypeView,
+  roundView,
+  runBlocked,
+  tokenShare,
+} from './stage-run';
 
 describe('runBlocked', () => {
   it('offers Run on a skeleton stage of an active project with no open run', () => {
@@ -148,5 +155,43 @@ describe('artifactSections', () => {
     expect(artifactSections({ sections: [] })).toBeNull();
     expect(artifactSections({ sections: [{ title: 'A' }] })).toBeNull();
     expect(artifactSections({ sections: ['x'] })).toBeNull();
+  });
+});
+
+describe('roundView and tokenShare (P4-T06, P4-T10)', () => {
+  const ok = {
+    round: 2,
+    title: 'Services',
+    branch: 'round-2',
+    commit: 'a'.repeat(40),
+    summary: 'Built services',
+    files: [{ path: 'app/page.tsx', added: 3, removed: 1 }, { nope: 1 }],
+    notes_diff: '+ x',
+    screenshots: { desktop: 'p/d.jpg', mobile: 'p/m.jpg' },
+    claims: [{ file: 'a.mdx', text: 'Since 2009' }],
+    claims_to_check: [],
+    unmarked_claims: [{ file: 'b.mdx', text: '20 years' }],
+    packages: [{ name: 'clsx', from: null, to: '2.1.1', install_scripts: false }],
+    backlog: { questions: 1, assumptions: 2, refused: 0 },
+    reader_flags: ['Dropped x'],
+    feedback_version: true,
+  };
+  it('reads a round summary and drops malformed parts', () => {
+    const v = roundView(ok)!;
+    expect(v.round).toBe(2);
+    expect(v.files).toEqual([{ path: 'app/page.tsx', added: 3, removed: 1 }]);
+    expect(v.unmarkedClaims).toHaveLength(1);
+    expect(v.backlog.assumptions).toBe(2);
+    expect(v.feedbackVersion).toBe(true);
+  });
+  it('is null for anything that is not a round summary', () => {
+    expect(roundView({ ...ok, round: '2' })).toBeNull();
+    expect(roundView({ ...ok, screenshots: {} })).toBeNull();
+    expect(roundView(null)).toBeNull();
+  });
+  it('shares tokens against the budget, capped at 1', () => {
+    expect(tokenShare(50, 200)).toBe(0.25);
+    expect(tokenShare(500, 200)).toBe(1);
+    expect(tokenShare(5, 0)).toBe(0);
   });
 });
