@@ -2,6 +2,8 @@
 
 > **Dev-only scope (D-301):** parked runs, Pause and Resume are go-live items (G16); until then a run waiting for the owner keeps its slot.
 
+> **Dev-only scope (D-332, D-333; proposal 2026-11-20-phase-4-local-rounds):** until go-live each round is a local `round-N` branch in the project's git repository, with no pull request, GitHub token or Vercel preview (G33). The owner reviews the round summary, the diff against `staging`, the `.pipeline/NOTES.md` diff, screenshots and the local preview in the console; Accept is recorded in the console and the worker then merges the branch into `staging` with a merge commit. Feedback goes to the Builder directly instead of onto a pull request, and Reject leaves the branch unmerged. The Builder runs on the owner's Claude Code login.
+
 > Originally taken from a Claude Doc (2026-10-05) that has since been retired. The repo is the source of truth; this file reflects the owner-approved decisions recorded in `DECISIONS.md`. Agents change files in `docs/spec/` only after the owner approves a proposal in `docs/proposals/` (see `AGENTS.md`).
 
 The Planner sets the number of rounds from the page count and features in the locked PRD, using a rule of thumb: 5 pages or fewer and no blog is 2 rounds, otherwise 4. The owner can override it and approves the plan.
