@@ -15,6 +15,7 @@ Rules: work only on this phase's tasks; tick each box when its acceptance criter
 ## Tasks
 
 - [ ] **P4-T01 Round scope, re-plan and gating**  
+  Until go-live (D-335): the re-plan and its plan approval are go-live item G35; the approved plan stays fixed.  
   Acceptance: Rounds are created from the approved plan. A round cannot start until the previous round is approved, its backlog is triaged, and the updated plan is approved. After each approved round the Planner re-plans the remaining rounds using the owner's answers, and the owner approves the new plan version.
 
 - [ ] **P4-T02 Builder worker (container moved to go-live, D-310, G19)**  

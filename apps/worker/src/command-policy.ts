@@ -102,6 +102,7 @@ const PNPM_SCRIPTS = new Set([
   'format',
   'format:check',
 ]);
+// The Builder never changes branch or merges: the worker puts it on round-N and merges staging into it itself.
 const GIT_READ = new Set([
   'status',
   'diff',
@@ -112,9 +113,6 @@ const GIT_READ = new Set([
   'add',
   'restore',
   'stash',
-  'merge',
-  'switch',
-  'checkout',
   'mv',
 ]);
 const GIT_REWRITE = new Set([

@@ -4,16 +4,7 @@ import { hostname } from 'node:os';
 import { resolve } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@wpe/shared';
-import { agentDeps } from './builder-agent';
-import { builderHandler } from './builder';
-import {
-  checkBuild,
-  prepareWorkdir,
-  run,
-  startPreview,
-  stopAllPreviews,
-  stopPreview,
-} from './builder-host';
+import { run, startPreview, stopAllPreviews, stopPreview } from './builder-host';
 import { defaultSelector } from './handlers';
 import { intakeReviewHandler, unconfiguredReviewHandler } from './intake-review';
 import { supabaseReviewDeps } from './intake-review-supabase';
@@ -37,6 +28,21 @@ import { supabaseRunnerDeps } from './runner-supabase';
 import { stubStageHandler } from './stage-stubs';
 import { supabaseStubDeps } from './stage-stubs-supabase';
 import { evalRecordWarning } from './eval-planner';
+import { runReader } from './reader';
+import { ownerApproval, roundBuilderSession } from './round-builder';
+import {
+  assertBranch,
+  commitRound,
+  listClaims,
+  mergeRound,
+  prepareRoundRepo,
+  roundBranch,
+  roundChecks,
+  roundDiff,
+  takeBacklog,
+} from './round-host';
+import { roundHandler, type RoundDeps } from './round-run';
+import { supabaseRoundDeps } from './round-supabase';
 
 function need(name: string): string {
   const v = process.env[name];
@@ -64,8 +70,13 @@ const worker = `${hostname()}-${process.pid}`;
 let review;
 let requirements;
 let planner;
+// The reader stage of a build round (P4-T13) uses the same model; without one a round run fails with the reason.
+let readClient: RoundDeps['read'] = async () => {
+  throw new Error('the reader stage needs a model (MODEL_PROVIDER in .env)');
+};
 try {
   const model = modelFromEnv(process.env);
+  readClient = (input, io) => runReader(model, input, io);
   review = intakeReviewHandler(supabaseReviewDeps(admin), model);
   requirements = requirementsHandler(supabaseRequirementsDeps(admin), model);
   planner = plannerHandler(
@@ -125,13 +136,28 @@ const skeleton = {
   planner,
   prototype,
   stubs: stubStageHandler(stubDeps),
-  builder: builderHandler({
-    loadApproved: stubDeps.loadApproved,
-    prepare: prepareWorkdir,
+  // Build rounds (P4-T01 to P4-T04, D-332, D-333): local round-N branches, the Builder on your Claude Code
+  // login with the command allowlist and pauses, the reader stage in front of it.
+  builder: roundHandler({
+    ...supabaseRoundDeps(admin, () => ({
+      skills: scanSkills(skillsRoot),
+      library: () => supabaseRegistryDeps(admin).listLibrary(),
+    })),
+    read: (input, io) => readClient(input, io),
+    prepare: (projectId, io) => prepareRoundRepo(projectId, io),
     stopPreview,
-    check: checkBuild,
+    merge: mergeRound,
+    onBranch: assertBranch,
+    branch: roundBranch,
+    session: roundBuilderSession,
+    askOwner: (runId, signal) => ownerApproval(admin as never, runId, worker, signal),
+    checks: roundChecks,
+    takeBacklog,
+    claims: listClaims,
+    commit: commitRound,
+    diff: roundDiff,
     startPreview: (dir, io) => startPreview(dir, io),
-    ...agentDeps(process.env),
+    screenshots: (url) => previewScreenshots(url),
   }),
 };
 // The skills library (P3-T01): skills_registry follows skills/ at start and before every run.

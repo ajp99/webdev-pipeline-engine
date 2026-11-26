@@ -1,6 +1,7 @@
 import type { Plan, PlanRound, ReaderFields } from '@wpe/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  claimsToCheck,
   nextRound,
   parseBacklog,
   roundHandler,
@@ -22,7 +23,7 @@ const rnd = (number: number, depends_on: number[] = [], hard = false): PlanRound
 const plan: Plan = {
   rounds: [rnd(1), rnd(2, [1]), rnd(3, [1])],
   total_token_budget: 600_000,
-  design_brief: { palette: 'blue', fonts: 'Inter', layout: 'single column', references: '' },
+  design_brief: { palette: 'blue', fonts: 'Inter', layout: 'single column', references: 'none' },
   rationale: { rounds: 'r', skills: 's', budget: 'b', design: 'd' },
 };
 const row = (number: number, status: RoundRow['status'], merged = false): RoundRow => ({
@@ -123,6 +124,8 @@ function deps(over: Partial<RoundLoad> = {}, backlog = '') {
     plan,
     rounds: [],
     feedback: null,
+    ownerAnswers: [],
+    open: [],
     reader: {
       projectName: 'Brightside',
       intake: {},
@@ -140,9 +143,13 @@ function deps(over: Partial<RoundLoad> = {}, backlog = '') {
     read: async () => (order.push('read'), { fields, tokens: 10 }),
     prepare: async () => (order.push('prepare'), '/w/site'),
     stopPreview: step('stopPreview'),
-    merge: async (_d, n) => (order.push(`merge ${n}`), 'f'.repeat(40)),
+    merge: async (_d, n, _io, reviewed) => (
+      order.push(`merge ${n}${reviewed ? ` at ${reviewed}` : ''}`),
+      'f'.repeat(40)
+    ),
+    onBranch: step('onBranch'),
     recordMerge: async (_p, n) => void order.push(`recordMerge ${n}`),
-    branch: async (_d, b) => void order.push(`branch ${b}`),
+    branch: async (_d, b, _io, fresh) => void order.push(`branch ${b}${fresh ? ' fresh' : ''}`),
     startRound: async (_p, r) => void order.push(`startRound ${r.number}`),
     session: async (a) => {
       order.push(`session ${a.model}`);
@@ -154,11 +161,24 @@ function deps(over: Partial<RoundLoad> = {}, backlog = '') {
     checks: step('checks'),
     takeBacklog: async () => (order.push('takeBacklog'), backlog),
     logBacklog: async (a) => void order.push(`logBacklog ${a.entries.length}`),
-    claims: async () => (order.push('claims'), 2),
+    claims: async () => (
+      order.push('claims'),
+      {
+        marked: [
+          { file: 'content/pages/home.mdx', text: 'Since 2009' },
+          { file: 'content/pages/home.mdx', text: '500 happy patients' },
+        ],
+        unmarked: [{ file: 'content/pages/about.mdx', text: 'Award-winning team' }],
+      }
+    ),
     commit: async (_d, _io, m) => (order.push(`commit ${m}`), 'a'.repeat(40)),
     diff: async () => (
       order.push('diff'),
-      { files: [{ path: 'app/page.tsx', added: 10, removed: 2 }], notes: '+ round 1' }
+      {
+        files: [{ path: 'app/page.tsx', added: 10, removed: 2 }],
+        notes: '+ round 1',
+        packages: [{ name: 'clsx', from: null, to: '2.1.1', install_scripts: false }],
+      }
     ),
     startPreview: async () => (order.push('startPreview'), 'http://localhost:4100'),
     screenshots: async () => (
@@ -190,6 +210,7 @@ describe('roundHandler (P4-T01, P4-T04)', () => {
       'startRound 1',
       'read',
       'session claude-sonnet-5-5',
+      'onBranch',
       'takeBacklog',
       'checks',
       'claims',
@@ -204,7 +225,16 @@ describe('roundHandler (P4-T01, P4-T04)', () => {
       round: 1,
       branch: 'round-1',
       base: 'staging',
-      claims: 2,
+      claims: [
+        { file: 'content/pages/home.mdx', text: 'Since 2009' },
+        { file: 'content/pages/home.mdx', text: '500 happy patients' },
+      ],
+      claims_to_check: [
+        { file: 'content/pages/home.mdx', text: 'Since 2009' },
+        { file: 'content/pages/home.mdx', text: '500 happy patients' },
+      ],
+      unmarked_claims: [{ file: 'content/pages/about.mdx', text: 'Award-winning team' }],
+      packages: [{ name: 'clsx', from: null, to: '2.1.1', install_scripts: false }],
       reader_flags: fields.flags,
       feedback_version: false,
     });
@@ -231,7 +261,9 @@ describe('roundHandler (P4-T01, P4-T04)', () => {
     expect(written[0]!.content.feedback_version).toBe(true);
   });
   it('a hard round runs on Opus 5.5 (D-333)', async () => {
-    const { d, order } = deps({ plan: { ...plan, rounds: [rnd(1, [], true)] } });
+    const { d, order } = deps({
+      plan: { ...plan, rounds: [rnd(1, [], true)], total_token_budget: 200_000 },
+    });
     await roundHandler(d)(ctx());
     expect(order).toContain('session claude-opus-5-5');
   });
@@ -260,6 +292,65 @@ describe('roundHandler (P4-T01, P4-T04)', () => {
       throw new Error('pnpm build failed');
     };
     await expect(roundHandler(d)(ctx())).rejects.toThrow('pnpm build failed');
+    expect(order.some((s) => s.startsWith('commit'))).toBe(false);
+  });
+});
+
+describe('triage, Reject and the claim check (P4-T01, P4-T05, P4-T09)', () => {
+  it("the next round waits until the earlier rounds' questions and blockers are triaged", () => {
+    expect(
+      nextRound(plan, [row(1, 'approved')], null, [{ round: 1, kind: 'question' }]),
+    ).toBeNull();
+    expect(
+      nextRound(plan, [row(1, 'approved')], null, [{ round: null, kind: 'question' }])?.round
+        .number,
+    ).toBe(2);
+  });
+  it('a blocked round waits for its blocker, then is retried', () => {
+    expect(nextRound(plan, [row(1, 'building')], null, [{ round: 1, kind: 'blocker' }])).toBeNull();
+    expect(nextRound(plan, [row(1, 'building')], null, [{ round: 1, kind: 'question' }])?.why).toBe(
+      'retry',
+    );
+  });
+  it('a rejected round starts again from staging', async () => {
+    const { d, order } = deps({
+      rounds: [{ number: 1, status: 'planned', merged: false, branch: null }],
+    });
+    await roundHandler(d)(ctx());
+    expect(order).toContain('branch round-1 fresh');
+  });
+  it('lists marked claims whose numbers the client never gave', () => {
+    const f = { ...fields, claims: ['Family practice since 2009'] };
+    expect(
+      claimsToCheck(
+        [
+          { file: 'a', text: 'Since 2009' },
+          { file: 'a', text: '500 happy patients' },
+          { file: 'a', text: 'Friendly team' },
+        ],
+        f,
+      ).map((c) => c.text),
+    ).toEqual(['500 happy patients']);
+  });
+});
+
+describe('gate review fixes (P4)', () => {
+  it("keeps the owner's Feedback when a Feedback run failed and the round is retried", () => {
+    expect(nextRound(plan, [row(1, 'building')], { round: 1, notes: ['x'] })?.why).toBe('feedback');
+  });
+  it('merges an accepted round at the commit the owner reviewed', async () => {
+    const { d, order } = deps({
+      rounds: [{ number: 1, status: 'approved', merged: false, reviewed: 'abc' }],
+    });
+    await roundHandler(d)(ctx());
+    expect(order).toContain('merge 1 at abc');
+  });
+  it('stops before committing when the Builder left the round branch', async () => {
+    const { d, order } = deps();
+    d.onBranch = async () => {
+      throw new Error('the Builder ended on staging, not round-1');
+    };
+    await expect(roundHandler(d)(ctx())).rejects.toThrow('ended on staging');
     expect(order.some((s) => s.startsWith('commit'))).toBe(false);
   });
 });
