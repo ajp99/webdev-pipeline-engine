@@ -322,7 +322,7 @@ create table backlog_items (
   -- is the allowlist's refusal with its reason (P4-T02). options: what the agent considered.
   kind text not null default 'question' check (kind in ('question', 'assumption', 'blocker', 'refused_command')),
   options text,
-  run_id uuid references stage_runs (id) on delete set null,
+  run_id uuid, -- references stage_runs, added after that table below
   created_at timestamptz not null default now()
 );
 create index backlog_items_project_idx on backlog_items (project_id);
@@ -420,6 +420,8 @@ create table stage_runs (
   constraint prompt_hash_is_sha256 check (prompt_hash is null or prompt_hash ~ '^[0-9a-f]{64}$'),
   unique (id, trace_id)
 );
+alter table backlog_items
+  add constraint backlog_items_run_id_fkey foreign key (run_id) references stage_runs (id) on delete set null;
 create index stage_runs_project_idx on stage_runs (project_id);
 -- D-278: one running, waiting or cancel_requested run per project; a queued run does not hold the slot.
 create unique index stage_runs_one_active_per_project on stage_runs (project_id)
@@ -1102,7 +1104,7 @@ begin
   values (art.id, auth.uid(), gk, p_gate, nullif(btrim(p_note), ''));
 
   if v.stage = 'build_rounds' then
-    update public.rounds set status = 'approved' where project_id = p_project and number = p_round;
+    update public.rounds set status = 'approved', claims_cleared_at = now() where project_id = p_project and number = p_round;
     update public.artifacts set status = 'approved' where id = art.id;
     return case when private.advance_blocker(p_project) is null then 'ready_to_advance' else 'recorded' end;
   end if;
@@ -1167,6 +1169,11 @@ begin
     raise exception 'reject_gate: round % is not in review', p_round;
   end if;
   update public.artifacts set status = 'rejected' where id = art.id;
+  -- D-332: a rejected round goes back to planned with no branch, so its next run starts again from staging (the
+  -- worker keeps the old branch under another name).
+  if v.stage = 'build_rounds' then
+    update public.rounds set status = 'planned', branch = null where project_id = p_project and number = p_round;
+  end if;
 end;
 $$;
 revoke all on function reject_gate(uuid, uuid, int) from public, anon, authenticated, service_role;
@@ -1914,7 +1921,7 @@ begin
   if run.status <> 'running' or run.stage is distinct from proj.stage then
     raise exception 'complete_stage_artifact: the run must be running in the project''s current stage';
   end if;
-  if p_type not in ('prd', 'plan', 'prototype') or private.artifact_stage(p_type) is distinct from proj.stage then
+  if p_type not in ('prd', 'plan', 'prototype', 'round_summary') or private.artifact_stage(p_type) is distinct from proj.stage then
     raise exception 'complete_stage_artifact: a % artifact cannot be written in the % stage', p_type, proj.stage;
   end if;
   if p_content is null or jsonb_typeof(p_content) <> 'object' or p_content = '{}'::jsonb then
@@ -1958,10 +1965,24 @@ begin
     raise exception 'complete_stage_artifact: only a PRD has notes';
   end if;
 
+  -- A round summary belongs to one build round (P4-T01, D-332): its content names the round, which must be
+  -- building or in review; Feedback versions stay on the same round, and an approved round takes no new version.
+  if p_type = 'round_summary' then
+    if jsonb_typeof(p_content->'round') is distinct from 'number' or (p_content->>'round')::numeric <> floor((p_content->>'round')::numeric)
+       or not exists (select 1 from public.rounds r where r.project_id = p_project and r.number = (p_content->>'round')::int
+                        and r.status in ('building', 'in_review')) then
+      raise exception 'complete_stage_artifact: a round summary needs the number of a round that is building or in review';
+    end if;
+    if jsonb_typeof(coalesce(p_content->'claims', '[]'::jsonb)) <> 'array' then
+      raise exception 'complete_stage_artifact: a round summary''s claims must be a list';
+    end if;
+  end if;
   if exists (
     select 1 from public.artifacts a
      where a.project_id = p_project and a.type = p_type and a.status = 'approved'
-       and a.version = (select max(b.version) from public.artifacts b where b.project_id = p_project and b.type = p_type)
+       and (p_type <> 'round_summary' or a.content->'round' = p_content->'round')
+       and a.version = (select max(b.version) from public.artifacts b where b.project_id = p_project and b.type = p_type
+                          and (p_type <> 'round_summary' or b.content->'round' = p_content->'round'))
   ) then
     raise exception 'complete_stage_artifact: the newest % is already approved; a new version needs Feedback or a change request', p_type;
   end if;
@@ -1975,6 +1996,12 @@ begin
   )
   returning id into art;
   update public.stage_runs set model = p_model, prompt_hash = p_prompt_hash where id = p_run;
+  if p_type = 'round_summary' then
+    -- The round goes to review with the claims its pages carry (D-143); approving the round clears them.
+    update public.rounds
+       set status = 'in_review', claims = coalesce(p_content->'claims', '[]'::jsonb), claims_cleared_at = null
+     where project_id = p_project and number = (p_content->>'round')::int;
+  end if;
   if p_type = 'prd' then
     update public.artifacts set status = 'superseded'
      where project_id = p_project and type = 'prd_notes' and status = 'draft';
