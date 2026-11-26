@@ -1,10 +1,13 @@
-# CI (P1-T12, D-287). No secrets are used or needed.
+# CI (P1-T12, D-287, D-336). No secrets are used or needed. Two checks on every pull request: "Checks" (lint,
+# types, unit tests, docs and the database checks on Postgres 16) and "Build" (the end-to-end test and the master
+# starter), whose heavy steps run only when the app, packages, starter, database or e2e files change. Nothing
+# repeats on push to main: the pull request already ran it. The local Supabase stack check and the mutation
+# check have their own workflows.
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,27 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  node:
-    name: Lint, types, tests, docs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm docs:lint:test
-      - run: pnpm doctor:test
-      - run: pnpm docs:lint
-
-  database:
-    name: Database checks (Postgres 16)
+  checks:
+    name: Checks
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -55,51 +39,67 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
-      - name: Install the Postgres client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - run: bash supabase/tests/run.sh
-
-  supabase:
-    # Runs the same suites against the local Supabase stack (Supabase CLI and Docker). It passed on GitHub
-    # on 2026-10-15 (PR #15), so it now blocks like the other jobs.
-    name: Database checks (local Supabase)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
-        with:
-          version: 3.2.0
-      - name: Create the CLI config if the repo has none yet
-        run: '[ -f supabase/config.toml ] || supabase init'
-      - run: supabase start
-      - run: supabase db reset
-      - name: Run the suites against the stack
-        env:
-          WPE_SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: bash supabase/tests/run.sh
-      - if: always()
-        run: supabase stop --no-backup
-
-  e2e:
-    # P2-T14: the 2b flow in a browser against the local Supabase stack, with the models scripted (no secrets).
-    name: End-to-end (Playwright)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm docs:lint:test
+      - run: pnpm doctor:test
+      - run: pnpm docs:lint
+
+      - name: Install the Postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Database checks (Postgres 16)
+        run: bash supabase/tests/run.sh
+
+  build:
+    # P2-T14 and P3-T02: the end-to-end flow in a browser against the local Supabase stack (models scripted, no
+    # secrets), then the master starter's tests, build and Lighthouse 80+ on every category. Skipped, and passing,
+    # when a pull request changes none of the paths below; a manual run always runs it.
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Decide whether the heavy steps run
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ]; then echo build=true >> "$GITHUB_OUTPUT"; exit 0; fi
+          changed=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD)
+          if echo "$changed" | grep -qE '^(apps/|packages/|templates/|supabase/|scripts/e2e\.sh|pnpm-lock\.yaml|package\.json|\.github/workflows/ci\.yml)'; then
+            echo build=true >> "$GITHUB_OUTPUT"
+          else
+            echo build=false >> "$GITHUB_OUTPUT"; echo 'No app, package, starter or database change: skipped.'
+          fi
+      - uses: pnpm/action-setup@v4
+        if: steps.changes.outputs.build == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.changes.outputs.build == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.changes.outputs.build == 'true'
       - run: pnpm --filter @wpe/web exec playwright install --with-deps chromium
+        if: steps.changes.outputs.build == 'true'
       - uses: supabase/setup-cli@v1
+        if: steps.changes.outputs.build == 'true'
         with:
           version: 3.2.0
       - run: supabase start
+        if: steps.changes.outputs.build == 'true'
       - run: supabase db reset
+        if: steps.changes.outputs.build == 'true'
       - run: bash scripts/e2e.sh
-      - if: failure()
+        if: steps.changes.outputs.build == 'true'
+      - if: steps.changes.outputs.build == 'true' && failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -108,29 +108,27 @@ jobs:
             apps/web/test-results
             /tmp/e2e-*.log
           retention-days: 7
-      - if: always()
+      - if: steps.changes.outputs.build == 'true' && always()
         run: supabase stop --no-backup
 
-  starter:
-    # P3-T02: the master starter's tests, a production build (fonts downloaded from Google Fonts at build time)
-    # and Lighthouse 80+ on every category, for the home page and a content page.
-    name: Master starter (tests, build, Lighthouse)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: templates/master-starter
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
       - run: pnpm install --frozen-lockfile --ignore-scripts --ignore-workspace
+        if: steps.changes.outputs.build == 'true'
+        working-directory: templates/master-starter
       - run: pnpm test
+        if: steps.changes.outputs.build == 'true'
+        working-directory: templates/master-starter
       - run: pnpm typecheck
+        if: steps.changes.outputs.build == 'true'
+        working-directory: templates/master-starter
       - run: pnpm check:content
+        if: steps.changes.outputs.build == 'true'
+        working-directory: templates/master-starter
       - run: pnpm build
+        if: steps.changes.outputs.build == 'true'
+        working-directory: templates/master-starter
       - name: Lighthouse on the built site
+        if: steps.changes.outputs.build == 'true'
+        working-directory: templates/master-starter
         run: |
           MAIL_TRANSPORT=stub MAIL_TRANSPORT_ALLOW_STUB=1 pnpm start -p 3000 > /tmp/starter.log 2>&1 &
           for _ in $(seq 1 30); do curl -fs http://localhost:3000/ >/dev/null && break; sleep 1; done

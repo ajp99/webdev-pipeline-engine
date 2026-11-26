@@ -1,0 +1,30 @@
+# The database checks against the local Supabase stack (Supabase CLI and Docker), on demand only (D-336). The
+# same suites run on Postgres 16 in CI on every pull request; this confirms the migration on the real stack.
+# Run it before each phase gate and after a Supabase CLI upgrade: Actions > Supabase stack check > Run workflow.
+name: Supabase stack check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  supabase:
+    name: Database checks (local Supabase)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.2.0
+      - name: Create the CLI config if the repo has none yet
+        run: '[ -f supabase/config.toml ] || supabase init'
+      - run: supabase start
+      - run: supabase db reset
+      - name: Run the suites against the stack
+        env:
+          WPE_SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: bash supabase/tests/run.sh
+      - if: always()
+        run: supabase stop --no-backup
