@@ -161,3 +161,91 @@ export function prototypeView(content: unknown): PrototypeView | null {
     screenshots: { desktop: shots.desktop, mobile: shots.mobile },
   };
 }
+
+type Line = { file: string; text: string };
+export type RoundView = {
+  round: number;
+  title: string;
+  branch: string;
+  commit: string;
+  summary: string;
+  files: { path: string; added: number; removed: number }[];
+  notesDiff: string;
+  screenshots: { desktop: string; mobile: string };
+  claims: Line[];
+  claimsToCheck: Line[];
+  unmarkedClaims: Line[];
+  packages: { name: string; from: string | null; to: string | null; install_scripts: boolean }[];
+  backlog: { questions: number; assumptions: number; refused: number };
+  readerFlags: string[];
+  feedbackVersion: boolean;
+};
+
+const lines = (v: unknown): Line[] =>
+  Array.isArray(v)
+    ? v.flatMap((x) =>
+        x && typeof x === 'object' && typeof x.file === 'string' && typeof x.text === 'string'
+          ? [{ file: x.file, text: x.text }]
+          : [],
+      )
+    : [];
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/** A round summary as the worker writes it (P4-T06), or null when the content is not one. */
+export function roundView(content: unknown): RoundView | null {
+  if (typeof content !== 'object' || content === null) return null;
+  const c = content as Record<string, unknown>;
+  const shots = c.screenshots as { desktop?: unknown; mobile?: unknown } | undefined;
+  if (!Number.isInteger(c.round) || typeof c.branch !== 'string' || typeof c.commit !== 'string')
+    return null;
+  if (typeof shots?.desktop !== 'string' || typeof shots?.mobile !== 'string') return null;
+  const b = (c.backlog ?? {}) as Record<string, unknown>;
+  return {
+    round: c.round as number,
+    title: typeof c.title === 'string' ? c.title : '',
+    branch: c.branch,
+    commit: c.commit,
+    summary: typeof c.summary === 'string' ? c.summary : '',
+    files: Array.isArray(c.files)
+      ? c.files.flatMap((f) =>
+          f && typeof f.path === 'string'
+            ? [{ path: f.path, added: num(f.added), removed: num(f.removed) }]
+            : [],
+        )
+      : [],
+    notesDiff: typeof c.notes_diff === 'string' ? c.notes_diff : '',
+    screenshots: { desktop: shots.desktop, mobile: shots.mobile },
+    claims: lines(c.claims),
+    claimsToCheck: lines(c.claims_to_check),
+    unmarkedClaims: lines(c.unmarked_claims),
+    packages: Array.isArray(c.packages)
+      ? c.packages.flatMap((p) =>
+          p && typeof p.name === 'string'
+            ? [
+                {
+                  name: p.name,
+                  from: typeof p.from === 'string' ? p.from : null,
+                  to: typeof p.to === 'string' ? p.to : null,
+                  install_scripts: p.install_scripts === true,
+                },
+              ]
+            : [],
+        )
+      : [],
+    backlog: {
+      questions: num(b.questions),
+      assumptions: num(b.assumptions),
+      refused: num(b.refused),
+    },
+    readerFlags: strings(c.reader_flags),
+    feedbackVersion: c.feedback_version === true,
+  };
+}
+
+/** Tokens used against the plan's budget, as a share from 0 to 1 (P4-T10). No money, no warnings. */
+export function tokenShare(used: number, budget: number): number {
+  if (!(budget > 0) || !(used > 0)) return 0;
+  return Math.min(1, used / budget);
+}

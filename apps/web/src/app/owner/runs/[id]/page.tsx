@@ -14,7 +14,7 @@ import {
 } from '@/lib/runs';
 import { previewUrl } from '@/lib/stage-run';
 import { createClient } from '@/lib/supabase/server';
-import { cancelRun, endRun, retryRun } from '../actions';
+import { cancelRun, decidePause, endRun, retryRun } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +46,17 @@ export default async function RunDetail({
   if (run.error) throw new Error(run.error.message);
   if (!run.data) notFound();
   const r = run.data;
+  // P4-T03: pause requests of a waiting run (requests of a run that ended are never shown as open).
+  const pauses =
+    r.status === 'waiting'
+      ? await supabase
+          .from('run_approvals')
+          .select('id, kind, command, requested_at')
+          .eq('run_id', id)
+          .eq('status', 'pending')
+          .order('requested_at')
+      : null;
+  if (pauses?.error) throw new Error(pauses.error.message);
 
   const count = await supabase
     .from('run_logs')
@@ -130,6 +141,34 @@ export default async function RunDetail({
           {error}
         </p>
       ) : null}
+      {(pauses?.data ?? []).map((p) => (
+        <section
+          key={p.id}
+          role="alert"
+          className="mt-3 rounded border border-amber-400 bg-amber-50 p-3 text-sm"
+        >
+          <p className="font-medium">
+            The Builder is waiting for you:{' '}
+            {p.kind === 'delete_files'
+              ? 'it wants to delete files'
+              : 'it wants to rewrite git history'}
+          </p>
+          <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs">{p.command}</pre>
+          <form action={decidePause} className="mt-2 flex gap-2">
+            <input type="hidden" name="approvalId" value={p.id} />
+            <button
+              name="decision"
+              value="approve"
+              className="rounded bg-neutral-900 px-3 py-1 text-white"
+            >
+              Allow this command
+            </button>
+            <button name="decision" value="deny" className="rounded border px-3 py-1">
+              Deny
+            </button>
+          </form>
+        </section>
+      ))}
       {r.status === 'failed' || r.status === 'stopped' ? (
         <p role="alert" className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">
           {r.status === 'stopped'

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { AutoRefresh } from '@/components/AutoRefresh';
 import { requireRole } from '@/lib/auth';
 import { isActive, statusLabel } from '@/lib/runs';
-import { previewUrl, runBlocked, STAGE_ARTIFACT } from '@/lib/stage-run';
+import { previewUrl, runBlocked, STAGE_ARTIFACT, tokenShare } from '@/lib/stage-run';
 import { createClient } from '@/lib/supabase/server';
 import { runStage } from './actions';
 
@@ -71,6 +71,35 @@ export default async function StagePage({
     preview = previewUrl((logs.data ?? []).map((l) => l.message));
   }
 
+  // P4-T10: tokens the build rounds used against the approved plan's budget. No money, no warnings.
+  let tokens: { used: number; budget: number } | null = null;
+  if (p.stage === 'build_rounds') {
+    const [used, plan] = await Promise.all([
+      supabase
+        .from('stage_runs')
+        .select('tokens_used')
+        .eq('project_id', id)
+        .eq('stage', 'build_rounds'),
+      supabase
+        .from('artifacts')
+        .select('content')
+        .eq('project_id', id)
+        .eq('type', 'plan')
+        .eq('status', 'approved')
+        .order('version', { ascending: false })
+        .limit(1),
+    ]);
+    if (used.error) throw new Error(used.error.message);
+    if (plan.error) throw new Error(plan.error.message);
+    const budget = Number(
+      (plan.data?.[0]?.content as { total_token_budget?: unknown } | null)?.total_token_budget,
+    );
+    tokens = {
+      used: (used.data ?? []).reduce((n, r) => n + (r.tokens_used ?? 0), 0),
+      budget: Number.isFinite(budget) ? budget : 0,
+    };
+  }
+
   return (
     <main className="mx-auto max-w-3xl p-6">
       {hasOpenRun ? <AutoRefresh /> : null}
@@ -92,6 +121,31 @@ export default async function StagePage({
           Change requests
         </Link>
       </div>
+      {tokens ? (
+        <section className="mt-4 text-sm">
+          <div className="flex justify-between">
+            <span>Build rounds: tokens used</span>
+            <span>
+              {tokens.used.toLocaleString('en')} of {tokens.budget.toLocaleString('en')}
+            </span>
+          </div>
+          <div
+            className="mt-1 h-2 w-full rounded bg-neutral-200"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(tokenShare(tokens.used, tokens.budget) * 100)}
+          >
+            <div
+              className="h-2 rounded bg-neutral-700"
+              style={{ width: `${Math.round(tokenShare(tokens.used, tokens.budget) * 100)}%` }}
+            />
+          </div>
+          <Link href={`/owner/projects/${id}/backlog`} className="mt-2 inline-block underline">
+            Backlog
+          </Link>
+        </section>
+      ) : null}
       {notice ? <p className="mt-3 rounded bg-emerald-50 p-3 text-sm">{notice}</p> : null}
       {error ? <p className="mt-3 rounded bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
 
