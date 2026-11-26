@@ -71,8 +71,8 @@ select case when (select coalesce(array_agg(p.proname::text order by p.proname),
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
       and has_function_privilege('authenticated', p.oid, 'execute'))
-    = array['accept_gate','advance_stage','cancel_project','decide_change_request','end_run','enqueue_run','feedback_gate','reject_gate','remaining_gates','request_run_cancel','save_prd_version']
-  then 'PASS      the owner session can call only the gate functions (accept_gate, feedback_gate, reject_gate, remaining_gates), advance_stage, cancel_project, end_run, enqueue_run, request_run_cancel and the PRD functions (save_prd_version, decide_change_request)'
+    = array['accept_gate','advance_stage','cancel_project','decide_change_request','decide_run_approval','end_run','enqueue_run','feedback_gate','reject_gate','remaining_gates','request_run_cancel','save_prd_version']
+  then 'PASS      the owner session can call only the gate functions (accept_gate, feedback_gate, reject_gate, remaining_gates), advance_stage, cancel_project, end_run, enqueue_run, request_run_cancel, decide_run_approval (P4-T03) and the PRD functions (save_prd_version, decide_change_request)'
   else 'FAIL      the owner session can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
@@ -81,8 +81,8 @@ select case when (select coalesce(array_agg(p.proname::text order by p.proname),
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
       and has_function_privilege('service_role', p.oid, 'execute'))
-    = array['claim_run','complete_intake_review','complete_stage_artifact','enqueue_run','finish_run','heartbeat_run']
-  then 'PASS      the worker can call the four queue functions it uses, complete_intake_review and complete_stage_artifact, nothing else'
+    = array['claim_run','complete_intake_review','complete_stage_artifact','enqueue_run','finish_run','heartbeat_run','request_run_approval']
+  then 'PASS      the worker can call the four queue functions it uses, complete_intake_review, complete_stage_artifact and request_run_approval (P4-T03), nothing else'
   else 'FAIL      the worker can call: ' || (select string_agg(p.proname::text, ', ' order by p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prorettype <> 'trigger'::regtype
       and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
